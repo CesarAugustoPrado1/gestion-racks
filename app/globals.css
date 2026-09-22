@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+@theme {
+  /* Colores de confiabilidad. Son los del indice de DISENO.md §5.3: el verde
+     es "chequeado hace poco y siempre dio bien", el gris es "nunca se chequeo",
+     que no es una respuesta mala sino una pregunta sin hacer. */
+  --color-confiable: oklch(0.62 0.15 155);
+  --color-confiable-suave: oklch(0.95 0.04 155);
+  --color-dudoso: oklch(0.78 0.16 85);
+  --color-dudoso-suave: oklch(0.96 0.06 90);
+  --color-vencido: oklch(0.6 0.19 25);
+  --color-vencido-suave: oklch(0.96 0.04 25);
+  --color-sin-datos: oklch(0.72 0.02 250);
+  --color-sin-datos-suave: oklch(0.96 0.005 250);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-slate-100 text-slate-900 antialiased;
+    /* Evita el zoom accidental al doble tap arriba del autoelevador. */
+    touch-action: manipulation;
+  }
+
+  /* iOS hace zoom al enfocar inputs de menos de 16px. */
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1rem);
+  }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+}
+
+@layer components {
+  .tarjeta {
+    @apply rounded-2xl bg-white shadow-sm ring-1 ring-slate-200;
+  }
+
+  /* Objetivo tactil de 48px: se usa con guantes y a las apuradas.
+     Tailwind v4 solo deja aplicar utilidades con @apply, no otras clases de
+     componente, asi que la base va compartida por lista de selectores. */
+  .boton,
+  .boton-primario,
+  .boton-secundario,
+  .boton-peligro {
+    @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-5 text-base
+           font-semibold transition active:scale-[0.98] disabled:pointer-events-none
+           disabled:opacity-45;
+  }
+  .boton-primario {
+    @apply bg-slate-900 text-white hover:bg-slate-800;
+  }
+  .boton-secundario {
+    @apply bg-white text-slate-700 ring-1 ring-slate-300 hover:bg-slate-50;
+  }
+  .boton-peligro {
+    @apply bg-red-600 text-white hover:bg-red-700;
+  }
+
+  .campo {
+    @apply w-full rounded-xl border-0 bg-white px-4 py-3 text-slate-900 shadow-sm
+           ring-1 ring-slate-300 outline-none placeholder:text-slate-400
+           focus:ring-2 focus:ring-slate-900;
+  }
+
+  .etiqueta {
+    @apply mb-1.5 block text-sm font-medium text-slate-600;
+  }
+
+  .chip {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+
+  /* El codigo de una ubicacion (B-4) y el de un bulto se leen de lejos y se
+     comparan de a varios: van siempre en tabular-nums para que las cifras
+     queden en columna. */
+  .codigo {
+    @apply font-mono font-bold tabular-nums;
+  }
+}

@@ -1,0 +1,17 @@
+node_modules
+.next
+out
+build
+.DS_Store
+*.pem
+npm-debug.log*
+.env
+.env*.local
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+
+# OJO: drizzle/meta NO se ignora, aunque en Control-Secaderos si.
+# Ahi las migraciones se aplicaban con `push` y el journal daba igual. Aca lo
+# que se despliega son los archivos de drizzle/, y sin meta/_journal.json
+# drizzle-kit no puede generar la migracion siguiente ni saber cuales aplico.
