@@ -23,8 +23,13 @@ la pantalla de las cuatro solapas —suelto, palet, optimizado y el total en la
 unidad de la línea—, con la ubicación de cada bulto, las marcas de fuera de
 norma y mezclado, y el índice de confiabilidad.
 
-**ABM funcionando**: líneas, modelos con sus normas, racks con generación de
-posiciones por rango, motivos y usuarios. Nada se borra: todo se suspende.
+**ABM funcionando**: líneas, modelos con sus normas (cantidad y altura), grupos
+de racks con su geometría, motivos y usuarios. Nada se borra: todo se suspende.
+
+**Geometría de racks**: los grupos declaran `ancho × niveles` (selectivo) o
+`niveles × profundidad` (penetrable), y las posiciones se generan de ahí. Cada
+posición aloja un bulto y tiene dirección propia (`B-07-2-1`). El motor conoce
+las dos formas de tapar de un drive-in y la altura libre de cada nivel.
 
 **Control funcionando**: `/control` es la recorrida ordenada por
 `(1 − confianza) × cantidad` —primero lo que hace más que no se mira y más

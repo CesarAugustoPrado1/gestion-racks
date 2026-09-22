@@ -12,8 +12,8 @@ import {
   bloquearPosicion,
   crearBulto,
   exigirComposicion,
+  exigirLibre,
   exigirMotivo,
-  ubicarEn,
   type Tx,
 } from "./motor";
 import { ejecutar, fallar, type Resultado } from "./comun";
@@ -100,7 +100,7 @@ export async function confirmar(
       await tx.insert(chequeos).values({
         posicionId: pos.id,
         posicionCodigo: pos.codigo,
-        resultado: pos.ocupados.length === 0 ? "vacio_ok" : "ok",
+        resultado: pos.ocupante ? "ok" : "vacio_ok",
         usuarioId: sesion.uid,
         usuarioNombre: sesion.nombre,
         creadoEn: ahora,
@@ -108,7 +108,7 @@ export async function confirmar(
 
       await asentarChequeo(tx, pos.id, true, ahora);
       revalidatePath("/", "layout");
-      return { codigo: pos.codigo, vacia: pos.ocupados.length === 0 };
+      return { codigo: pos.codigo, vacia: pos.ocupante == null };
     });
   });
 }
@@ -176,11 +176,7 @@ export async function corregirCantidades(
         contenidoDespues,
         packagingDespues: bulto.packaging,
         estadoDespues: bulto.estado,
-        posicionDestino: {
-          id: pos.id,
-          codigo: pos.codigo,
-          profundidad: bulto.profundidad,
-        },
+        posicionDestino: { id: pos.id, codigo: pos.codigo },
         usuario: { id: sesion.uid, nombre: sesion.nombre },
         motivo,
         nota: datos.nota,
@@ -301,7 +297,7 @@ export async function registrarEncontrado(
     return db.transaction(async (tx) => {
       const pos = await bloquearPosicion(tx, datos.posicionId);
       const motivo = await exigirMotivo(tx, datos.motivoId, "ajuste");
-      const profundidad = ubicarEn(pos);
+      exigirLibre(pos);
       const ahora = new Date();
 
       const nuevo = await crearBulto(tx, {
@@ -320,14 +316,13 @@ export async function registrarEncontrado(
           estado: "ubicado",
           posicionId: null,
           posicionCodigo: null,
-          profundidad: null,
           contenido: [],
           lineaCodigo: "",
         },
         contenidoDespues: datos.contenido,
         packagingDespues: datos.packaging as Packaging,
         estadoDespues: "ubicado",
-        posicionDestino: { id: pos.id, codigo: pos.codigo, profundidad },
+        posicionDestino: { id: pos.id, codigo: pos.codigo },
         usuario: { id: sesion.uid, nombre: sesion.nombre },
         motivo,
         nota: datos.nota,

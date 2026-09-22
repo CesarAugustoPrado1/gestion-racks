@@ -191,8 +191,8 @@ export async function detalleDeModelo(
              c.cantidad as unidades, b.cantidad as total_bulto,
              b.chequeado_en, b.chequeos_ok, b.chequeos_total,
              case when p.id is null then null
-                  else r.codigo || '-' || p.codigo end as ubicacion,
-             r.accesibilidad, b.profundidad, p.profundidad as profundidad_max,
+                  else g.codigo || '-' || p.codigo end as ubicacion,
+             g.accesibilidad, p.profundidad, g.profundidad as profundidad_max,
              (select string_agg(m2.nombre, ', ' order by m2.nombre)
                 from bulto_contenido x
                 join modelos m2 on m2.id = x.modelo_id
@@ -201,9 +201,9 @@ export async function detalleDeModelo(
       from bulto_contenido c
       join bultos b on b.id = c.bulto_id
       left join posiciones p on p.id = b.posicion_id
-      left join racks r on r.id = p.rack_id
+      left join grupos g on g.id = p.grupo_id
       where c.modelo_id = ${modeloId} and ${EN_STOCK}
-      order by r.orden nulls last, p.orden nulls last, b.profundidad nulls first, b.codigo
+      order by g.orden nulls last, p.orden nulls last, b.codigo
     `) as unknown as Promise<
       Array<{
         id: number;
@@ -262,7 +262,10 @@ export type PosicionLibre = {
   codigo: string;
   rack: string;
   penetrable: boolean;
-  libres: number;
+  nivel: number;
+  niveles: number;
+  profundidad: number | null;
+  profundidadMax: number | null;
 };
 
 /**
@@ -275,30 +278,35 @@ export type PosicionLibre = {
 export async function posicionesLibres(): Promise<PosicionLibre[]> {
   const filas = (await db.execute(sql`
     select p.id,
-           r.codigo || '-' || p.codigo as codigo,
-           r.codigo as rack,
-           r.accesibilidad,
-           p.capacidad_bultos - count(b.id)::int as libres
+           g.codigo || '-' || p.codigo as codigo,
+           g.codigo as rack,
+           g.accesibilidad, g.niveles, g.profundidad as profundidad_max,
+           p.nivel, p.profundidad
       from posiciones p
-      join racks r on r.id = p.rack_id
+      join grupos g on g.id = p.grupo_id
       left join bultos b on b.posicion_id = p.id and b.estado = 'ubicado'
-     where p.activa and r.activo
-     group by p.id, p.capacidad_bultos, r.id, r.codigo, r.orden, p.orden, r.accesibilidad
-    having p.capacidad_bultos - count(b.id) > 0
-     order by r.orden, p.orden
+     where p.activa and g.activo and b.id is null
+     order by g.orden, p.orden
   `)) as unknown as Array<{
     id: number;
     codigo: string;
     rack: string;
     accesibilidad: string;
-    libres: number;
+    niveles: number;
+    profundidad_max: number | null;
+    nivel: number;
+    profundidad: number | null;
   }>;
+
   return filas.map((f) => ({
     id: f.id,
     codigo: f.codigo,
     rack: f.rack,
     penetrable: f.accesibilidad === "penetrable",
-    libres: f.libres,
+    nivel: f.nivel,
+    niveles: f.niveles,
+    profundidad: f.profundidad,
+    profundidadMax: f.profundidad_max,
   }));
 }
 
@@ -370,7 +378,7 @@ const SELECT_BULTO = sql`
   select b.id, b.codigo, b.packaging, b.cantidad,
          b.chequeado_en, b.chequeos_ok, b.chequeos_total,
          case when p.id is null then null
-              else r.codigo || '-' || p.codigo end as ubicacion,
+              else g.codigo || '-' || p.codigo end as ubicacion,
          (select string_agg(m.nombre || ' ' || c.cantidad, ' + ' order by m.nombre)
             from bulto_contenido c join modelos m on m.id = c.modelo_id
            where c.bulto_id = b.id) as contenido,
@@ -380,7 +388,7 @@ const SELECT_BULTO = sql`
            where c.bulto_id = b.id limit 1) as unidad_plural
     from bultos b
     left join posiciones p on p.id = b.posicion_id
-    left join racks r on r.id = p.rack_id
+    left join grupos g on g.id = p.grupo_id
 `;
 
 type FilaBulto = {
@@ -426,7 +434,7 @@ export async function buscarBultos(texto: string): Promise<BultoEnLista[]> {
     where ${EN_STOCK}
       and (
         b.codigo ilike ${patron}
-        or (r.codigo || '-' || p.codigo) ilike ${patron}
+        or (g.codigo || '-' || p.codigo) ilike ${patron}
         or exists (select 1 from bulto_contenido c join modelos m on m.id = c.modelo_id
                     where c.bulto_id = b.id and m.nombre ilike ${patron})
       )
@@ -551,6 +559,10 @@ export type PosicionParaChequear = {
   codigo: string;
   rack: string;
   penetrable: boolean;
+  nivel: number;
+  niveles: number;
+  profundidad: number | null;
+  profundidadMax: number | null;
   bultos: number;
   unidades: number;
   unidadPlural: string | null;
@@ -571,9 +583,10 @@ export type PosicionParaChequear = {
 export async function posicionesParaChequear(): Promise<PosicionParaChequear[]> {
   const filas = (await db.execute(sql`
     select p.id,
-           r.codigo || '-' || p.codigo as codigo,
-           r.codigo as rack,
-           r.accesibilidad,
+           g.codigo || '-' || p.codigo as codigo,
+           g.codigo as rack,
+           g.accesibilidad, g.niveles, g.profundidad as profundidad_max,
+           p.nivel, p.profundidad,
            p.chequeado_en, p.chequeos_ok, p.chequeos_total,
            count(b.id)::int as bultos,
            coalesce(sum(b.cantidad), 0)::int as unidades,
@@ -583,7 +596,7 @@ export async function posicionesParaChequear(): Promise<PosicionParaChequear[]> 
                       join bulto_contenido c on c.bulto_id = b2.id
                       join modelos m on m.id = c.modelo_id
                      where b2.posicion_id = p.id and b2.estado = 'ubicado'
-                     order by b2.profundidad nulls first, m.nombre) x
+                     order by m.orden, m.nombre) x
            ) as contenido,
            (select l.unidad_plural
               from bultos b3
@@ -593,15 +606,19 @@ export async function posicionesParaChequear(): Promise<PosicionParaChequear[]> 
              where b3.posicion_id = p.id and b3.estado = 'ubicado' limit 1
            ) as unidad_plural
       from posiciones p
-      join racks r on r.id = p.rack_id
+      join grupos g on g.id = p.grupo_id
       left join bultos b on b.posicion_id = p.id and b.estado = 'ubicado'
-     where p.activa and r.activo
-     group by p.id, r.id, r.codigo, r.accesibilidad
+     where p.activa and g.activo
+     group by p.id, g.id, g.codigo, g.accesibilidad, g.niveles, g.profundidad
   `)) as unknown as Array<{
     id: number;
     codigo: string;
     rack: string;
     accesibilidad: string;
+    niveles: number;
+    profundidad_max: number | null;
+    nivel: number;
+    profundidad: number | null;
     chequeado_en: Date | string | null;
     chequeos_ok: number;
     chequeos_total: number;
@@ -616,6 +633,10 @@ export async function posicionesParaChequear(): Promise<PosicionParaChequear[]> 
     codigo: f.codigo,
     rack: f.rack,
     penetrable: f.accesibilidad === "penetrable",
+    nivel: f.nivel,
+    niveles: f.niveles,
+    profundidad: f.profundidad,
+    profundidadMax: f.profundidad_max,
     bultos: f.bultos,
     unidades: f.unidades,
     unidadPlural: f.unidad_plural,
@@ -645,7 +666,7 @@ export async function posicionConBultos(id: number): Promise<{
   if (!posicion) return null;
 
   const filas = (await db.execute(sql`
-    select b.id, b.codigo, b.packaging, b.cantidad, b.profundidad,
+    select b.id, b.codigo, b.packaging, b.cantidad, p.profundidad,
            c.modelo_id, m.nombre as modelo_nombre, c.cantidad as cantidad_modelo,
            l.unidad_plural
       from bultos b
@@ -653,7 +674,7 @@ export async function posicionConBultos(id: number): Promise<{
       join modelos m on m.id = c.modelo_id
       join lineas l on l.id = m.linea_id
      where b.posicion_id = ${id} and b.estado = 'ubicado'
-     order by b.profundidad nulls first, b.codigo, m.orden, m.nombre
+     order by b.codigo, m.orden, m.nombre
   `)) as unknown as Array<{
     id: number;
     codigo: string;

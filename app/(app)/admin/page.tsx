@@ -21,7 +21,7 @@ async function conteos() {
       (select count(*) from lineas where activa)::int     as lineas,
       (select count(*) from modelos where activo)::int    as modelos,
       (select count(*) from normas)::int                  as normas,
-      (select count(*) from racks where activo)::int      as racks,
+      (select count(*) from grupos where activo)::int     as grupos,
       (select count(*) from posiciones where activa)::int as posiciones,
       (select count(*) from motivos where activo)::int    as motivos,
       (select count(*) from usuarios where activo)::int   as usuarios
@@ -50,10 +50,10 @@ export default async function PantallaAdmin() {
     },
     {
       href: "/admin/racks",
-      titulo: "Racks y posiciones",
-      detalle: `${n.racks} rack${n.racks === 1 ? "" : "s"} · ${n.posiciones} posicion${n.posiciones === 1 ? "" : "es"}`,
-      ayuda: "Selectivo o penetrable, y las posiciones se generan por rango.",
-      falta: n.racks === 0,
+      titulo: "Grupos de racks",
+      detalle: `${n.grupos} grupo${n.grupos === 1 ? "" : "s"} · ${n.posiciones} posicion${n.posiciones === 1 ? "" : "es"}`,
+      ayuda: "Selectivo o penetrable, con su geometría y la altura de cada nivel.",
+      falta: n.grupos === 0,
     },
     {
       href: "/admin/motivos",

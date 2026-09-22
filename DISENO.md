@@ -129,37 +129,85 @@ en secaderos): es `cantidad ≠ norma_de_hoy`. Se compara contra la norma vigent
 no contra un snapshot, porque la pregunta que importa es comercial y es del
 presente: *¿este palet es despachable como estándar hoy?*
 
-### 3.4 Ubicaciones: racks, posiciones y accesibilidad
+### 3.4 Grupos, unidades y posiciones
+
+Tres niveles, y son tres de verdad:
 
 ```
-rack        codigo ("B"), nombre, accesibilidad (selectivo | penetrable), activo
-posicion    rack + codigo ("4"), ⟨nivel?⟩, ⟨profundidad?⟩, capacidad, activa
+GRUPO     A, B, C…  un lugar físico donde todas las posiciones comparten
+                    características. Eso es lo que lo hace un grupo.
+UNIDAD    un MÓDULO en un selectivo, una CALLE en un penetrable.
+POSICIÓN  el lugar de UN bulto, con dirección propia.
 ```
 
-Una ubicación se muestra siempre como **código compuesto y hablado**: `B-4`. Es
-el que el operario dice por handy, y tiene que ser el mismo que lee en la app.
+Puede haber **dos grupos con la misma geometría** —A y F, los dos selectivos de
+2×3— porque el grupo es un lugar, no un tipo. Y la geometría se declara una vez
+por grupo, no posición por posición:
 
-La **accesibilidad no es una etiqueta decorativa**, define el costo de tocar un
-bulto:
+| Tipo | Se escribe | Un ejemplo |
+| --- | --- | --- |
+| Selectivo | `ancho × niveles` | módulo de 2×3 = 6 posiciones |
+| Penetrable | `niveles × profundidad` | calle de 3×2 = 6 posiciones |
 
-- **Selectivo**: cada posición se alcanza sin mover nada.
-- **Penetrable** (drive-in): la posición es un carril con profundidad, y sacar el
-  del fondo obliga a bajar los de adelante. Es LIFO en la práctica.
+De la geometría salen las posiciones, y su código:
 
-Esto atraviesa dos cosas: qué bultos se ofrecen primero para una entrega (los
-accesibles), y el índice de confiabilidad (lo penetrable se chequea menos, y el
-índice tiene que mostrarlo en vez de disimularlo).
+```
+D-06-3     selectivo: columna 6, nivel 3
+B-07-2-1   penetrable: calle 7, nivel 2, profundidad 1 (pasillo)
+```
 
-**⟨pendiente 1⟩** ¿Cómo se codifica hoy una ubicación en la planta: alcanza
-`rack + posición`, o hay **niveles** (`B-4-2`)? En los penetrables, ¿cuántos
-bultos de profundidad entran, y se registra la profundidad o basta con "está en el
-carril B-4"? ¿Una posición aloja **un** bulto o varios?
+En los selectivos las **columnas van corridas por grupo** —módulo 3, columna 2 de
+un rack de 2 es la columna 6— porque para el que busca "06" es un solo número, y
+"módulo 3 derecha" son dos datos y una convención más para recordar.
 
-**⟨pendiente 2⟩** ¿Hay posiciones donde **no entra un optimizado** por altura? Si
-sí, va como `altura_max` en la posición y `alto` en el packaging, y el sistema
-avisa al subir. Si no, no lo modelamos: un campo que nadie usa miente.
+Los nombres de los niveles (piso, medio, arriba) y de las profundidades
+(pasillo, centro, pared) **se derivan de cuántos hay**, no se cargan. Un nombre
+que se escribe una vez por grupo es un nombre que un día va a estar mal escrito.
 
-### 3.5 Identidad del bulto ⟨pendiente 3 — la más importante⟩
+**Cada posición aloja un bulto.** Antes una calle penetrable era una posición que
+aguantaba tres y la profundidad era un dato del bulto; ahora cada slot tiene
+dirección, y el chequeo de control pasa de aproximado —"en C-3 hay tres
+palets"— a exacto.
+
+### 3.5 Lo que tapa a qué
+
+En un penetrable el autoelevador **entra manejando por adentro de la calle**, y
+de ahí salen dos bloqueos distintos:
+
+1. **El mismo nivel, más cerca del pasillo.** Para llegar al del fondo hay que
+   bajar el de adelante. Es el LIFO clásico del drive-in.
+2. **El piso, hasta esa profundidad.** Un palet en el piso le corta el camino al
+   clark: *no se puede sacar el del nivel medio si el del pasillo del piso está
+   ocupado*.
+
+El segundo es el que hace que un penetrable se vacíe de arriba hacia abajo y de
+afuera hacia adentro. No es una restricción del sistema: es cómo funciona el
+fierro, y si la app dejara registrar lo contrario, lo registrado dejaría de
+coincidir con la realidad, que es lo que esta app existe para evitar.
+
+En un selectivo no hay nada de esto: cada posición se alcanza sin mover nada.
+
+### 3.6 La altura
+
+Dos datos que se comparan:
+
+- **Del lado del rack**: la altura libre de cada **nivel del grupo**. Va por
+  nivel y no por posición porque todas las del nivel medio del grupo B tienen la
+  misma luz, y cargar doscientas alturas a mano es inusable. Una posición puede
+  sobrescribirla si tiene una viga cruzada.
+- **Del lado del producto**: la altura de un `(modelo, packaging)`, que vive en
+  `normas` junto a la cantidad. La norma **es** la especificación de un bulto
+  normalizado: cuánto lleva y cuánto mide.
+
+El **suelto no tiene altura**, igual que no tiene cantidad normalizada: no hay
+dos sueltos iguales. Por eso no tiene fila en `normas` y por eso nunca se le
+revisa la altura.
+
+Si falta cualquiera de los dos datos —la norma sin medir, el nivel sin medir— **no
+se valida nada**. Se puede usar la app antes de tener toda la planta medida, y
+cada altura que se carga empieza a proteger sola.
+
+### 3.7 Identidad del bulto ⟨pendiente — la más importante⟩
 
 Todo el diseño del chequeo depende de esto: **¿el bulto tiene una identidad física
 propia?** ¿Lleva etiqueta con número o QR, o lo único que lo identifica es "lo que
@@ -176,7 +224,7 @@ etiquetas, el código ya existe y solo se agrega el escaneo. Pero conviene
 decidirlo ahora, porque si hay etiquetas el flujo de "subir" empieza por escanear
 y se acorta mucho.
 
-### 3.6 Bultos mezclados
+### 3.8 Bultos mezclados
 
 **Resuelto:** sí existen. Se arman poco —para completar un pedido— pero se
 arman, y traen una consecuencia que ordena el modelo entero:

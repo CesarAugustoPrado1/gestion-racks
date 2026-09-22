@@ -2,17 +2,19 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import { esMezclado, total, validarComposicion } from "./bultos";
+import { codigoDePosicion, posicionesDe, type Geometria } from "./posiciones";
 import {
   bultoContenido,
   bultos,
   chequeos,
+  grupos,
+  nivelesDeGrupo,
   lineas,
   modelos,
   movimientoLineas,
   movimientos,
   normas,
   posiciones,
-  racks,
   type Packaging,
 } from "./db/schema";
 
@@ -56,6 +58,9 @@ type DefModelo = {
   nombre: string;
   palet: number | null;
   optimizado: number | null;
+  /** Alturas en centímetros. Inventadas, como las cantidades. */
+  altoPalet: number | null;
+  altoOptimizado: number | null;
 };
 
 const CATALOGO: Array<{
@@ -73,9 +78,9 @@ const CATALOGO: Array<{
     unidadPlural: "placas",
     activa: true,
     modelos: [
-      { nombre: "Standard 9.5", palet: 72, optimizado: 90 },
-      { nombre: "Standard 12.5", palet: 60, optimizado: 75 },
-      { nombre: "RH 12.5", palet: 60, optimizado: 75 },
+      { nombre: "Standard 9.5", palet: 72, optimizado: 90, altoPalet: 150, altoOptimizado: 185 },
+      { nombre: "Standard 12.5", palet: 60, optimizado: 75, altoPalet: 160, altoOptimizado: 200 },
+      { nombre: "RH 12.5", palet: 60, optimizado: 75, altoPalet: 160, altoOptimizado: 200 },
     ],
   },
   {
@@ -85,9 +90,9 @@ const CATALOGO: Array<{
     unidadPlural: "paquetes",
     activa: true,
     modelos: [
-      { nombre: "Laja", palet: 48, optimizado: 60 },
-      { nombre: "Patagónica", palet: 40, optimizado: 52 },
-      { nombre: "Ekos", palet: 36, optimizado: 45 },
+      { nombre: "Laja", palet: 48, optimizado: 60, altoPalet: 145, altoOptimizado: 205 },
+      { nombre: "Patagónica", palet: 40, optimizado: 52, altoPalet: 140, altoOptimizado: 195 },
+      { nombre: "Ekos", palet: 36, optimizado: 45, altoPalet: 138, altoOptimizado: 180 },
     ],
   },
   {
@@ -105,21 +110,44 @@ const CATALOGO: Array<{
   },
 ];
 
-const RACKS: Array<{
+/**
+ * Los cuatro grupos del ejemplo cubren las cuatro formas que existen en la
+ * planta: selectivos de 3 y de 4 niveles, y penetrables de 2 y de 3 de
+ * profundidad. Las alturas están en centímetros y son inventadas, como las
+ * normas: están para que la validación tenga algo que rechazar.
+ */
+const GRUPOS: Array<{
   codigo: string;
   nombre: string;
-  accesibilidad: "selectivo" | "penetrable";
-  posiciones: number;
-  profundidad: number | null;
+  geometria: Geometria;
+  /** Altura libre de cada nivel, del piso para arriba. */
+  alturas: Array<number | null>;
 }> = [
-  { codigo: "A", nombre: "Rack A", accesibilidad: "selectivo", posiciones: 12, profundidad: null },
-  { codigo: "B", nombre: "Rack B", accesibilidad: "selectivo", posiciones: 12, profundidad: null },
+  {
+    codigo: "A",
+    nombre: "Penetrable chico",
+    geometria: { tipo: "penetrable", ancho: null, niveles: 3, profundidad: 2, unidades: 6 },
+    alturas: [210, 190, 230],
+  },
+  {
+    codigo: "B",
+    nombre: "Penetrable grande",
+    geometria: { tipo: "penetrable", ancho: null, niveles: 3, profundidad: 3, unidades: 4 },
+    alturas: [210, 190, 230],
+  },
   {
     codigo: "C",
-    nombre: "Rack C (drive-in)",
-    accesibilidad: "penetrable",
-    posiciones: 4,
-    profundidad: 3,
+    nombre: "Selectivo",
+    geometria: { tipo: "selectivo", ancho: 2, niveles: 3, profundidad: null, unidades: 5 },
+    alturas: [200, 200, 240],
+  },
+  {
+    codigo: "D",
+    nombre: "Selectivo alto",
+    geometria: { tipo: "selectivo", ancho: 2, niveles: 4, profundidad: null, unidades: 4 },
+    // El nivel de arriba sin medir: el sistema no valida y eso también hay que
+    // poder verlo en el ejemplo.
+    alturas: [190, 185, 185, null],
   },
 ];
 
@@ -162,6 +190,7 @@ export async function cargarDatosDeEjemplo(
     nombre: string;
     lineaCodigo: string;
     normas: Partial<Record<Packaging, number>>;
+    alturas: Partial<Record<Packaging, number | null>>;
   }> = [];
 
   for (const [i, l] of CATALOGO.entries()) {
@@ -186,16 +215,25 @@ export async function cargarDatosDeEjemplo(
       resumen.modelos++;
 
       const suyas: Partial<Record<Packaging, number>> = {};
+      const alturas: Partial<Record<Packaging, number | null>> = {};
       // Sin fila = sin norma. El suelto nunca lleva una: el sistema no opina
-      // sobre cuánto producto suelto hay arriba de un palet de madera.
-      if (m.palet != null) suyas.palet = m.palet;
-      if (m.optimizado != null) suyas.optimizado = m.optimizado;
+      // sobre cuánto producto suelto hay arriba de un palet de madera, ni
+      // sobre cuánto mide.
+      if (m.palet != null) {
+        suyas.palet = m.palet;
+        alturas.palet = m.altoPalet;
+      }
+      if (m.optimizado != null) {
+        suyas.optimizado = m.optimizado;
+        alturas.optimizado = m.altoOptimizado;
+      }
 
       for (const [packaging, cantidad] of Object.entries(suyas)) {
         await tx.insert(normas).values({
           modeloId: modelo.id,
           packaging: packaging as Packaging,
           cantidad,
+          alturaCm: alturas[packaging as Packaging] ?? null,
         });
       }
 
@@ -204,48 +242,68 @@ export async function cargarDatosDeEjemplo(
         nombre: m.nombre,
         lineaCodigo: l.codigo,
         normas: suyas,
+        alturas,
       });
     }
   }
 
-  /* Racks y posiciones ------------------------------------------------------ */
+  /* Grupos, niveles y posiciones ------------------------------------------- */
 
   const posicionesCreadas: Array<{
     id: number;
     codigo: string;
+    nivel: number;
     profundidad: number | null;
+    alturaMaxCm: number | null;
     /** Los bultos que quedaron acá, con desde cuándo. Ver el bloque de chequeos. */
     bultos: Array<{ id: number; desde: Date }>;
   }> = [];
 
-  for (const [i, r] of RACKS.entries()) {
-    const [rack] = await tx
-      .insert(racks)
+  for (const [i, g] of GRUPOS.entries()) {
+    const [grupo] = await tx
+      .insert(grupos)
       .values({
-        codigo: r.codigo,
-        nombre: r.nombre,
-        accesibilidad: r.accesibilidad,
+        codigo: g.codigo,
+        nombre: g.nombre,
+        accesibilidad: g.geometria.tipo,
+        ancho: g.geometria.ancho,
+        niveles: g.geometria.niveles,
+        profundidad: g.geometria.profundidad,
+        unidades: g.geometria.unidades,
         orden: i,
       })
-      .returning({ id: racks.id });
+      .returning({ id: grupos.id });
     resumen.racks++;
 
-    for (let n = 1; n <= r.posiciones; n++) {
+    for (let n = 1; n <= g.geometria.niveles; n++) {
+      await tx.insert(nivelesDeGrupo).values({
+        grupoId: grupo.id,
+        nivel: n,
+        alturaMaxCm: g.alturas[n - 1] ?? null,
+      });
+    }
+
+    for (const [orden, c] of posicionesDe(g.geometria).entries()) {
+      const codigo = codigoDePosicion(c);
       const [pos] = await tx
         .insert(posiciones)
         .values({
-          rackId: rack.id,
-          codigo: String(n),
-          profundidad: r.profundidad,
-          capacidadBultos: r.profundidad ?? 1,
-          orden: n,
+          grupoId: grupo.id,
+          codigo,
+          unidad: c.unidad,
+          columna: c.columna,
+          nivel: c.nivel,
+          profundidad: c.profundidad,
+          orden,
         })
         .returning({ id: posiciones.id });
       resumen.posiciones++;
       posicionesCreadas.push({
         id: pos.id,
-        codigo: `${r.codigo}-${n}`,
-        profundidad: r.profundidad,
+        codigo: `${g.codigo}-${codigo}`,
+        nivel: c.nivel,
+        profundidad: c.profundidad,
+        alturaMaxCm: g.alturas[c.nivel - 1] ?? null,
         bultos: [],
       });
     }
@@ -254,158 +312,137 @@ export async function cargarDatosDeEjemplo(
   /* Bultos, con sus movimientos -------------------------------------------- */
 
   const conModelo = modelosCreados.filter((m) => m.normas.palet != null);
-  const libres = [...posicionesCreadas];
   let numero = 0;
 
-  /** Cuántos bultos ocupan cada posición: el penetrable lleva más de uno. */
-  const aOcupar = libres.filter(() => rnd() < 0.62);
+  /**
+   * Una posición aloja UN bulto. Antes el ejemplo metía varios por carril y la
+   * profundidad era del bulto; ahora cada slot es una posición con dirección
+   * propia y esto es un solo recorrido.
+   */
+  for (const pos of posicionesCreadas) {
+    if (rnd() > 0.55) continue;
 
-  for (const pos of aOcupar) {
-    const cuantos = pos.profundidad ? 1 + Math.floor(rnd() * pos.profundidad) : 1;
+    /**
+     * Uno de cada quince es MEZCLADO: dos modelos de la misma línea en el
+     * mismo bulto. Se arma poco -para completar un pedido- pero se arma, y
+     * nunca es normalizado: la norma es de un modelo y un packaging, así que
+     * un mezclado no tiene contra qué compararse y va siempre como suelto.
+     */
+    const mezclado = rnd() < 0.05;
+    const primero = conModelo[Math.floor(rnd() * conModelo.length)];
 
-    for (let k = 0; k < cuantos; k++) {
-      /**
-       * Uno de cada quince es MEZCLADO: dos modelos de la misma línea en el
-       * mismo bulto. Se arma poco -para completar un pedido- pero se arma, y
-       * nunca es normalizado: la norma es de un modelo y un packaging, así que
-       * un mezclado no tiene contra qué compararse y va siempre como suelto.
-       *
-       * Van pocos a propósito. Si el ejemplo tuviera la mitad mezclados, las
-       * pantallas se diseñarían para un caso que en la planta es raro.
-       */
-      const mezclado = rnd() < 0.03;
-
-      const primero = conModelo[Math.floor(rnd() * conModelo.length)];
-
-      // Dos de cada diez son producto suelto: sin norma y con cantidad libre,
-      // que es el caso que rompe cualquier cuenta hecha a ojo.
-      const dado = rnd();
-      const packaging: Packaging = mezclado
+    const dado = rnd();
+    const packaging: Packaging = mezclado
+      ? "suelto"
+      : dado < 0.2
         ? "suelto"
-        : dado < 0.2
-          ? "suelto"
-          : dado < 0.75
-            ? "palet"
-            : "optimizado";
+        : dado < 0.75
+          ? "palet"
+          : "optimizado";
 
-      const contenido: Array<{ modeloId: number; nombre: string; cantidad: number }> = [];
+    const contenido: Array<{ modeloId: number; nombre: string; cantidad: number }> = [];
 
-      if (mezclado) {
-        // El segundo modelo sale de la misma línea: mezclar placas con piedras
-        // no pasa, son dos depósitos distintos en la cabeza del operario.
-        const hermanos = conModelo.filter(
-          (m) => m.lineaCodigo === primero.lineaCodigo && m.id !== primero.id,
-        );
-        const segundo = hermanos[Math.floor(rnd() * hermanos.length)] ?? primero;
+    if (mezclado) {
+      // El segundo modelo sale de la misma línea: mezclar placas con piedras
+      // no pasa, son dos depósitos distintos en la cabeza del operario.
+      const hermanos = conModelo.filter(
+        (m) => m.lineaCodigo === primero.lineaCodigo && m.id !== primero.id,
+      );
+      const segundo = hermanos[Math.floor(rnd() * hermanos.length)] ?? primero;
+      contenido.push({
+        modeloId: primero.id,
+        nombre: primero.nombre,
+        cantidad: 8 + Math.floor(rnd() * 20),
+      });
+      if (segundo.id !== primero.id) {
         contenido.push({
-          modeloId: primero.id,
-          nombre: primero.nombre,
-          cantidad: 8 + Math.floor(rnd() * 20),
-        });
-        if (segundo.id !== primero.id) {
-          contenido.push({
-            modeloId: segundo.id,
-            nombre: segundo.nombre,
-            cantidad: 5 + Math.floor(rnd() * 15),
-          });
-        }
-      } else {
-        const norma = primero.normas[packaging] ?? null;
-        let cantidad: number;
-        if (packaging === "suelto") {
-          cantidad = 3 + Math.floor(rnd() * 25);
-        } else if (norma != null && rnd() < 0.12) {
-          // Una de cada ocho fuera de norma: existen, y la pantalla las tiene
-          // que marcar.
-          cantidad = Math.max(1, norma - (1 + Math.floor(rnd() * 6)));
-        } else {
-          cantidad = norma ?? 1;
-        }
-        contenido.push({
-          modeloId: primero.id,
-          nombre: primero.nombre,
-          cantidad,
+          modeloId: segundo.id,
+          nombre: segundo.nombre,
+          cantidad: 5 + Math.floor(rnd() * 15),
         });
       }
-
-      // La misma regla que va a validar la pantalla de mover. Si el ejemplo
-      // pudiera generar algo que la app rechazaría, el ejemplo miente.
-      const problema = validarComposicion(packaging, contenido);
-      if (problema) throw new Error(`Ejemplo inválido: ${problema}`);
-
-      const cantidad = total(contenido);
-      numero++;
-      const codigo = `P-${String(numero).padStart(5, "0")}`;
-      const creado = haceDias(5 + rnd() * 55);
-      const subido = new Date(creado.getTime() + 20 * 60 * 1000);
-
-      const [bulto] = await tx
-        .insert(bultos)
-        .values({
-          codigo,
-          packaging,
-          cantidad,
-          estado: "ubicado",
-          posicionId: pos.id,
-          /**
-           * En un carril penetrable 1 es EL DEL FRENTE, y el primero que
-           * entra queda al fondo: por eso `cuantos - k` y no `k + 1`. Es LIFO
-           * en la práctica, y esa es toda la diferencia entre un rack
-           * penetrable y uno selectivo.
-           */
-          profundidad: pos.profundidad ? cuantos - k : null,
-          creadoEn: creado,
-          creadoPor: usuario.id,
-          vistoEn: subido,
-        })
-        .returning({ id: bultos.id });
-      resumen.bultos++;
-      if (esMezclado(contenido)) resumen.mezclados++;
-      pos.bultos.push({ id: bulto.id, desde: subido });
-
-      await tx.insert(bultoContenido).values(
-        contenido.map((l) => ({
-          bultoId: bulto.id,
-          modeloId: l.modeloId,
-          cantidad: l.cantidad,
-        })),
-      );
-
-      /**
-       * Un solo movimiento: `meter`. Antes 0, después la cantidad.
-       *
-       * En la versión anterior del modelo esto eran dos -alta y subir- y no
-       * servía de nada: el bulto nace cuando entra al rack.
-       */
-      const [mov] = await tx
-        .insert(movimientos)
-        .values({
-          bultoId: bulto.id,
-          bultoCodigo: codigo,
-          lineaCodigo: primero.lineaCodigo,
-          tipo: "meter",
-          cantidadAntes: 0,
-          cantidad,
-          packaging,
-          posicionHastaId: pos.id,
-          posicionHastaCodigo: pos.codigo,
-          usuarioId: usuario.id,
-          usuarioNombre: usuario.nombre,
-          creadoEn: subido,
-        })
-        .returning({ id: movimientos.id });
-      resumen.movimientos++;
-
-      await tx.insert(movimientoLineas).values(
-        contenido.map((l) => ({
-          movimientoId: mov.id,
-          modeloId: l.modeloId,
-          modeloNombre: l.nombre,
-          cantidadAntes: 0,
-          cantidad: l.cantidad,
-        })),
-      );
+    } else {
+      const norma = primero.normas[packaging] ?? null;
+      let cantidad: number;
+      if (packaging === "suelto") {
+        cantidad = 3 + Math.floor(rnd() * 25);
+      } else if (norma != null && rnd() < 0.12) {
+        // Una de cada ocho fuera de norma: existen, y la pantalla las tiene
+        // que marcar.
+        cantidad = Math.max(1, norma - (1 + Math.floor(rnd() * 6)));
+      } else {
+        cantidad = norma ?? 1;
+      }
+      contenido.push({ modeloId: primero.id, nombre: primero.nombre, cantidad });
     }
+
+    // Las mismas reglas que valida la pantalla de mover. Si el ejemplo pudiera
+    // generar algo que la app rechazaría, el ejemplo miente.
+    const problema = validarComposicion(packaging, contenido);
+    if (problema) throw new Error(`Ejemplo inválido: ${problema}`);
+
+    const alto = packaging === "suelto" ? null : (primero.alturas[packaging] ?? null);
+    if (alto != null && pos.alturaMaxCm != null && alto > pos.alturaMaxCm) continue;
+
+    const cantidad = total(contenido);
+    numero++;
+    const codigo = `P-${String(numero).padStart(5, "0")}`;
+    const creado = haceDias(5 + rnd() * 55);
+    const subido = new Date(creado.getTime() + 20 * 60 * 1000);
+
+    const [bulto] = await tx
+      .insert(bultos)
+      .values({
+        codigo,
+        packaging,
+        cantidad,
+        estado: "ubicado",
+        posicionId: pos.id,
+        creadoEn: creado,
+        creadoPor: usuario.id,
+        vistoEn: subido,
+      })
+      .returning({ id: bultos.id });
+    resumen.bultos++;
+    if (esMezclado(contenido)) resumen.mezclados++;
+    pos.bultos.push({ id: bulto.id, desde: subido });
+
+    await tx.insert(bultoContenido).values(
+      contenido.map((l) => ({
+        bultoId: bulto.id,
+        modeloId: l.modeloId,
+        cantidad: l.cantidad,
+      })),
+    );
+
+    const [mov] = await tx
+      .insert(movimientos)
+      .values({
+        bultoId: bulto.id,
+        bultoCodigo: codigo,
+        lineaCodigo: primero.lineaCodigo,
+        tipo: "meter",
+        cantidadAntes: 0,
+        cantidad,
+        packaging,
+        posicionHastaId: pos.id,
+        posicionHastaCodigo: pos.codigo,
+        usuarioId: usuario.id,
+        usuarioNombre: usuario.nombre,
+        creadoEn: subido,
+      })
+      .returning({ id: movimientos.id });
+    resumen.movimientos++;
+
+    await tx.insert(movimientoLineas).values(
+      contenido.map((l) => ({
+        movimientoId: mov.id,
+        modeloId: l.modeloId,
+        modeloNombre: l.nombre,
+        cantidadAntes: 0,
+        cantidad: l.cantidad,
+      })),
+    );
   }
 
   /* Bultos sin ubicar: el limbo ------------------------------------------- */

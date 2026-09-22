@@ -29,6 +29,13 @@
       "when": 1790105452228,
       "tag": "0003_movimientos",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790120489325,
+      "tag": "0004_grupos",
+      "breakpoints": true
     }
   ]
 }

@@ -15,7 +15,7 @@ async function contar() {
     select
       (select count(*) from lineas)::int      as lineas,
       (select count(*) from modelos)::int     as modelos,
-      (select count(*) from racks)::int       as racks,
+      (select count(*) from grupos)::int      as grupos,
       (select count(*) from posiciones)::int  as posiciones,
       (select count(*) from bultos)::int      as bultos,
       (select count(*) from movimientos)::int as movimientos,

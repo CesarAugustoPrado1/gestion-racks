@@ -5,6 +5,7 @@ import { semividaDias } from "@/lib/configuracion";
 import { confianza, hace, indice, nivel } from "@/lib/confiabilidad";
 import { Indice } from "@/components/confiabilidad";
 import { numero } from "@/lib/formato";
+import { describirPosicion } from "@/lib/posiciones";
 import { Titulo } from "@/components/ui";
 
 export const metadata = { title: "Control · Racks" };
@@ -72,11 +73,9 @@ export default async function PantallaControl() {
                   <span className="codigo text-base text-slate-900">
                     {p.codigo}
                   </span>
-                  {p.penetrable && (
-                    <span className="chip bg-slate-100 text-slate-500">
-                      penetrable
-                    </span>
-                  )}
+                  <span className="text-xs text-slate-500">
+                    {describirPosicion(p).split(" · ")[1]}
+                  </span>
                 </div>
                 <p className="mt-0.5 truncate text-sm text-slate-600">
                   {p.contenido ?? "El sistema dice que está vacía"}

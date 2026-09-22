@@ -6,6 +6,7 @@ import { mover, sacar } from "@/lib/acciones/flujo";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
 import { ETIQUETA_PACKAGING, numero } from "@/lib/formato";
+import { describirPosicion } from "@/lib/posiciones";
 import type { PosicionLibre } from "@/lib/consultas";
 import type { Packaging } from "@/lib/db/schema";
 
@@ -266,10 +267,7 @@ function Mover({
         <option value="">Elegí la posición nueva…</option>
         {posiciones.map((p) => (
           <option key={p.id} value={p.id}>
-            {p.codigo}
-            {p.penetrable
-              ? ` · penetrable, ${p.libres} libre${p.libres === 1 ? "" : "s"}`
-              : ""}
+            {describirPosicion(p)}
           </option>
         ))}
       </select>

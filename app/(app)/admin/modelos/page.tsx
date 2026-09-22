@@ -16,7 +16,9 @@ export default async function PantallaModelos() {
       select m.id, m.nombre, m.activo, m.linea_id, l.nombre as linea_nombre,
              l.unidad_plural,
              max(case when n.packaging = 'palet' then n.cantidad end)::int as palet,
-             max(case when n.packaging = 'optimizado' then n.cantidad end)::int as optimizado
+             max(case when n.packaging = 'optimizado' then n.cantidad end)::int as optimizado,
+             max(case when n.packaging = 'palet' then n.altura_cm end)::int as alto_palet,
+             max(case when n.packaging = 'optimizado' then n.altura_cm end)::int as alto_optimizado
         from modelos m
         join lineas l on l.id = m.linea_id
         left join normas n on n.modelo_id = m.id
@@ -32,6 +34,8 @@ export default async function PantallaModelos() {
         unidad_plural: string;
         palet: number | null;
         optimizado: number | null;
+        alto_palet: number | null;
+        alto_optimizado: number | null;
       }>
     >,
     db.execute(sql`
@@ -66,6 +70,8 @@ export default async function PantallaModelos() {
             unidadPlural: m.unidad_plural,
             palet: m.palet,
             optimizado: m.optimizado,
+            altoPalet: m.alto_palet,
+            altoOptimizado: m.alto_optimizado,
           }))}
           lineas={lineas}
         />

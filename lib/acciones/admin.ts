@@ -6,16 +6,18 @@ import { z } from "zod";
 import { db } from "../db";
 import { autorizar, hashPin } from "../auth";
 import {
+  grupos,
   lineas,
   modelos,
   motivos,
+  nivelesDeGrupo,
   normas,
   posiciones,
-  racks,
   usuarios,
   type Packaging,
 } from "../db/schema";
 import { ROLES } from "../permisos";
+import { codigoDePosicion, posicionesDe, type Geometria } from "../posiciones";
 import { ejecutar, fallar, type Resultado } from "./comun";
 
 /**
@@ -112,8 +114,14 @@ const esquemaModelo = z.object({
    * propio: el sistema no opina sobre esa cantidad.
    */
   normas: z.object({
-    palet: z.number().int().positive().nullable(),
-    optimizado: z.number().int().positive().nullable(),
+    palet: z.object({
+      cantidad: z.number().int().positive().nullable(),
+      alturaCm: z.number().int().positive().nullable(),
+    }),
+    optimizado: z.object({
+      cantidad: z.number().int().positive().nullable(),
+      alturaCm: z.number().int().positive().nullable(),
+    }),
   }),
 });
 
@@ -157,7 +165,8 @@ export async function guardarModelo(
       }
 
       for (const p of ["palet", "optimizado"] as const) {
-        const cantidad = d.normas[p];
+        const { cantidad, alturaCm } = d.normas[p];
+        // Sin cantidad no hay norma: la altura sola no describe nada.
         if (cantidad == null) {
           await tx
             .delete(normas)
@@ -165,10 +174,10 @@ export async function guardarModelo(
         } else {
           await tx
             .insert(normas)
-            .values({ modeloId, packaging: p as Packaging, cantidad })
+            .values({ modeloId, packaging: p as Packaging, cantidad, alturaCm })
             .onConflictDoUpdate({
               target: [normas.modeloId, normas.packaging],
-              set: { cantidad },
+              set: { cantidad, alturaCm },
             });
         }
       }
@@ -181,110 +190,153 @@ export async function guardarModelo(
 /* Racks y posiciones                                                         */
 /* -------------------------------------------------------------------------- */
 
-const esquemaRack = z.object({
+const esquemaGrupo = z.object({
   id: z.number().int().positive().optional(),
-  codigo: z.string().trim().min(1, "Falta el código del rack.").max(10),
+  codigo: z.string().trim().min(1, "Falta el código del grupo.").max(10),
   nombre: z.string().trim().max(60).optional(),
   accesibilidad: z.enum(["selectivo", "penetrable"]),
+  ancho: z.number().int().min(1).max(10).nullable(),
+  niveles: z.number().int().min(1, "Un grupo tiene al menos un nivel.").max(10),
+  profundidad: z.number().int().min(1).max(10).nullable(),
+  unidades: z.number().int().min(0).max(200),
   activo: z.boolean(),
 });
 
-export async function guardarRack(
-  entrada: z.input<typeof esquemaRack>,
-): Promise<Resultado<{ id: number }>> {
+/**
+ * Crea las posiciones que le faltan al grupo según su geometría.
+ *
+ * Nunca borra: una posición que ya tuvo bultos aparece en el historial y tiene
+ * que seguir existiendo. Si el grupo se achica, las que sobran se suspenden a
+ * mano desde la pantalla, y solo si están vacías.
+ *
+ * Es idempotente, así que se puede correr cada vez que se guarda el grupo: si
+ * se agregan calles, aparecen las nuevas y nada más.
+ */
+async function sincronizarPosiciones(
+  grupoId: number,
+  g: Geometria,
+): Promise<number> {
+  const existentes = (await db.execute(
+    sql`select codigo from posiciones where grupo_id = ${grupoId}`,
+  )) as unknown as Array<{ codigo: string }>;
+  const ya = new Set(existentes.map((e) => e.codigo));
+
+  const nuevas = posicionesDe(g)
+    .map((c) => ({ c, codigo: codigoDePosicion(c) }))
+    .filter(({ codigo }) => !ya.has(codigo));
+
+  if (nuevas.length > 0) {
+    await db.insert(posiciones).values(
+      nuevas.map(({ c, codigo }, i) => ({
+        grupoId,
+        codigo,
+        unidad: c.unidad,
+        columna: c.columna,
+        nivel: c.nivel,
+        profundidad: c.profundidad,
+        orden: ya.size + i,
+      })),
+    );
+  }
+
+  // Un nivel por cada altura configurable, para poder medirlos después.
+  for (let n = 1; n <= g.niveles; n++) {
+    await db
+      .insert(nivelesDeGrupo)
+      .values({ grupoId, nivel: n })
+      .onConflictDoNothing();
+  }
+
+  return nuevas.length;
+}
+
+export async function guardarGrupo(
+  entrada: z.input<typeof esquemaGrupo>,
+): Promise<Resultado<{ id: number; posicionesNuevas: number }>> {
   return ejecutar(async () => {
     await autorizar("admin");
-    const d = esquemaRack.parse(entrada);
+    const d = esquemaGrupo.parse(entrada);
     const codigo = d.codigo.toUpperCase();
 
-    if (d.id) {
-      await db
-        .update(racks)
-        .set({
-          codigo,
-          nombre: d.nombre || null,
-          accesibilidad: d.accesibilidad,
-          activo: d.activo,
-        })
-        .where(eq(racks.id, d.id));
-      revalidatePath("/", "layout");
-      return { id: d.id };
+    const selectivo = d.accesibilidad === "selectivo";
+    const ancho = selectivo ? (d.ancho ?? 2) : null;
+    const profundidad = selectivo ? null : (d.profundidad ?? 2);
+    if (selectivo && ancho == null) fallar("Falta el ancho del módulo.");
+    if (!selectivo && profundidad == null) fallar("Falta la profundidad de la calle.");
+
+    const geometria: Geometria = {
+      tipo: d.accesibilidad,
+      ancho,
+      niveles: d.niveles,
+      profundidad,
+      unidades: d.unidades,
+    };
+
+    const valores = {
+      codigo,
+      nombre: d.nombre || null,
+      accesibilidad: d.accesibilidad,
+      ancho,
+      niveles: d.niveles,
+      profundidad,
+      unidades: d.unidades,
+      activo: d.activo,
+    };
+
+    let id = d.id;
+    if (id) {
+      await db.update(grupos).set(valores).where(eq(grupos.id, id));
+    } else {
+      const [ya] = await db
+        .select({ id: grupos.id })
+        .from(grupos)
+        .where(eq(grupos.codigo, codigo))
+        .limit(1);
+      if (ya) fallar(`Ya hay un grupo ${codigo}.`);
+
+      const [{ max }] = (await db.execute(
+        sql`select coalesce(max(orden), -1) + 1 as max from grupos`,
+      )) as unknown as Array<{ max: number }>;
+
+      const [creado] = await db
+        .insert(grupos)
+        .values({ ...valores, orden: max })
+        .returning({ id: grupos.id });
+      id = creado.id;
     }
 
-    const [ya] = await db
-      .select({ id: racks.id })
-      .from(racks)
-      .where(eq(racks.codigo, codigo))
-      .limit(1);
-    if (ya) fallar(`Ya hay un rack ${codigo}.`);
-
-    const [{ max }] = (await db.execute(
-      sql`select coalesce(max(orden), -1) + 1 as max from racks`,
-    )) as unknown as Array<{ max: number }>;
-
-    const [creado] = await db
-      .insert(racks)
-      .values({
-        codigo,
-        nombre: d.nombre || null,
-        accesibilidad: d.accesibilidad,
-        activo: d.activo,
-        orden: max,
-      })
-      .returning({ id: racks.id });
-
+    const posicionesNuevas = await sincronizarPosiciones(id, geometria);
     revalidatePath("/", "layout");
-    return { id: creado.id };
+    return { id, posicionesNuevas };
   });
 }
 
-const esquemaPosiciones = z.object({
-  rackId: z.number().int().positive(),
-  desde: z.number().int().min(1, "El número de inicio tiene que ser 1 o más."),
-  hasta: z.number().int().min(1),
-  /** Cuántos bultos de fondo. Vacío en un rack selectivo. */
-  profundidad: z.number().int().min(1).max(20).nullable(),
-});
-
 /**
- * Crea las posiciones de un rack de una sola vez.
+ * La altura libre de un nivel, en centímetros.
  *
- * Un rack tiene veinte o treinta posiciones y cargarlas de a una es media hora
- * de tocar botones. Las que ya existen se saltean, así se puede volver a correr
- * para ampliar un rack sin tocar lo que ya está.
+ * Vacío la borra y vuelve a "sin medir", que NO es cero: sin medir el sistema
+ * no valida nada, y cero significaría que no entra nada. Poder volver atrás
+ * importa, porque el primer número que se carga suele ser el de la cinta mal
+ * leída.
  */
-export async function generarPosiciones(
-  entrada: z.input<typeof esquemaPosiciones>,
-): Promise<Resultado<{ creadas: number; salteadas: number }>> {
+export async function guardarAlturaNivel(
+  grupoId: number,
+  nivel: number,
+  alturaCm: number | null,
+): Promise<Resultado<void>> {
   return ejecutar(async () => {
     await autorizar("admin");
-    const d = esquemaPosiciones.parse(entrada);
-    if (d.hasta < d.desde) fallar("El número final tiene que ser mayor al inicial.");
-    if (d.hasta - d.desde > 200) fallar("Son demasiadas posiciones de una vez.");
-
-    const existentes = (await db.execute(
-      sql`select codigo from posiciones where rack_id = ${d.rackId}`,
-    )) as unknown as Array<{ codigo: string }>;
-    const ya = new Set(existentes.map((e) => e.codigo));
-
-    const nuevas: Array<typeof posiciones.$inferInsert> = [];
-    for (let n = d.desde; n <= d.hasta; n++) {
-      if (ya.has(String(n))) continue;
-      nuevas.push({
-        rackId: d.rackId,
-        codigo: String(n),
-        profundidad: d.profundidad,
-        capacidadBultos: d.profundidad ?? 1,
-        orden: n,
-      });
+    if (alturaCm != null && (alturaCm < 20 || alturaCm > 1500)) {
+      fallar("La altura tiene que estar entre 20 y 1500 cm.");
     }
-
-    if (nuevas.length > 0) await db.insert(posiciones).values(nuevas);
+    await db
+      .insert(nivelesDeGrupo)
+      .values({ grupoId, nivel, alturaMaxCm: alturaCm })
+      .onConflictDoUpdate({
+        target: [nivelesDeGrupo.grupoId, nivelesDeGrupo.nivel],
+        set: { alturaMaxCm: alturaCm },
+      });
     revalidatePath("/", "layout");
-    return {
-      creadas: nuevas.length,
-      salteadas: d.hasta - d.desde + 1 - nuevas.length,
-    };
   });
 }
 
@@ -302,8 +354,7 @@ export async function suspenderPosicion(
       )) as unknown as Array<{ cuantos: number }>;
       if (cuantos > 0) {
         fallar(
-          `No se puede suspender: todavía tiene ${cuantos} bulto${cuantos === 1 ? "" : "s"} adentro. ` +
-            `Sacalos o movelos primero.`,
+          `No se puede suspender: todavía tiene un bulto adentro. Sacalo o movelo primero.`,
         );
       }
     }

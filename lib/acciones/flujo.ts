@@ -13,9 +13,10 @@ import {
   crearBulto,
   exigirAccesible,
   exigirComposicion,
+  exigirAltura,
   exigirEnStock,
+  exigirLibre,
   exigirMotivo,
-  ubicarEn,
 } from "./motor";
 import { ejecutar, fallar, type Resultado } from "./comun";
 
@@ -68,7 +69,15 @@ export async function meter(
       const destino = datos.posicionId
         ? await bloquearPosicion(tx, datos.posicionId)
         : null;
-      const profundidad = destino ? ubicarEn(destino) : null;
+
+      if (destino) {
+        exigirLibre(destino);
+        await exigirAccesible(tx, destino);
+        await exigirAltura(tx, destino, {
+          packaging: datos.packaging as Packaging,
+          contenido: datos.contenido,
+        });
+      }
 
       const nuevo = await crearBulto(tx, {
         packaging: datos.packaging as Packaging,
@@ -88,7 +97,6 @@ export async function meter(
           estado: destino ? "ubicado" : "sin_ubicar",
           posicionId: null,
           posicionCodigo: null,
-          profundidad: null,
           contenido: [],
           lineaCodigo: "",
         },
@@ -96,7 +104,7 @@ export async function meter(
         packagingDespues: datos.packaging as Packaging,
         estadoDespues: destino ? "ubicado" : "sin_ubicar",
         posicionDestino: destino
-          ? { id: destino.id, codigo: destino.codigo, profundidad }
+          ? { id: destino.id, codigo: destino.codigo }
           : null,
         usuario: { id: sesion.uid, nombre: sesion.nombre },
         nota: datos.nota,
@@ -135,7 +143,7 @@ export async function sacar(
 
       if (bulto.posicionId) {
         const pos = await bloquearPosicion(tx, bulto.posicionId);
-        exigirAccesible(pos, bulto);
+        await exigirAccesible(tx, pos);
       }
 
       const motivo = await exigirMotivo(tx, datos.motivoId, "salida");
@@ -194,11 +202,7 @@ export async function sacar(
         // la posición libre.
         posicionDestino:
           quedaron > 0 && bulto.posicionId
-            ? {
-                id: bulto.posicionId,
-                codigo: bulto.posicionCodigo!,
-                profundidad: bulto.profundidad,
-              }
+            ? { id: bulto.posicionId, codigo: bulto.posicionCodigo! }
             : null,
         usuario: { id: sesion.uid, nombre: sesion.nombre },
         motivo,
@@ -244,13 +248,18 @@ export async function mover(
       // Sacarlo de donde está: en un carril penetrable puede estar tapado.
       if (bulto.posicionId) {
         const origen = await bloquearPosicion(tx, bulto.posicionId);
-        exigirAccesible(origen, bulto);
+        await exigirAccesible(tx, origen);
       }
 
       const destino = datos.posicionId
         ? await bloquearPosicion(tx, datos.posicionId)
         : null;
-      const profundidad = destino ? ubicarEn(destino) : null;
+
+      if (destino) {
+        exigirLibre(destino);
+        await exigirAccesible(tx, destino);
+        await exigirAltura(tx, destino, bulto);
+      }
 
       await aplicarMovimiento(tx, {
         tipo: "mover",
@@ -264,7 +273,7 @@ export async function mover(
         packagingDespues: bulto.packaging,
         estadoDespues: destino ? "ubicado" : "sin_ubicar",
         posicionDestino: destino
-          ? { id: destino.id, codigo: destino.codigo, profundidad }
+          ? { id: destino.id, codigo: destino.codigo }
           : null,
         usuario: { id: sesion.uid, nombre: sesion.nombre },
         nota: datos.nota,

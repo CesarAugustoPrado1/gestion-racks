@@ -14,6 +14,8 @@ type Modelo = {
   unidadPlural: string;
   palet: number | null;
   optimizado: number | null;
+  altoPalet: number | null;
+  altoOptimizado: number | null;
 };
 
 type Edicion = {
@@ -23,6 +25,8 @@ type Edicion = {
   activo: boolean;
   palet: string;
   optimizado: string;
+  altoPalet: string;
+  altoOptimizado: string;
 };
 
 export function Modelos({
@@ -52,8 +56,16 @@ export function Modelos({
               nombre: editando.nombre,
               activo: editando.activo,
               normas: {
-                palet: editando.palet ? Number(editando.palet) : null,
-                optimizado: editando.optimizado ? Number(editando.optimizado) : null,
+                palet: {
+                  cantidad: editando.palet ? Number(editando.palet) : null,
+                  alturaCm: editando.altoPalet ? Number(editando.altoPalet) : null,
+                },
+                optimizado: {
+                  cantidad: editando.optimizado ? Number(editando.optimizado) : null,
+                  alturaCm: editando.altoOptimizado
+                    ? Number(editando.altoOptimizado)
+                    : null,
+                },
               },
             })
           }
@@ -118,10 +130,47 @@ export function Modelos({
             </div>
             {/* El campo vacío produce `null`, no cero. Son cosas distintas y la
                 pantalla lo tiene que decir. */}
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 mb-3 text-xs text-slate-500">
               Dejalo vacío si este modelo no se arma en ese packaging. Vacío no
               es cero: significa que el sistema no opina sobre esa cantidad y no
               va a marcar nada como fuera de norma.
+            </p>
+
+            <span className="etiqueta">Altura, en centímetros</span>
+            <div className="grid grid-cols-2 gap-3">
+              <Campo etiqueta="Palet">
+                <input
+                  className="campo"
+                  inputMode="numeric"
+                  value={editando.altoPalet}
+                  onChange={(e) =>
+                    setEditando({
+                      ...editando,
+                      altoPalet: e.target.value.replace(/\D/g, ""),
+                    })
+                  }
+                  placeholder="180"
+                />
+              </Campo>
+              <Campo etiqueta="Optimizado">
+                <input
+                  className="campo"
+                  inputMode="numeric"
+                  value={editando.altoOptimizado}
+                  onChange={(e) =>
+                    setEditando({
+                      ...editando,
+                      altoOptimizado: e.target.value.replace(/\D/g, ""),
+                    })
+                  }
+                  placeholder="200"
+                />
+              </Campo>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              Es lo que se compara contra la altura libre del nivel al meter o
+              mover. Sin medir, no se valida nada. El <strong>suelto</strong> no
+              lleva altura: no hay dos sueltos iguales.
             </p>
           </div>
 
@@ -144,6 +193,8 @@ export function Modelos({
               activo: true,
               palet: "",
               optimizado: "",
+              altoPalet: "",
+              altoOptimizado: "",
             })
           }
         >
@@ -177,6 +228,16 @@ export function Modelos({
                           {m.optimizado != null && (
                             <>optimizado {numero(m.optimizado)}</>
                           )}
+                          {(m.altoPalet != null || m.altoOptimizado != null) && (
+                            <>
+                              {" · "}
+                              alto{" "}
+                              {[m.altoPalet, m.altoOptimizado]
+                                .filter((a): a is number => a != null)
+                                .map((a) => `${(a / 100).toFixed(2).replace(".", ",")} m`)
+                                .join(" / ")}
+                            </>
+                          )}
                         </>
                       ) : (
                         <span className="text-amber-700">
@@ -199,6 +260,12 @@ export function Modelos({
                           palet: m.palet != null ? String(m.palet) : "",
                           optimizado:
                             m.optimizado != null ? String(m.optimizado) : "",
+                          altoPalet:
+                            m.altoPalet != null ? String(m.altoPalet) : "",
+                          altoOptimizado:
+                            m.altoOptimizado != null
+                              ? String(m.altoOptimizado)
+                              : "",
                         })
                       }
                     >

@@ -239,6 +239,18 @@ export const normas = pgTable(
       .references(() => modelos.id),
     packaging: packagingEnum("packaging").notNull(),
     cantidad: integer("cantidad").notNull(),
+    /**
+     * Cuánto mide un bulto de este modelo en este packaging, en centímetros.
+     *
+     * Es lo que se compara contra la altura libre del nivel al meter o mover.
+     * `null` = sin medir, y entonces no se valida.
+     *
+     * El SUELTO nunca tiene altura, igual que nunca tiene cantidad normalizada:
+     * no hay dos sueltos iguales. Por eso las dos cosas viven en la misma tabla
+     * -la especificación de un (modelo, packaging) normalizado- y por eso un
+     * suelto no tiene fila acá.
+     */
+    alturaCm: integer("altura_cm"),
   },
   (t) => [uniqueIndex("normas_modelo_packaging").on(t.modeloId, t.packaging)],
 );
@@ -247,48 +259,99 @@ export const normas = pgTable(
 /* Ubicaciones                                                                */
 /* -------------------------------------------------------------------------- */
 
-export const racks = pgTable("racks", {
+/**
+ * Un GRUPO de racks: A, B, C… Un lugar físico donde todas las posiciones
+ * comparten características. Eso es lo que lo hace un grupo.
+ *
+ * Puede haber dos grupos con la misma geometría -A y F, los dos selectivos de
+ * 2×3- porque el grupo es un LUGAR, no un tipo.
+ *
+ * La geometría se guarda acá y las posiciones se generan de ella:
+ *
+ *   selectivo    ancho × niveles        un módulo de 2×3 son 6 posiciones
+ *   penetrable   niveles × profundidad  una calle de 3×2 son 6 posiciones
+ *
+ * `unidades` son los módulos (selectivo) o las calles (penetrable). Las
+ * columnas nulas son las que no aplican al tipo: un selectivo no tiene
+ * profundidad y un penetrable no tiene ancho, y `null` dice eso mejor que un 1
+ * que se podría confundir con un dato.
+ */
+export const grupos = pgTable("grupos", {
   id: serial("id").primaryKey(),
   codigo: text("codigo").notNull().unique(),
   nombre: text("nombre"),
   accesibilidad: accesibilidadEnum("accesibilidad").notNull(),
+  ancho: integer("ancho"),
+  niveles: integer("niveles").notNull().default(3),
+  profundidad: integer("profundidad"),
+  unidades: integer("unidades").notNull().default(0),
   activo: boolean("activo").notNull().default(true),
   orden: integer("orden").notNull().default(0),
 });
 
 /**
- * Una posicion dentro de un rack. Se muestra siempre como codigo compuesto y
- * hablado -"B-4"-, que es el que el operario dice por handy.
+ * La altura libre de cada nivel del grupo.
  *
- * Tres columnas nacen nullable a proposito, porque todavia no sabemos como esta
- * organizada la planta y `null` significa "el sistema no opina":
+ * Va por nivel y no por posición porque todas las posiciones del nivel medio
+ * del grupo B tienen la misma luz, y cargar doscientas alturas a mano es
+ * inusable. Una posición puede sobrescribirla si tiene una viga cruzada.
  *
- * - `nivel`: si las posiciones tienen altura propia (B-4-2). Si en la planta
- *   alcanza con rack + posicion, queda en null y no se muestra.
- * - `profundidad`: cuantos bultos de fondo entran en un carril penetrable. En un
- *   rack selectivo no significa nada.
- * - `alturaMaxCm`: para avisar que un optimizado no entra. Si no hay ninguna
- *   posicion con ese limite, queda en null: un campo que nadie usa miente.
+ * `null` = sin medir, y entonces **no se valida nada**: se puede usar la app
+ * antes de tener toda la planta medida, y cada altura que se carga empieza a
+ * proteger sola.
  *
- * `codigo` es el codigo completo DENTRO del rack ("4", o "4-2" si hay niveles),
- * y es unico por rack. `nivel` sirve para agrupar y filtrar, no para
- * identificar: si identificara, no podria ser nullable.
+ * El nombre del nivel -piso, medio, arriba- NO se guarda: se deriva de cuántos
+ * hay, en lib/posiciones.ts. Un nombre que se escribe una vez por grupo es un
+ * nombre que un día va a estar mal escrito.
+ */
+export const nivelesDeGrupo = pgTable(
+  "niveles",
+  {
+    id: serial("id").primaryKey(),
+    grupoId: integer("grupo_id")
+      .notNull()
+      .references(() => grupos.id, { onDelete: "cascade" }),
+    nivel: integer("nivel").notNull(),
+    alturaMaxCm: integer("altura_max_cm"),
+  },
+  (t) => [uniqueIndex("niveles_grupo_nivel").on(t.grupoId, t.nivel)],
+);
+
+/**
+ * Una posición: el lugar de UN bulto, con dirección propia.
+ *
+ *   D-06-3     selectivo: columna 6, nivel 3
+ *   B-07-2-1   penetrable: calle 7, nivel 2, profundidad 1 (pasillo)
+ *
+ * Antes una calle penetrable era UNA posición que aguantaba tres bultos y la
+ * profundidad era un dato del bulto. Ahora cada slot es una posición: el chequeo
+ * de control pasa de aproximado -"en C-3 hay tres palets"- a exacto -"en la
+ * calle 7, nivel medio, contra la pared hay un palet de Laja"-.
+ *
+ * `codigo` es el código dentro del grupo y se genera de las coordenadas; las
+ * coordenadas quedan guardadas aparte porque son con lo que se calcula qué tapa
+ * a qué, y parsear un string para eso sería pedir un bug.
  *
  * Los contadores de chequeo se mantienen al escribir y no se recalculan al leer,
  * por el mismo motivo que `duracion_min` en Control-Secaderos: que la pantalla no
- * reconstruya la historia posicion por posicion.
+ * reconstruya la historia posición por posición.
  */
 export const posiciones = pgTable(
   "posiciones",
   {
     id: serial("id").primaryKey(),
-    rackId: integer("rack_id")
+    grupoId: integer("grupo_id")
       .notNull()
-      .references(() => racks.id),
+      .references(() => grupos.id),
     codigo: text("codigo").notNull(),
-    nivel: integer("nivel"),
+    /** Módulo (selectivo) o calle (penetrable). */
+    unidad: integer("unidad").notNull().default(1),
+    /** Columna corrida dentro del grupo. Solo selectivo. */
+    columna: integer("columna"),
+    nivel: integer("nivel").notNull().default(1),
+    /** 1 es el del pasillo, el más alto el de la pared. Solo penetrable. */
     profundidad: integer("profundidad"),
-    capacidadBultos: integer("capacidad_bultos").notNull().default(1),
+    /** Sobrescribe la altura del nivel. `null` = usa la del nivel. */
     alturaMaxCm: integer("altura_max_cm"),
     activa: boolean("activa").notNull().default(true),
     orden: integer("orden").notNull().default(0),
@@ -296,7 +359,10 @@ export const posiciones = pgTable(
     chequeosOk: integer("chequeos_ok").notNull().default(0),
     chequeosTotal: integer("chequeos_total").notNull().default(0),
   },
-  (t) => [uniqueIndex("posiciones_rack_codigo").on(t.rackId, t.codigo)],
+  (t) => [
+    uniqueIndex("posiciones_grupo_codigo").on(t.grupoId, t.codigo),
+    index("posiciones_grupo_unidad").on(t.grupoId, t.unidad, t.nivel),
+  ],
 );
 
 /* -------------------------------------------------------------------------- */
@@ -363,7 +429,6 @@ export const bultos = pgTable(
      */
     estado: estadoBultoEnum("estado").notNull(),
     posicionId: integer("posicion_id").references(() => posiciones.id),
-    profundidad: integer("profundidad"),
     creadoEn: timestamp("creado_en", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -585,7 +650,7 @@ export const movimientoLineas = pgTable(
 
 export type Linea = typeof lineas.$inferSelect;
 export type Modelo = typeof modelos.$inferSelect;
-export type Rack = typeof racks.$inferSelect;
+export type Grupo = typeof grupos.$inferSelect;
 export type Posicion = typeof posiciones.$inferSelect;
 export type Bulto = typeof bultos.$inferSelect;
 export type Movimiento = typeof movimientos.$inferSelect;

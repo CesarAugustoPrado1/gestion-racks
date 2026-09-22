@@ -1,300 +1,365 @@
 "use client";
 
 import { useState } from "react";
+import { guardarAlturaNivel, guardarGrupo } from "@/lib/acciones/admin";
+import { Campo, Formulario, Interruptor } from "@/components/admin";
+import { useAccion } from "@/components/usar-accion";
+import { Aviso } from "@/components/ui";
+import { useRouter } from "next/navigation";
 import {
-  generarPosiciones,
-  guardarRack,
-  suspenderPosicion,
-} from "@/lib/acciones/admin";
-import { BotonAccion, Campo, Formulario, Interruptor } from "@/components/admin";
+  cuantasPosiciones,
+  describirGeometria,
+  nombreDeNivel,
+  type TipoGrupo,
+} from "@/lib/posiciones";
 
-type Rack = {
+type Grupo = {
   id: number;
   codigo: string;
   nombre: string | null;
-  accesibilidad: "selectivo" | "penetrable";
+  accesibilidad: TipoGrupo;
+  ancho: number | null;
+  niveles: number;
+  profundidad: number | null;
+  unidades: number;
   activo: boolean;
   posiciones: number;
+  ocupadas: number;
 };
 
-type Posicion = {
-  id: number;
-  rackId: number;
+type Nivel = { grupoId: number; nivel: number; alturaMaxCm: number | null };
+
+type Edicion = {
+  id?: number;
   codigo: string;
-  profundidad: number | null;
-  capacidad: number;
-  activa: boolean;
-  ocupados: number;
+  nombre: string;
+  accesibilidad: TipoGrupo;
+  ancho: string;
+  niveles: string;
+  profundidad: string;
+  unidades: string;
+  activo: boolean;
 };
 
-export function Racks({
-  racks,
-  posiciones,
+const NUEVO: Edicion = {
+  codigo: "",
+  nombre: "",
+  accesibilidad: "selectivo",
+  ancho: "2",
+  niveles: "3",
+  profundidad: "2",
+  unidades: "",
+  activo: true,
+};
+
+export function Grupos({
+  grupos,
+  niveles,
 }: {
-  racks: Rack[];
-  posiciones: Posicion[];
+  grupos: Grupo[];
+  niveles: Nivel[];
 }) {
-  const [editando, setEditando] = useState<Partial<Rack> | null>(null);
-  const [generando, setGenerando] = useState<Rack | null>(null);
-  const [abierto, setAbierto] = useState<number | null>(null);
+  const [editando, setEditando] = useState<Edicion | null>(null);
 
   return (
     <div className="space-y-3">
       {editando && (
-        <Formulario
-          titulo={editando.id ? "Editar rack" : "Rack nuevo"}
-          puedeGuardar={(editando.codigo ?? "").trim().length > 0}
-          alGuardar={() =>
-            guardarRack({
-              id: editando.id,
-              codigo: editando.codigo ?? "",
-              nombre: editando.nombre ?? undefined,
-              accesibilidad: editando.accesibilidad ?? "selectivo",
-              activo: editando.activo ?? true,
-            })
-          }
+        <FormularioGrupo
+          edicion={editando}
+          cambiar={setEditando}
           cerrar={() => setEditando(null)}
-        >
-          <div className="grid grid-cols-3 gap-3">
-            <Campo etiqueta="Código">
-              <input
-                className="campo uppercase"
-                value={editando.codigo ?? ""}
-                onChange={(e) =>
-                  setEditando({ ...editando, codigo: e.target.value })
-                }
-                placeholder="B"
-              />
-            </Campo>
-            <div className="col-span-2">
-              <Campo etiqueta="Nombre (opcional)">
-                <input
-                  className="campo"
-                  value={editando.nombre ?? ""}
-                  onChange={(e) =>
-                    setEditando({ ...editando, nombre: e.target.value })
-                  }
-                  placeholder="Rack del fondo"
-                />
-              </Campo>
-            </div>
-          </div>
-          <p className="text-xs text-slate-500">
-            El código es el que se dice por handy: las posiciones se van a llamar
-            B-1, B-2…
-          </p>
-
-          <div>
-            <span className="etiqueta">Accesibilidad</span>
-            <div className="grid grid-cols-2 gap-2">
-              {(["selectivo", "penetrable"] as const).map((a) => (
-                <button
-                  key={a}
-                  type="button"
-                  onClick={() => setEditando({ ...editando, accesibilidad: a })}
-                  className={`min-h-12 rounded-xl text-sm font-semibold capitalize ${
-                    (editando.accesibilidad ?? "selectivo") === a
-                      ? "bg-slate-900 text-white"
-                      : "bg-white text-slate-700 ring-1 ring-slate-300"
-                  }`}
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
-            <p className="mt-1 text-xs text-slate-500">
-              En un rack <strong>penetrable</strong> cada posición es un carril
-              con fondo, y para sacar el de atrás hay que bajar el de adelante.
-              El sistema lo va a impedir si no se respeta.
-            </p>
-          </div>
-
-          <Interruptor
-            valor={editando.activo ?? true}
-            cambiar={(v) => setEditando({ ...editando, activo: v })}
-            etiqueta="Activo"
-          />
-        </Formulario>
+        />
       )}
 
-      {generando && (
-        <GenerarPosiciones rack={generando} cerrar={() => setGenerando(null)} />
-      )}
-
-      {!editando && !generando && (
+      {!editando && (
         <button
           type="button"
           className="boton-primario w-full"
-          onClick={() => setEditando({ accesibilidad: "selectivo", activo: true })}
+          onClick={() => setEditando({ ...NUEVO })}
         >
-          + Rack nuevo
+          + Grupo nuevo
         </button>
       )}
 
       <ul className="space-y-2">
-        {racks.map((r) => {
-          const suyas = posiciones.filter((p) => p.rackId === r.id);
-          const libres = suyas.filter((p) => p.activa && p.ocupados < p.capacidad);
-          return (
-            <li key={r.id} className="tarjeta p-4">
-              <div className="flex items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-base font-bold text-slate-900">
-                    Rack {r.codigo}
-                    <span className="ml-2 chip bg-slate-100 text-slate-600">
-                      {r.accesibilidad}
+        {grupos.map((g) => (
+          <li key={g.id} className="tarjeta p-4">
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-base font-bold text-slate-900">
+                  Grupo {g.codigo}
+                  <span className="ml-2 chip bg-slate-100 text-slate-600">
+                    {g.accesibilidad}
+                  </span>
+                  {!g.activo && (
+                    <span className="ml-2 chip bg-slate-100 text-slate-500">
+                      suspendido
                     </span>
-                    {!r.activo && (
-                      <span className="ml-2 chip bg-slate-100 text-slate-500">
-                        suspendido
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {r.nombre ? `${r.nombre} · ` : ""}
-                    {suyas.length} posicion{suyas.length === 1 ? "" : "es"} ·{" "}
-                    {libres.length} con lugar
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-col items-end gap-2">
-                  <button
-                    type="button"
-                    className="boton-secundario text-sm"
-                    onClick={() => setEditando(r)}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    className="boton-secundario text-sm"
-                    onClick={() => setGenerando(r)}
-                  >
-                    Agregar posiciones
-                  </button>
-                </div>
-              </div>
-
-              {suyas.length > 0 && (
-                <>
-                  <button
-                    type="button"
-                    className="mt-3 text-sm font-medium text-slate-500"
-                    onClick={() => setAbierto(abierto === r.id ? null : r.id)}
-                  >
-                    {abierto === r.id ? "Ocultar" : "Ver"} posiciones
-                  </button>
-                  {abierto === r.id && (
-                    <ul className="mt-2 divide-y divide-slate-100">
-                      {suyas.map((p) => (
-                        <li
-                          key={p.id}
-                          className="flex items-center gap-3 py-2 text-sm"
-                        >
-                          <span className="codigo w-16 text-slate-900">
-                            {r.codigo}-{p.codigo}
-                          </span>
-                          <span className="min-w-0 flex-1 text-xs text-slate-500">
-                            {p.ocupados} de {p.capacidad}
-                            {p.profundidad ? ` · fondo ${p.profundidad}` : ""}
-                            {!p.activa && " · suspendida"}
-                          </span>
-                          <BotonAccion
-                            accion={() => suspenderPosicion(p.id, !p.activa)}
-                          >
-                            {p.activa ? "Suspender" : "Reactivar"}
-                          </BotonAccion>
-                        </li>
-                      ))}
-                    </ul>
                   )}
-                </>
-              )}
-            </li>
-          );
-        })}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {g.nombre ? `${g.nombre} · ` : ""}
+                  {describirGeometria({ ...g, tipo: g.accesibilidad })}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {g.posiciones} posiciones · {g.ocupadas} ocupadas
+                </p>
+              </div>
+              <button
+                type="button"
+                className="boton-secundario shrink-0 text-sm"
+                onClick={() =>
+                  setEditando({
+                    id: g.id,
+                    codigo: g.codigo,
+                    nombre: g.nombre ?? "",
+                    accesibilidad: g.accesibilidad,
+                    ancho: String(g.ancho ?? 2),
+                    niveles: String(g.niveles),
+                    profundidad: String(g.profundidad ?? 2),
+                    unidades: String(g.unidades),
+                    activo: g.activo,
+                  })
+                }
+              >
+                Editar
+              </button>
+            </div>
+
+            <Alturas
+              grupo={g}
+              niveles={niveles.filter((n) => n.grupoId === g.id)}
+            />
+          </li>
+        ))}
       </ul>
     </div>
   );
 }
 
-/**
- * Crear las posiciones de a una es media hora de tocar botones para un rack de
- * treinta. Se generan por rango, y las que ya existen se saltean: así se puede
- * volver a correr para ampliar un rack sin tocar lo que ya está.
- */
-function GenerarPosiciones({
-  rack,
+function FormularioGrupo({
+  edicion,
+  cambiar,
   cerrar,
 }: {
-  rack: Rack;
+  edicion: Edicion;
+  cambiar: (e: Edicion) => void;
   cerrar: () => void;
 }) {
-  const [desde, setDesde] = useState("1");
-  const [hasta, setHasta] = useState("12");
-  const [profundidad, setProfundidad] = useState(
-    rack.accesibilidad === "penetrable" ? "3" : "",
-  );
-
-  const d = Number(desde);
-  const h = Number(hasta);
-  const cuantas = h >= d ? h - d + 1 : 0;
+  const selectivo = edicion.accesibilidad === "selectivo";
+  const geometria = {
+    tipo: edicion.accesibilidad,
+    ancho: selectivo ? Number(edicion.ancho || 0) : null,
+    niveles: Number(edicion.niveles || 0),
+    profundidad: selectivo ? null : Number(edicion.profundidad || 0),
+    unidades: Number(edicion.unidades || 0),
+  };
+  const total = cuantasPosiciones(geometria);
+  const puede =
+    edicion.codigo.trim().length > 0 &&
+    geometria.niveles > 0 &&
+    geometria.unidades > 0 &&
+    (selectivo ? (geometria.ancho ?? 0) > 0 : (geometria.profundidad ?? 0) > 0);
 
   return (
     <Formulario
-      titulo={`Posiciones del rack ${rack.codigo}`}
-      puedeGuardar={cuantas > 0}
-      textoBoton={`Crear ${cuantas}`}
+      titulo={edicion.id ? `Editar grupo ${edicion.codigo}` : "Grupo nuevo"}
+      puedeGuardar={puede}
+      textoBoton={edicion.id ? "Guardar" : `Crear con ${total} posiciones`}
       alGuardar={() =>
-        generarPosiciones({
-          rackId: rack.id,
-          desde: d,
-          hasta: h,
-          profundidad: profundidad ? Number(profundidad) : null,
+        guardarGrupo({
+          id: edicion.id,
+          codigo: edicion.codigo,
+          nombre: edicion.nombre || undefined,
+          accesibilidad: edicion.accesibilidad,
+          ancho: geometria.ancho,
+          niveles: geometria.niveles,
+          profundidad: geometria.profundidad,
+          unidades: geometria.unidades,
+          activo: edicion.activo,
         })
       }
       cerrar={cerrar}
     >
-      <div className="grid grid-cols-2 gap-3">
-        <Campo etiqueta="Desde">
+      <div className="grid grid-cols-3 gap-3">
+        <Campo etiqueta="Código">
           <input
-            className="campo"
-            inputMode="numeric"
-            value={desde}
-            onChange={(e) => setDesde(e.target.value.replace(/\D/g, ""))}
+            className="campo uppercase"
+            value={edicion.codigo}
+            onChange={(e) => cambiar({ ...edicion, codigo: e.target.value })}
+            placeholder="B"
           />
         </Campo>
-        <Campo etiqueta="Hasta">
+        <div className="col-span-2">
+          <Campo etiqueta="Nombre (opcional)">
+            <input
+              className="campo"
+              value={edicion.nombre}
+              onChange={(e) => cambiar({ ...edicion, nombre: e.target.value })}
+              placeholder="Penetrable del fondo"
+            />
+          </Campo>
+        </div>
+      </div>
+
+      <div>
+        <span className="etiqueta">Tipo</span>
+        <div className="grid grid-cols-2 gap-2">
+          {(["selectivo", "penetrable"] as const).map((a) => (
+            <button
+              key={a}
+              type="button"
+              onClick={() => cambiar({ ...edicion, accesibilidad: a })}
+              className={`min-h-12 rounded-xl text-sm font-semibold capitalize ${
+                edicion.accesibilidad === a
+                  ? "bg-slate-900 text-white"
+                  : "bg-white text-slate-700 ring-1 ring-slate-300"
+              }`}
+            >
+              {a}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          En un <strong>penetrable</strong> el clark entra por adentro de la
+          calle: el palet del piso le corta el paso a los de arriba, y el sistema
+          lo va a impedir.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        {selectivo ? (
+          <Campo etiqueta="Ancho">
+            <input
+              className="campo"
+              inputMode="numeric"
+              value={edicion.ancho}
+              onChange={(e) =>
+                cambiar({ ...edicion, ancho: e.target.value.replace(/\D/g, "") })
+              }
+            />
+          </Campo>
+        ) : (
+          <Campo etiqueta="Profundidad">
+            <input
+              className="campo"
+              inputMode="numeric"
+              value={edicion.profundidad}
+              onChange={(e) =>
+                cambiar({
+                  ...edicion,
+                  profundidad: e.target.value.replace(/\D/g, ""),
+                })
+              }
+            />
+          </Campo>
+        )}
+        <Campo etiqueta="Niveles">
           <input
             className="campo"
             inputMode="numeric"
-            value={hasta}
-            onChange={(e) => setHasta(e.target.value.replace(/\D/g, ""))}
+            value={edicion.niveles}
+            onChange={(e) =>
+              cambiar({ ...edicion, niveles: e.target.value.replace(/\D/g, "") })
+            }
+          />
+        </Campo>
+        <Campo etiqueta={selectivo ? "Módulos" : "Calles"}>
+          <input
+            className="campo"
+            inputMode="numeric"
+            value={edicion.unidades}
+            onChange={(e) =>
+              cambiar({ ...edicion, unidades: e.target.value.replace(/\D/g, "") })
+            }
+            placeholder="15"
           />
         </Campo>
       </div>
 
-      {rack.accesibilidad === "penetrable" && (
-        <Campo
-          etiqueta="Profundidad del carril"
-          ayuda="Cuántos bultos entran uno detrás de otro. El primero que entra queda al fondo."
-        >
-          <input
-            className="campo"
-            inputMode="numeric"
-            value={profundidad}
-            onChange={(e) => setProfundidad(e.target.value.replace(/\D/g, ""))}
-            placeholder="3"
-          />
-        </Campo>
+      {puede && (
+        <Aviso tono="info">
+          {describirGeometria(geometria)} = <strong>{total} posiciones</strong>.
+          {edicion.id && " Las que ya existen no se tocan; solo se agregan las que falten."}
+        </Aviso>
       )}
 
-      <p className="text-sm text-slate-600">
-        Se van a crear{" "}
-        <strong>
-          {rack.codigo}-{desde || "?"} a {rack.codigo}-{hasta || "?"}
-        </strong>
-        . Las que ya existan se saltean.
-      </p>
+      <Interruptor
+        valor={edicion.activo}
+        cambiar={(v) => cambiar({ ...edicion, activo: v })}
+        etiqueta="Activo"
+      />
     </Formulario>
+  );
+}
+
+/**
+ * La altura libre de cada nivel, editable en la misma fila del grupo.
+ *
+ * Sin medir no se valida nada, y por eso el estado vacío se muestra: es la
+ * diferencia entre "acá entra un optimizado" y "nadie lo midió todavía".
+ */
+function Alturas({ grupo, niveles }: { grupo: Grupo; niveles: Nivel[] }) {
+  const router = useRouter();
+  const { ejecutar, enviando, error } = useAccion();
+  const [valores, setValores] = useState<Record<number, string>>(
+    Object.fromEntries(
+      niveles.map((n) => [n.nivel, n.alturaMaxCm != null ? String(n.alturaMaxCm) : ""]),
+    ),
+  );
+
+  if (niveles.length === 0) return null;
+
+  return (
+    <div className="mt-3 border-t border-slate-100 pt-3">
+      <p className="mb-2 text-xs font-semibold text-slate-500">
+        Altura libre por nivel, en cm
+      </p>
+      {error && <Aviso>{error}</Aviso>}
+      <ul className="space-y-1.5">
+        {[...niveles]
+          .sort((a, b) => b.nivel - a.nivel)
+          .map((n) => (
+            <li key={n.nivel} className="flex items-center gap-2">
+              <span className="w-24 text-sm text-slate-600">
+                {nombreDeNivel(n.nivel, grupo.niveles)}
+              </span>
+              <input
+                className="campo w-24 text-right"
+                inputMode="numeric"
+                value={valores[n.nivel] ?? ""}
+                placeholder="sin medir"
+                disabled={enviando}
+                onChange={(e) =>
+                  setValores((v) => ({
+                    ...v,
+                    [n.nivel]: e.target.value.replace(/\D/g, ""),
+                  }))
+                }
+                onBlur={() => {
+                  const antes = n.alturaMaxCm != null ? String(n.alturaMaxCm) : "";
+                  const ahora = valores[n.nivel] ?? "";
+                  if (ahora === antes) return;
+                  void ejecutar(
+                    () =>
+                      guardarAlturaNivel(
+                        grupo.id,
+                        n.nivel,
+                        ahora ? Number(ahora) : null,
+                      ),
+                    () => router.refresh(),
+                  );
+                }}
+                aria-label={`Altura del nivel ${n.nivel} del grupo ${grupo.codigo}`}
+              />
+              {valores[n.nivel] && (
+                <span className="text-xs text-slate-400">
+                  {(Number(valores[n.nivel]) / 100).toFixed(2).replace(".", ",")} m
+                </span>
+              )}
+            </li>
+          ))}
+      </ul>
+    </div>
   );
 }
