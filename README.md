@@ -16,8 +16,11 @@ propósito, cada una diciendo en qué fase se construye.
 
 Pendiente antes de seguir con la fase 1:
 
-- [ ] Correr `npm run db:migrate` y `npm run db:seed` contra la base de Neon.
-- [ ] Correr **`npm run probar-base`** y leer la salida. Es la validación de
+- [ ] Aplicar `drizzle/0000_inicial.sql` y crear el usuario admin. Con terminal,
+      `npm run db:migrate` y `npm run db:seed`; sin terminal, pegando el SQL en
+      el editor de Neon (ver más abajo).
+- [ ] Mirar el **diagnóstico de base**: `npm run probar-base` desde una terminal,
+      o la pantalla `/admin/diagnostico` una vez desplegado. Es la validación de
       concurrencia contra el pooler de Neon, y es la que decide si seguimos con
       `postgres-js` o pasamos a `neon-serverless`. Ver el comentario largo en
       `lib/db/index.ts`.
@@ -45,6 +48,23 @@ npm run dev
 
 Con `npm run db:seed -- --con-ejemplos` se crean además un usuario por puesto
 (`auto1`, `control1`, `comercial1`) con el mismo PIN, para probar cada pantalla.
+
+### Arranque sin terminal
+
+Todo lo de arriba se puede hacer sin instalar nada:
+
+1. **La migración**: en el dashboard de Neon, *SQL Editor*, pegar el contenido de
+   `drizzle/0000_inicial.sql` y ejecutar.
+2. **El usuario admin**: un `insert` en `usuarios` con un hash de bcrypt del PIN.
+   El hash no se puede escribir a mano; lo genera el seed, o se pide ya hecho.
+3. **El deploy**: importar el repo en Vercel y cargar las variables.
+4. **La verificación**: entrar a `/admin/diagnostico`, que corre las mismas tres
+   mediciones que `npm run probar-base` pero **desde la instancia de Vercel**,
+   que es donde de verdad importa cómo se porta el pooler.
+
+La pantalla de diagnóstico queda para siempre, no es un andamio: el día que desde
+la planta digan que la app está lenta, separa "la base tarda" de "la red del
+galpón anda mal".
 
 ### Las dos URLs de Neon
 

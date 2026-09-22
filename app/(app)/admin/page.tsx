@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
 import { EnConstruccion, Titulo } from "@/components/ui";
 
@@ -21,6 +22,18 @@ export default async function PantallaAdmin() {
           historial tiene que seguir leyéndose.
         </p>
       </EnConstruccion>
+
+      <div className="tarjeta mt-4 p-5">
+        <h2 className="text-base font-bold text-slate-900">Diagnóstico de base</h2>
+        <p className="mt-1 mb-3 text-sm text-slate-600">
+          Mide la latencia, las consultas en paralelo y una transacción con
+          bloqueo, desde el mismo lugar donde corre la app. Es lo primero que hay
+          que mirar cuando desde la planta dicen que está lenta.
+        </p>
+        <Link href="/admin/diagnostico" className="boton-secundario">
+          Medir ahora
+        </Link>
+      </div>
     </>
   );
 }
