@@ -323,6 +323,17 @@ export const posiciones = pgTable(
  *   indice de confiabilidad. El operario que mueve ve la posicion, pero es
  *   tambien quien pudo haberse equivocado: usar su registro para subir la
  *   confiabilidad seria dejar que el dato se valide a si mismo.
+ *
+ * Regla que las ata, y que hay que respetar en todo movimiento:
+ *
+ *   **`chequeadoEn` es el ultimo chequeo que verifico este bulto EN LA POSICION
+ *   DONDE ESTA AHORA, y se borra -vuelve a `null`- cuando el bulto se mueve.**
+ *
+ * Un chequeo dice "en B-4 hay este bulto". Si despues el bulto se va a C-2, ese
+ * chequeo ya no vouchea nada: nadie verifico que este en C-2. Dejar la fecha
+ * puesta haria que un bulto recien movido se viera verde, que es exactamente al
+ * reves de la verdad -acaba de pasar por las manos donde se cometen los errores
+ * que el control busca-.
  */
 export const bultos = pgTable(
   "bultos",

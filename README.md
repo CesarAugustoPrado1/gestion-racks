@@ -13,12 +13,18 @@ tocar el código.
 **Fase 0 hecha**: la app se levanta, loguea por usuario + PIN, manda a cada rol a
 su pantalla y expone `/api/version`.
 
-**Esquema del dominio listo** (migración `0001_dominio`): líneas, modelos,
-normas, racks, posiciones, bultos, movimientos, chequeos y motivos. Con los datos
-de ejemplo se puede llenar y vaciar la base desde la app.
+**Esquema del dominio listo** (migraciones `0001_dominio` y
+`0002_bultos-mezclados`): líneas, modelos, normas, racks, posiciones, bultos con
+su contenido, movimientos con sus líneas, chequeos y motivos. Con los datos de
+ejemplo se puede llenar y vaciar la base desde la app.
 
-Las pantallas de trabajo están en blanco a propósito, cada una diciendo en qué
-fase se construye.
+**Stock funcionando**: `/stock` lista los modelos por línea, y `/stock/[id]` es
+la pantalla de las cuatro solapas —suelto, palet, optimizado y el total en la
+unidad de la línea—, con la ubicación de cada bulto, las marcas de fuera de
+norma y mezclado, y el índice de confiabilidad.
+
+Las demás pantallas de trabajo están en blanco a propósito, cada una diciendo en
+qué fase se construye.
 
 Pendiente antes de seguir con la fase 1:
 
@@ -168,11 +174,14 @@ app/
     mover/        autoelevador: subir, bajar, mover, entregar     (fase 2)
     control/      chequeos y ajustes asentados                    (fase 4)
     racks/        la foto de la planta                            (fase 3)
-    stock/        por modelo, con las cuatro solapas de packaging  (fase 3)
+    stock/        por modelo, con las cuatro solapas de packaging
     admin/        ABM de líneas, modelos, normas, racks, usuarios  (fase 1)
   login/
   api/version/    qué commit está desplegado
 lib/
+  consultas.ts    TODAS las lecturas de pantalla
+  confiabilidad.ts  el índice (módulo puro)
+  bultos.ts       reglas de composición (módulo puro)
   db/schema.ts    tablas y enums
   db/index.ts     cliente postgres cacheado (leer los comentarios)
   acciones/       server actions. comun.ts tiene Resultado/ejecutar/fallar

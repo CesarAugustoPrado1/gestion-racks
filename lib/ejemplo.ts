@@ -224,6 +224,8 @@ export async function cargarDatosDeEjemplo(
     id: number;
     codigo: string;
     profundidad: number | null;
+    /** Los bultos que quedaron acá, con desde cuándo. Ver el bloque de chequeos. */
+    bultos: Array<{ id: number; desde: Date }>;
   }> = [];
 
   for (const [i, r] of RACKS.entries()) {
@@ -254,6 +256,7 @@ export async function cargarDatosDeEjemplo(
         id: pos.id,
         codigo: `${r.codigo}-${n}`,
         profundidad: r.profundidad,
+        bultos: [],
       });
     }
   }
@@ -365,7 +368,13 @@ export async function cargarDatosDeEjemplo(
           cantidad,
           estado: "en_rack",
           posicionId: pos.id,
-          profundidad: pos.profundidad ? k + 1 : null,
+          /**
+           * En un carril penetrable 1 es EL DEL FRENTE, y el primero que
+           * entra queda al fondo: por eso `cuantos - k` y no `k + 1`. Es LIFO
+           * en la práctica, y esa es toda la diferencia entre un rack
+           * penetrable y uno selectivo.
+           */
+          profundidad: pos.profundidad ? cuantos - k : null,
           creadoEn: creado,
           creadoPor: usuario.id,
           vistoEn: subido,
@@ -373,6 +382,7 @@ export async function cargarDatosDeEjemplo(
         .returning({ id: bultos.id });
       resumen.bultos++;
       if (esMezclado(contenido)) resumen.mezclados++;
+      pos.bultos.push({ id: bulto.id, desde: subido });
 
       await tx.insert(bultoContenido).values(
         contenido.map((l) => ({
@@ -437,6 +447,7 @@ export async function cargarDatosDeEjemplo(
     const cuantos = 1 + Math.floor(rnd() * 3);
     let ok = 0;
     let ultima: Date | null = null;
+    const fechas: Array<{ cuando: Date; bien: boolean }> = [];
 
     for (let i = 0; i < cuantos; i++) {
       const edad = edades[Math.floor(rnd() * edades.length)] + i * 12;
@@ -446,6 +457,7 @@ export async function cargarDatosDeEjemplo(
       const fallo = rnd() < 0.17;
       const resultado = fallo ? "corregido" : "ok";
       if (!fallo) ok++;
+      fechas.push({ cuando, bien: !fallo });
 
       await tx.insert(chequeos).values({
         posicionId: pos.id,
@@ -465,6 +477,30 @@ export async function cargarDatosDeEjemplo(
       .update(posiciones)
       .set({ chequeadoEn: ultima, chequeosOk: ok, chequeosTotal: cuantos })
       .where(eq(posiciones.id, pos.id));
+
+    /**
+     * Un chequeo solo cubre a los bultos que YA ESTABAN ahí cuando se hizo.
+     *
+     * Si el bulto llegó después, ese chequeo no dice nada sobre él: nadie
+     * verificó que esté donde el sistema dice. Sin este filtro, un bulto subido
+     * hoy a una posición chequeada el mes pasado se vería verde, que es
+     * exactamente al revés de la verdad.
+     */
+    for (const b of pos.bultos) {
+      const suyos = fechas.filter((f) => f.cuando >= b.desde);
+      if (suyos.length === 0) continue;
+      await tx
+        .update(bultos)
+        .set({
+          chequeadoEn: suyos.reduce(
+            (max, f) => (f.cuando > max ? f.cuando : max),
+            suyos[0].cuando,
+          ),
+          chequeosOk: suyos.filter((f) => f.bien).length,
+          chequeosTotal: suyos.length,
+        })
+        .where(eq(bultos.id, b.id));
+    }
   }
 
   return resumen;

@@ -83,10 +83,18 @@
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
   }
 
-  /* El codigo de una ubicacion (B-4) y el de un bulto se leen de lejos y se
-     comparan de a varios: van siempre en tabular-nums para que las cifras
-     queden en columna. */
+  /* Dos tratamientos distintos, y la diferencia importa:
+
+     .codigo  IDENTIFICA: B-4, P-00021. Va en monoespaciada porque se compara
+              caracter por caracter contra lo que dice la etiqueta o el handy.
+     .cifra   CUENTA: 224 paquetes. Va en la tipografia del texto, porque se
+              lee como un numero y no como un codigo, pero con tabular-nums
+              para que en una lista las cifras queden en columna. */
   .codigo {
     @apply font-mono font-bold tabular-nums;
+  }
+
+  .cifra {
+    @apply font-bold tabular-nums;
   }
 }

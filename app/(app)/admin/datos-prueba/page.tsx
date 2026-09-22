@@ -43,7 +43,7 @@ export default async function PantallaDatosPrueba() {
           {Object.entries(conteo).map(([que, cuantos]) => (
             <div key={que}>
               <dt className="text-xs text-slate-500 capitalize">{que}</dt>
-              <dd className="codigo text-lg text-slate-900">{cuantos}</dd>
+              <dd className="cifra text-lg text-slate-900">{cuantos}</dd>
             </div>
           ))}
         </dl>
