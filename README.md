@@ -23,6 +23,11 @@ la pantalla de las cuatro solapas —suelto, palet, optimizado y el total en la
 unidad de la línea—, con la ubicación de cada bulto, las marcas de fuera de
 norma y mezclado, y el índice de confiabilidad.
 
+**Mover funcionando**: `/mover` es la pantalla del autoelevador —buscar por
+código, ubicación o modelo; la cola de los que están sin ubicar; la actividad del
+día— más meter, sacar (entero o parcial, con motivo) y cambiar de lugar. El motor
+está en `lib/acciones/motor.ts` y es el único lugar que escribe un movimiento.
+
 Las demás pantallas de trabajo están en blanco a propósito, cada una diciendo en
 qué fase se construye.
 
@@ -171,7 +176,7 @@ también contesta 200.
 ```
 app/
   (app)/          pantallas con sesión
-    mover/        autoelevador: subir, bajar, mover, entregar     (fase 2)
+    mover/        autoelevador: meter, sacar, cambiar de lugar
     control/      chequeos y ajustes asentados                    (fase 4)
     racks/        la foto de la planta                            (fase 3)
     stock/        por modelo, con las cuatro solapas de packaging
@@ -179,6 +184,8 @@ app/
   login/
   api/version/    qué commit está desplegado
 lib/
+  acciones/motor.ts  bloqueo, validaciones y escritura de movimientos
+  acciones/flujo.ts  meter, sacar y mover
   consultas.ts    TODAS las lecturas de pantalla
   confiabilidad.ts  el índice (módulo puro)
   bultos.ts       reglas de composición (módulo puro)

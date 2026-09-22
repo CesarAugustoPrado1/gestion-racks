@@ -12,6 +12,18 @@ import type { Packaging } from "./db/schema";
  */
 const EN_STOCK = sql`b.estado in ('ubicado', 'sin_ubicar')`;
 
+/**
+ * Los timestamps de `db.execute` con SQL crudo vuelven como TEXTO, no como
+ * Date: el mapeo de tipos de drizzle solo corre en el query builder.
+ *
+ * Declararlos `Date` y devolver un string compila igual y explota en la
+ * pantalla, que es donde se descubrió: `creadoEn.toLocaleTimeString is not a
+ * function`, con la lista del día en blanco. Toda fecha que salga de una
+ * consulta cruda pasa por acá, para que el tipo declarado sea verdad.
+ */
+const comoFecha = (v: Date | string | null): Date | null =>
+  v == null ? null : v instanceof Date ? v : new Date(v);
+
 export type TotalPorPackaging = Partial<
   Record<Packaging, { unidades: number; bultos: number }>
 >;
@@ -234,9 +246,298 @@ export async function detalleDeModelo(
       accesibilidad: b.accesibilidad,
       profundidad: b.profundidad,
       profundidadMax: b.profundidad_max,
-      chequeadoEn: b.chequeado_en,
+      chequeadoEn: comoFecha(b.chequeado_en),
       chequeosOk: b.chequeos_ok,
       chequeosTotal: b.chequeos_total,
     })),
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Lecturas para la pantalla de mover                                         */
+/* -------------------------------------------------------------------------- */
+
+export type PosicionLibre = {
+  id: number;
+  codigo: string;
+  rack: string;
+  penetrable: boolean;
+  libres: number;
+};
+
+/**
+ * Las posiciones donde entra algo, agrupadas por rack.
+ *
+ * Solo se ofrecen las que tienen lugar: una lista que incluye posiciones llenas
+ * obliga al operario a acordarse de cuáles no sirven, y ese es trabajo que la
+ * pantalla puede hacer sola.
+ */
+export async function posicionesLibres(): Promise<PosicionLibre[]> {
+  const filas = (await db.execute(sql`
+    select p.id,
+           r.codigo || '-' || p.codigo as codigo,
+           r.codigo as rack,
+           r.accesibilidad,
+           p.capacidad_bultos - count(b.id)::int as libres
+      from posiciones p
+      join racks r on r.id = p.rack_id
+      left join bultos b on b.posicion_id = p.id and b.estado = 'ubicado'
+     where p.activa and r.activo
+     group by p.id, p.capacidad_bultos, r.id, r.codigo, r.orden, p.orden, r.accesibilidad
+    having p.capacidad_bultos - count(b.id) > 0
+     order by r.orden, p.orden
+  `)) as unknown as Array<{
+    id: number;
+    codigo: string;
+    rack: string;
+    accesibilidad: string;
+    libres: number;
+  }>;
+  return filas.map((f) => ({
+    id: f.id,
+    codigo: f.codigo,
+    rack: f.rack,
+    penetrable: f.accesibilidad === "penetrable",
+    libres: f.libres,
+  }));
+}
+
+export type ModeloParaCargar = {
+  id: number;
+  nombre: string;
+  lineaId: number;
+  lineaNombre: string;
+  unidadPlural: string;
+  normas: Partial<Record<Packaging, number>>;
+};
+
+/** Los modelos que se pueden cargar, con su norma por packaging. */
+export async function modelosParaCargar(): Promise<ModeloParaCargar[]> {
+  const [modelos, normas] = await Promise.all([
+    db.execute(sql`
+      select m.id, m.nombre, l.id as linea_id, l.nombre as linea_nombre,
+             l.unidad_plural
+        from modelos m join lineas l on l.id = m.linea_id
+       where m.activo and l.activa
+       order by l.orden, m.orden
+    `) as unknown as Promise<
+      Array<{
+        id: number;
+        nombre: string;
+        linea_id: number;
+        linea_nombre: string;
+        unidad_plural: string;
+      }>
+    >,
+    db.execute(sql`
+      select modelo_id, packaging, cantidad from normas
+    `) as unknown as Promise<
+      Array<{ modelo_id: number; packaging: Packaging; cantidad: number }>
+    >,
+  ]);
+
+  const porModelo = new Map<number, Partial<Record<Packaging, number>>>();
+  for (const n of normas) {
+    const actual = porModelo.get(n.modelo_id) ?? {};
+    actual[n.packaging] = n.cantidad;
+    porModelo.set(n.modelo_id, actual);
+  }
+
+  return modelos.map((m) => ({
+    id: m.id,
+    nombre: m.nombre,
+    lineaId: m.linea_id,
+    lineaNombre: m.linea_nombre,
+    unidadPlural: m.unidad_plural,
+    normas: porModelo.get(m.id) ?? {},
+  }));
+}
+
+export type BultoEnLista = {
+  id: number;
+  codigo: string;
+  packaging: Packaging;
+  cantidad: number;
+  ubicacion: string | null;
+  contenido: string;
+  unidadPlural: string;
+  chequeadoEn: Date | null;
+  chequeosOk: number;
+  chequeosTotal: number;
+};
+
+const SELECT_BULTO = sql`
+  select b.id, b.codigo, b.packaging, b.cantidad,
+         b.chequeado_en, b.chequeos_ok, b.chequeos_total,
+         case when p.id is null then null
+              else r.codigo || '-' || p.codigo end as ubicacion,
+         (select string_agg(m.nombre || ' ' || c.cantidad, ' + ' order by m.nombre)
+            from bulto_contenido c join modelos m on m.id = c.modelo_id
+           where c.bulto_id = b.id) as contenido,
+         (select l.unidad_plural
+            from bulto_contenido c join modelos m on m.id = c.modelo_id
+            join lineas l on l.id = m.linea_id
+           where c.bulto_id = b.id limit 1) as unidad_plural
+    from bultos b
+    left join posiciones p on p.id = b.posicion_id
+    left join racks r on r.id = p.rack_id
+`;
+
+type FilaBulto = {
+  id: number;
+  codigo: string;
+  packaging: Packaging;
+  cantidad: number;
+  ubicacion: string | null;
+  contenido: string | null;
+  unidad_plural: string | null;
+  chequeado_en: Date | null;
+  chequeos_ok: number;
+  chequeos_total: number;
+};
+
+const aBulto = (f: FilaBulto): BultoEnLista => ({
+  id: f.id,
+  codigo: f.codigo,
+  packaging: f.packaging,
+  cantidad: f.cantidad,
+  ubicacion: f.ubicacion,
+  contenido: f.contenido ?? "Vacío",
+  unidadPlural: f.unidad_plural ?? "unidades",
+  chequeadoEn: comoFecha(f.chequeado_en),
+  chequeosOk: f.chequeos_ok,
+  chequeosTotal: f.chequeos_total,
+});
+
+/**
+ * Busca un bulto por código, por ubicación o por modelo.
+ *
+ * Las tres cosas en un solo campo porque el operario tiene una sola mano libre:
+ * escribe "B-4" o "laja" o "21" y la pantalla se arregla. Pedirle que elija
+ * primero el tipo de búsqueda es un toque de más en cada uso.
+ */
+export async function buscarBultos(texto: string): Promise<BultoEnLista[]> {
+  const q = texto.trim();
+  if (q.length === 0) return [];
+  const patron = `%${q}%`;
+
+  const filas = (await db.execute(sql`
+    ${SELECT_BULTO}
+    where ${EN_STOCK}
+      and (
+        b.codigo ilike ${patron}
+        or (r.codigo || '-' || p.codigo) ilike ${patron}
+        or exists (select 1 from bulto_contenido c join modelos m on m.id = c.modelo_id
+                    where c.bulto_id = b.id and m.nombre ilike ${patron})
+      )
+    order by b.visto_en desc
+    limit 40
+  `)) as unknown as FilaBulto[];
+
+  return filas.map(aBulto);
+}
+
+export async function bultoPorId(id: number): Promise<BultoEnLista | null> {
+  const filas = (await db.execute(sql`
+    ${SELECT_BULTO} where b.id = ${id} and ${EN_STOCK} limit 1
+  `)) as unknown as FilaBulto[];
+  return filas.length > 0 ? aBulto(filas[0]) : null;
+}
+
+/** El contenido de un bulto, modelo por modelo. Para sacar una parte. */
+export async function contenidoDeBulto(
+  id: number,
+): Promise<Array<{ modeloId: number; nombre: string; cantidad: number }>> {
+  const filas = (await db.execute(sql`
+    select c.modelo_id, m.nombre, c.cantidad
+      from bulto_contenido c join modelos m on m.id = c.modelo_id
+     where c.bulto_id = ${id}
+     order by m.orden, m.nombre
+  `)) as unknown as Array<{
+    modelo_id: number;
+    nombre: string;
+    cantidad: number;
+  }>;
+  return filas.map((f) => ({
+    modeloId: f.modelo_id,
+    nombre: f.nombre,
+    cantidad: f.cantidad,
+  }));
+}
+
+/**
+ * Los bultos sin lugar asignado.
+ *
+ * Va primero en la pantalla del autoelevador, y no escondido en un reporte: es
+ * una cola de trabajo -"esto hay que ubicarlo"- y una cola que no se ve no se
+ * vacía.
+ */
+export async function bultosSinUbicar(): Promise<BultoEnLista[]> {
+  const filas = (await db.execute(sql`
+    ${SELECT_BULTO} where b.estado = 'sin_ubicar' order by b.creado_en limit 50
+  `)) as unknown as FilaBulto[];
+  return filas.map(aBulto);
+}
+
+export async function motivosDeSalida(): Promise<
+  Array<{ id: number; nombre: string; esEgreso: boolean }>
+> {
+  const filas = (await db.execute(sql`
+    select id, nombre, es_egreso from motivos
+     where ambito = 'salida' and activo order by orden, nombre
+  `)) as unknown as Array<{ id: number; nombre: string; es_egreso: boolean }>;
+  return filas.map((f) => ({
+    id: f.id,
+    nombre: f.nombre,
+    esEgreso: f.es_egreso,
+  }));
+}
+
+export type MovimientoDelDia = {
+  id: number;
+  tipo: string;
+  bultoCodigo: string;
+  desde: string | null;
+  hasta: string | null;
+  cantidadAntes: number;
+  cantidad: number;
+  motivo: string | null;
+  usuario: string;
+  creadoEn: Date;
+};
+
+/** Lo que se hizo hoy. Es lo que el operario mira para saber si ya lo registró. */
+export async function actividadDeHoy(): Promise<MovimientoDelDia[]> {
+  const filas = (await db.execute(sql`
+    select id, tipo, bulto_codigo, posicion_desde_codigo, posicion_hasta_codigo,
+           cantidad_antes, cantidad, motivo_nombre, usuario_nombre, creado_en
+      from movimientos
+     where anulado_en is null
+       and creado_en >= date_trunc('day', now())
+     order by creado_en desc
+     limit 30
+  `)) as unknown as Array<{
+    id: number;
+    tipo: string;
+    bulto_codigo: string;
+    posicion_desde_codigo: string | null;
+    posicion_hasta_codigo: string | null;
+    cantidad_antes: number;
+    cantidad: number;
+    motivo_nombre: string | null;
+    usuario_nombre: string;
+    creado_en: Date;
+  }>;
+  return filas.map((f) => ({
+    id: f.id,
+    tipo: f.tipo,
+    bultoCodigo: f.bulto_codigo,
+    desde: f.posicion_desde_codigo,
+    hasta: f.posicion_hasta_codigo,
+    cantidadAntes: f.cantidad_antes,
+    cantidad: f.cantidad,
+    motivo: f.motivo_nombre,
+    usuario: f.usuario_nombre,
+    creadoEn: comoFecha(f.creado_en)!,
+  }));
 }
