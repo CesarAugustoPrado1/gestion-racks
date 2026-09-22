@@ -23,6 +23,9 @@ la pantalla de las cuatro solapas —suelto, palet, optimizado y el total en la
 unidad de la línea—, con la ubicación de cada bulto, las marcas de fuera de
 norma y mezclado, y el índice de confiabilidad.
 
+**ABM funcionando**: líneas, modelos con sus normas, racks con generación de
+posiciones por rango, motivos y usuarios. Nada se borra: todo se suspende.
+
 **Control funcionando**: `/control` es la recorrida ordenada por
 `(1 − confianza) × cantidad` —primero lo que hace más que no se mira y más
 producto tiene— y `/control/[id]` es el chequeo: confirmar en un toque, o
@@ -186,13 +189,14 @@ app/
     control/      recorrida, chequeos y ajustes asentados
     racks/        la foto de la planta                            (fase 3)
     stock/        por modelo, con las cuatro solapas de packaging
-    admin/        ABM de líneas, modelos, normas, racks, usuarios  (fase 1)
+    admin/        ABM, datos de prueba y diagnóstico de base
   login/
   api/version/    qué commit está desplegado
 lib/
   acciones/motor.ts  bloqueo, validaciones y escritura de movimientos
   acciones/flujo.ts  meter, sacar y mover
   acciones/control.ts  confirmar y corregir
+  acciones/admin.ts  ABM
   consultas.ts    TODAS las lecturas de pantalla
   confiabilidad.ts  el índice (módulo puro)
   bultos.ts       reglas de composición (módulo puro)

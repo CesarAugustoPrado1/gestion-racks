@@ -19,7 +19,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import bcrypt from "bcryptjs";
 import { normalizarUrl } from "../lib/db";
 import * as schema from "../lib/db/schema";
-import { config, usuarios, type Rol } from "../lib/db/schema";
+import { config, motivos, usuarios, type Rol } from "../lib/db/schema";
 
 const conExamples = process.argv.includes("--con-ejemplos");
 
@@ -42,6 +42,27 @@ const conModoPrueba = process.argv.includes("--modo-prueba");
  */
 const PARAMETROS: Array<{ clave: string; valor: string }> = [
   { clave: "confiabilidad_semivida_dias", valor: "30" },
+];
+
+/**
+ * Los motivos son configuracion y no datos de prueba: sin ellos no se puede
+ * sacar nada del rack. Por eso los crea el seed y no el ejemplo, y por eso el
+ * borrado total no los toca.
+ */
+const MOTIVOS: Array<{
+  nombre: string;
+  ambito: "salida" | "ajuste";
+  esEgreso?: boolean;
+}> = [
+  { nombre: "Entrega a cliente", ambito: "salida" },
+  { nombre: "Muestra", ambito: "salida" },
+  { nombre: "Rotura o descarte", ambito: "salida" },
+  { nombre: "Rearmado o reempaque", ambito: "salida", esEgreso: false },
+  { nombre: "Otro", ambito: "salida" },
+  { nombre: "Cantidad distinta a la registrada", ambito: "ajuste" },
+  { nombre: "Bulto en otra posición", ambito: "ajuste" },
+  { nombre: "Modelo equivocado", ambito: "ajuste" },
+  { nombre: "Posición vacía en el sistema", ambito: "ajuste" },
 ];
 
 const EJEMPLOS: Array<{ usuario: string; nombre: string; rol: Rol }> = [
@@ -94,6 +115,16 @@ async function main() {
     await db.insert(config).values(p).onConflictDoNothing();
   }
   console.log(`✓ ${PARAMETROS.length} parámetro(s) verificado(s)`);
+
+  const yaHay = await db.select({ nombre: motivos.nombre }).from(motivos);
+  const nombres = new Set(yaHay.map((m) => m.nombre.toLowerCase()));
+  const faltan = MOTIVOS.filter((m) => !nombres.has(m.nombre.toLowerCase()));
+  if (faltan.length > 0) {
+    await db
+      .insert(motivos)
+      .values(faltan.map((m, i) => ({ ...m, orden: nombres.size + i })));
+  }
+  console.log(`✓ ${faltan.length} motivo(s) creado(s), ${nombres.size} ya estaban`);
 
   if (conExamples) {
     for (const e of EJEMPLOS) {

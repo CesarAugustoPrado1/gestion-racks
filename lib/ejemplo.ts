@@ -8,7 +8,6 @@ import {
   chequeos,
   lineas,
   modelos,
-  motivos,
   movimientoLineas,
   movimientos,
   normas,
@@ -122,27 +121,6 @@ const RACKS: Array<{
     posiciones: 4,
     profundidad: 3,
   },
-];
-
-/**
- * Lista cerrada. `esEgreso` marca lo que se fue de la fábrica y no vuelve: sin
- * esa distinción, un rearmado que baja y vuelve a subir en media hora contaría
- * como producto despachado.
- */
-const MOTIVOS: Array<{
-  nombre: string;
-  ambito: "salida" | "ajuste";
-  esEgreso?: boolean;
-}> = [
-  { nombre: "Entrega a cliente", ambito: "salida" },
-  { nombre: "Muestra", ambito: "salida" },
-  { nombre: "Rotura o descarte", ambito: "salida" },
-  { nombre: "Rearmado o reempaque", ambito: "salida", esEgreso: false },
-  { nombre: "Otro", ambito: "salida" },
-  { nombre: "Cantidad distinta a la registrada", ambito: "ajuste" },
-  { nombre: "Bulto en otra posición", ambito: "ajuste" },
-  { nombre: "Modelo equivocado", ambito: "ajuste" },
-  { nombre: "Posición vacía en el sistema", ambito: "ajuste" },
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -271,12 +249,6 @@ export async function cargarDatosDeEjemplo(
         bultos: [],
       });
     }
-  }
-
-  /* Motivos ----------------------------------------------------------------- */
-
-  for (const [i, m] of MOTIVOS.entries()) {
-    await tx.insert(motivos).values({ ...m, orden: i });
   }
 
   /* Bultos, con sus movimientos -------------------------------------------- */

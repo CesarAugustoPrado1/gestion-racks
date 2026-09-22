@@ -32,17 +32,28 @@ import { ejecutar, fallar, type Resultado } from "./comun";
  * descubre es el que aprieta el boton.
  */
 
-/** Orden de borrado: de lo que referencia a lo referenciado. */
+/**
+ * Orden de borrado: de lo que referencia a lo referenciado.
+ *
+ * `motivos` NO está en la lista, y es a propósito: son CONFIGURACIÓN, no datos
+ * de prueba. Sin motivos no se puede sacar nada del rack, y quedarse sin ellos
+ * justo al terminar la etapa de prueba -o sea, justo al empezar a trabajar en
+ * serio- sería el peor momento posible. Se editan desde Administración.
+ *
+ * Tampoco están `usuarios` ni `config`, por la misma razón: un borrado que se
+ * lleva los usuarios te deja afuera de tu propia app.
+ */
 const TABLAS_EN_ORDEN = [
   "chequeos",
+  "movimiento_lineas",
   "movimientos",
+  "bulto_contenido",
   "bultos",
   "posiciones",
   "racks",
   "normas",
   "modelos",
   "lineas",
-  "motivos",
 ];
 
 async function exigirModoPrueba() {
