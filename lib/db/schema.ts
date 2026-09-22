@@ -116,47 +116,57 @@ export const accesibilidadEnum = pgEnum("accesibilidad", [
   "penetrable",
 ]);
 
-/** Solo `en_rack` y `en_piso` son stock: los otros dos ya no existen como bulto. */
+/**
+ * Tres estados, y solo los dos primeros son stock.
+ *
+ * `sin_ubicar` es el limbo: el bulto ESTA en el sistema y se cuenta, pero
+ * todavia no tiene lugar asignado. Pasa cuando las posiciones previstas para ese
+ * producto estan llenas -o cuando hay lugar pero esta reservado para otra cosa-
+ * y el palet no se puede quedar sin existir solo porque no hay donde ponerlo.
+ *
+ * Tiene un costo deliberado: un bulto sin ubicar NO SE PUEDE CHEQUEAR, porque no
+ * hay posicion que verificar. Su confiabilidad queda en "sin datos" mientras
+ * siga ahi. El limbo tiene que ser incomodo, si no se llena.
+ *
+ * `salido` no dice por que salio: eso vive en el motivo del movimiento, que es
+ * donde se puede medir.
+ */
 export const estadoBultoEnum = pgEnum("estado_bulto", [
-  "en_rack",
-  "en_piso",
-  "entregado",
-  "desarmado",
+  "ubicado",
+  "sin_ubicar",
+  "salido",
 ]);
+export type EstadoBulto = (typeof estadoBultoEnum.enumValues)[number];
 
 /**
- * Un tipo por cada cosa que se mida distinto. Es la regla de oro heredada de
- * Control-Secaderos y la decision mas importante del modelo.
+ * CUATRO movimientos, definidos por su efecto sobre el stock.
  *
- * `alta`      el bulto entra al sistema: se armo en planta. Es produccion
- *             ingresada, no un movimiento de rack.
- * `subir`     piso -> posicion.
- * `mover`     posicion -> posicion. Manipulacion interna: no es stock nuevo ni
- *             menos.
- * `bajar`     posicion -> piso, sigue en planta. Bajado NO es entregado: un
- *             bulto al pie del rack existe y se cuenta.
- * `entrega`   sale de la fabrica. El UNICO que resta stock comercial.
- * `reempaque` cambia el packaging o la cantidad (armar, desarmar, pasar a
- *             optimizado). Mueve cantidad entre solapas sin que entre ni salga
- *             nada de la fabrica.
- * `ajuste`    correccion de control, con motivo obligatorio. Es la medida del
- *             error del sistema; mezclarlo con `mover` borraria el unico numero
- *             que dice cuanto nos equivocamos.
+ * Esta es la segunda version del modelo y la buena. La primera tenia siete tipos
+ * definidos por la INTENCION (alta, subir, bajar, mover, entrega, reempaque,
+ * ajuste). Estos cuatro se definen por lo que le hacen al stock, que es lo unico
+ * que el operario, el comercial y el dueño tienen que entender igual:
  *
- * Si `bajar` y `entrega` fueran el mismo tipo con una nota, no se podria
- * distinguir "lo baje para reacomodar" de "salio a un cliente", que es la
- * diferencia entre manipulacion y venta.
+ *   meter   +   entra producto al rack
+ *   sacar   -   sale producto del rack, entero o una parte
+ *   mover   0   cambia de lugar; sigue estando y sigue disponible
+ *   ajuste  ±   el registro estaba mal y control lo corrige: NO SE MOVIO NADA
  *
- * Corolario: toda consulta de estadistica filtra por tipo EXPLICITAMENTE, asi un
- * tipo nuevo queda fuera de los calculos viejos por defecto.
+ * Las palabras son las de la planta, no las del programador. Si el sistema y el
+ * piso no hablan igual, la traduccion la termina haciendo el operario, y ahi se
+ * equivoca.
+ *
+ * `ajuste` es el que no se puede fusionar con ninguno. Si una correccion de
+ * control se registrara como `meter`, el sistema diria que produccion entrego
+ * palets que nunca existieron, y se perderia el unico numero que dice cuanto nos
+ * equivocamos, que es lo que le da sentido al indice de confiabilidad.
+ *
+ * Lo que `sacar` NO distingue por tipo -venta, rearmado, rotura- va en el
+ * motivo, que es obligatorio y de lista cerrada. Ver `motivos`.
  */
 export const tipoMovimientoEnum = pgEnum("tipo_movimiento", [
-  "alta",
-  "subir",
-  "bajar",
+  "meter",
+  "sacar",
   "mover",
-  "entrega",
-  "reempaque",
   "ajuste",
 ]);
 export type TipoMovimiento = (typeof tipoMovimientoEnum.enumValues)[number];
@@ -172,11 +182,7 @@ export const resultadoChequeoEnum = pgEnum("resultado_chequeo", [
 ]);
 export type ResultadoChequeo = (typeof resultadoChequeoEnum.enumValues)[number];
 
-export const ambitoMotivoEnum = pgEnum("ambito_motivo", [
-  "ajuste",
-  "entrega",
-  "reempaque",
-]);
+export const ambitoMotivoEnum = pgEnum("ambito_motivo", ["salida", "ajuste"]);
 
 /**
  * La unidad base es un dato de la LINEA, no un `if` en el codigo.
@@ -349,7 +355,13 @@ export const bultos = pgTable(
      * misma transaccion.
      */
     cantidad: integer("cantidad").notNull(),
-    estado: estadoBultoEnum("estado").notNull().default("en_piso"),
+    /**
+     * Sin default: cada alta tiene que decir explicitamente si el bulto entra
+     * ubicado o al limbo. Un default aca haria que un olvido mande bultos a
+     * `sin_ubicar` en silencio, que es justo el estado que no queremos que
+     * crezca solo.
+     */
+    estado: estadoBultoEnum("estado").notNull(),
     posicionId: integer("posicion_id").references(() => posiciones.id),
     profundidad: integer("profundidad"),
     creadoEn: timestamp("creado_en", { withTimezone: true })
@@ -409,11 +421,29 @@ export const bultoContenido = pgTable(
 /* Movimientos y chequeos                                                     */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Por que salio, o por que hubo que ajustar.
+ *
+ * Es LISTA CERRADA y no texto libre, por una razon simple: el texto libre no se
+ * puede sumar. "Cuanto salio a clientes este mes" tiene que ser una consulta, no
+ * una lectura de notas.
+ *
+ * Y el motivo de una salida se pide EN EL MOMENTO porque es el unico momento en
+ * que se sabe: el lunes nadie puede reconstruir por que bajaron el P-00042 el
+ * jueves. Es un toque mas para el operario y es irrecuperable si no se pide.
+ */
 export const motivos = pgTable("motivos", {
   id: serial("id").primaryKey(),
   nombre: text("nombre").notNull(),
   ambito: ambitoMotivoEnum("ambito").notNull(),
+  /**
+   * Si esta salida es producto que se fue de la fabrica. Un rearmado tambien
+   * resta del rack, pero no es una venta: sin esta bandera, "lo que salio" y "lo
+   * que se vendio" serian el mismo numero y no lo son.
+   */
+  esEgreso: boolean("es_egreso").notNull().default(true),
   activo: boolean("activo").notNull().default(true),
+  orden: integer("orden").notNull().default(0),
 });
 
 /**
@@ -440,9 +470,28 @@ export const movimientos = pgTable(
       .references(() => bultos.id),
     bultoCodigo: text("bulto_codigo").notNull(),
     lineaCodigo: text("linea_codigo").notNull(),
-    packaging: packagingEnum("packaging").notNull(),
-    /** Total movido. El detalle por modelo esta en `movimientoLineas`. */
+    /**
+     * ANTES y DESPUES, en todos los movimientos y sin excepcion. Es la
+     * convencion que sostiene todo el sistema y hay que respetarla:
+     *
+     *   meter          antes 0   despues 48   -> +48
+     *   sacar entero   antes 48  despues 0    -> -48
+     *   sacar parcial  antes 48  despues 43   -> -5
+     *   mover          antes 48  despues 48   -> 0
+     *   ajuste         antes 48  despues 44   -> -4
+     *
+     * Con esto el efecto sobre el stock es siempre `cantidad - cantidadAntes`,
+     * sin un solo caso especial y sin que ninguna consulta tenga que saber que
+     * significa cada tipo. Sumar esa resta sobre los movimientos VIGENTES da el
+     * stock, y esa es la unica cuenta que no se puede equivocar.
+     *
+     * El packaging va igual, porque cambia solo: sacar una parte de un palet lo
+     * convierte en suelto, y el historial tiene que mostrar donde paso eso.
+     */
+    cantidadAntes: integer("cantidad_antes").notNull(),
     cantidad: integer("cantidad").notNull(),
+    packagingAntes: packagingEnum("packaging_antes"),
+    packaging: packagingEnum("packaging").notNull(),
     tipo: tipoMovimientoEnum("tipo").notNull(),
     posicionDesdeId: integer("posicion_desde_id").references(
       () => posiciones.id,
@@ -507,7 +556,12 @@ export const chequeos = pgTable(
 );
 
 /**
- * El contenido del bulto en el momento del movimiento, modelo por modelo.
+ * El contenido del bulto en el momento del movimiento, modelo por modelo, con
+ * la misma convencion de antes y despues que la cabecera.
+ *
+ * `cantidad - cantidadAntes` es el efecto de ESTE movimiento sobre ESE modelo.
+ * Sumado sobre los movimientos vigentes da el stock por modelo, que es el numero
+ * de las cuatro solapas.
  *
  * Guarda `modeloNombre` ademas de la FK, como todo el historial: el modelo se
  * puede renombrar y lo que se movio ese dia no cambia.
@@ -523,6 +577,7 @@ export const movimientoLineas = pgTable(
       .notNull()
       .references(() => modelos.id),
     modeloNombre: text("modelo_nombre").notNull(),
+    cantidadAntes: integer("cantidad_antes").notNull().default(0),
     cantidad: integer("cantidad").notNull(),
   },
   (t) => [index("movimiento_lineas_movimiento").on(t.movimientoId)],

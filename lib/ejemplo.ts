@@ -124,15 +124,25 @@ const RACKS: Array<{
   },
 ];
 
-const MOTIVOS: Array<{ nombre: string; ambito: "ajuste" | "entrega" | "reempaque" }> = [
+/**
+ * Lista cerrada. `esEgreso` marca lo que se fue de la fábrica y no vuelve: sin
+ * esa distinción, un rearmado que baja y vuelve a subir en media hora contaría
+ * como producto despachado.
+ */
+const MOTIVOS: Array<{
+  nombre: string;
+  ambito: "salida" | "ajuste";
+  esEgreso?: boolean;
+}> = [
+  { nombre: "Entrega a cliente", ambito: "salida" },
+  { nombre: "Muestra", ambito: "salida" },
+  { nombre: "Rotura o descarte", ambito: "salida" },
+  { nombre: "Rearmado o reempaque", ambito: "salida", esEgreso: false },
+  { nombre: "Otro", ambito: "salida" },
   { nombre: "Cantidad distinta a la registrada", ambito: "ajuste" },
   { nombre: "Bulto en otra posición", ambito: "ajuste" },
   { nombre: "Modelo equivocado", ambito: "ajuste" },
   { nombre: "Posición vacía en el sistema", ambito: "ajuste" },
-  { nombre: "Venta", ambito: "entrega" },
-  { nombre: "Muestra", ambito: "entrega" },
-  { nombre: "Armado de palet", ambito: "reempaque" },
-  { nombre: "Desarmado para pedido", ambito: "reempaque" },
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -145,6 +155,7 @@ export type ResumenEjemplo = {
   posiciones: number;
   bultos: number;
   mezclados: number;
+  sinUbicar: number;
   movimientos: number;
   chequeos: number;
 };
@@ -161,6 +172,7 @@ export async function cargarDatosDeEjemplo(
     posiciones: 0,
     bultos: 0,
     mezclados: 0,
+    sinUbicar: 0,
     movimientos: 0,
     chequeos: 0,
   };
@@ -263,13 +275,8 @@ export async function cargarDatosDeEjemplo(
 
   /* Motivos ----------------------------------------------------------------- */
 
-  const motivosCreados: Array<{ id: number; nombre: string; ambito: string }> = [];
-  for (const m of MOTIVOS) {
-    const [fila] = await tx
-      .insert(motivos)
-      .values(m)
-      .returning({ id: motivos.id });
-    motivosCreados.push({ id: fila.id, nombre: m.nombre, ambito: m.ambito });
+  for (const [i, m] of MOTIVOS.entries()) {
+    await tx.insert(motivos).values({ ...m, orden: i });
   }
 
   /* Bultos, con sus movimientos -------------------------------------------- */
@@ -366,7 +373,7 @@ export async function cargarDatosDeEjemplo(
           codigo,
           packaging,
           cantidad,
-          estado: "en_rack",
+          estado: "ubicado",
           posicionId: pos.id,
           /**
            * En un carril penetrable 1 es EL DEL FRENTE, y el primero que
@@ -392,44 +399,108 @@ export async function cargarDatosDeEjemplo(
         })),
       );
 
-      const comun = {
-        bultoId: bulto.id,
-        bultoCodigo: codigo,
-        lineaCodigo: primero.lineaCodigo,
-        packaging,
-        cantidad,
-        usuarioId: usuario.id,
-        usuarioNombre: usuario.nombre,
-      };
-
-      const creados = await tx
+      /**
+       * Un solo movimiento: `meter`. Antes 0, después la cantidad.
+       *
+       * En la versión anterior del modelo esto eran dos -alta y subir- y no
+       * servía de nada: el bulto nace cuando entra al rack.
+       */
+      const [mov] = await tx
         .insert(movimientos)
-        .values([
-          { ...comun, tipo: "alta" as const, creadoEn: creado },
-          {
-            ...comun,
-            tipo: "subir" as const,
-            posicionHastaId: pos.id,
-            posicionHastaCodigo: pos.codigo,
-            creadoEn: subido,
-          },
-        ])
+        .values({
+          bultoId: bulto.id,
+          bultoCodigo: codigo,
+          lineaCodigo: primero.lineaCodigo,
+          tipo: "meter",
+          cantidadAntes: 0,
+          cantidad,
+          packaging,
+          posicionHastaId: pos.id,
+          posicionHastaCodigo: pos.codigo,
+          usuarioId: usuario.id,
+          usuarioNombre: usuario.nombre,
+          creadoEn: subido,
+        })
         .returning({ id: movimientos.id });
-      resumen.movimientos += creados.length;
+      resumen.movimientos++;
 
-      // El detalle por modelo se repite en cada movimiento: el historial tiene
-      // que poder leerse sin mirar el estado actual del bulto.
       await tx.insert(movimientoLineas).values(
-        creados.flatMap((m) =>
-          contenido.map((l) => ({
-            movimientoId: m.id,
-            modeloId: l.modeloId,
-            modeloNombre: l.nombre,
-            cantidad: l.cantidad,
-          })),
-        ),
+        contenido.map((l) => ({
+          movimientoId: mov.id,
+          modeloId: l.modeloId,
+          modeloNombre: l.nombre,
+          cantidadAntes: 0,
+          cantidad: l.cantidad,
+        })),
       );
     }
+  }
+
+  /* Bultos sin ubicar: el limbo ------------------------------------------- */
+
+  /**
+   * Dos bultos que entraron al rack pero no tienen lugar asignado.
+   *
+   * Están en el ejemplo porque es un caso real y no un borde raro: las
+   * posiciones previstas para ese producto se llenan, o hay lugar pero está
+   * reservado para otra cosa, y el palet no puede dejar de existir solo porque
+   * no hay dónde ponerlo. Son stock y se cuentan.
+   *
+   * Nunca van a tener chequeo -no hay posición que verificar- así que aparecen
+   * siempre como "sin chequear". Eso es correcto y es a propósito: el limbo
+   * tiene que incomodar.
+   */
+  for (let i = 0; i < 2; i++) {
+    const modelo = conModelo[Math.floor(rnd() * conModelo.length)];
+    const cantidad = modelo.normas.palet ?? 1;
+    numero++;
+    const codigo = `P-${String(numero).padStart(5, "0")}`;
+    const creado = haceDias(1 + rnd() * 6);
+
+    const [bulto] = await tx
+      .insert(bultos)
+      .values({
+        codigo,
+        packaging: "palet",
+        cantidad,
+        estado: "sin_ubicar",
+        creadoEn: creado,
+        creadoPor: usuario.id,
+        vistoEn: creado,
+      })
+      .returning({ id: bultos.id });
+    resumen.bultos++;
+    resumen.sinUbicar++;
+
+    await tx
+      .insert(bultoContenido)
+      .values({ bultoId: bulto.id, modeloId: modelo.id, cantidad });
+
+    const [mov] = await tx
+      .insert(movimientos)
+      .values({
+        bultoId: bulto.id,
+        bultoCodigo: codigo,
+        lineaCodigo: modelo.lineaCodigo,
+        tipo: "meter",
+        cantidadAntes: 0,
+        cantidad,
+        packaging: "palet",
+        nota: "Sin lugar disponible al momento de entrar",
+        usuarioId: usuario.id,
+        usuarioNombre: usuario.nombre,
+        creadoEn: creado,
+      })
+      .returning({ id: movimientos.id });
+    resumen.movimientos++;
+
+    await tx.insert(movimientoLineas).values({
+      movimientoId: mov.id,
+      modeloId: modelo.id,
+      modeloNombre: modelo.nombre,
+      cantidadAntes: 0,
+      cantidad,
+    });
   }
 
   /* Chequeos ---------------------------------------------------------------- */

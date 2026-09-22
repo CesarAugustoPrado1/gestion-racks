@@ -6,12 +6,11 @@ import type { Packaging } from "./db/schema";
 /**
  * TODAS las lecturas de pantalla viven acá, como en Control-Secaderos.
  *
- * Una regla que no se puede olvidar: **solo son stock los bultos `en_rack` y
- * `en_piso`**. Un `entregado` salió de la fábrica y un `desarmado` se reempacó
- * en otro; si una consulta nueva se olvida el filtro, el stock incluye producto
- * que ya no existe.
+ * Una regla que no se puede olvidar: **solo son stock los bultos `ubicado` y
+ * `sin_ubicar`**. Un `salido` ya no está en el rack; si una consulta nueva se
+ * olvida el filtro, el stock incluye producto que ya no existe.
  */
-const EN_STOCK = sql`b.estado in ('en_rack', 'en_piso')`;
+const EN_STOCK = sql`b.estado in ('ubicado', 'sin_ubicar')`;
 
 export type TotalPorPackaging = Partial<
   Record<Packaging, { unidades: number; bultos: number }>

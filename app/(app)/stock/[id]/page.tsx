@@ -201,9 +201,20 @@ function FilaBulto({
     <li className="tarjeta flex items-start gap-4 p-4">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="codigo text-base text-slate-900">
-            {bulto.ubicacion ?? "En el piso"}
-          </span>
+          {bulto.ubicacion ? (
+            <span className="codigo text-base text-slate-900">
+              {bulto.ubicacion}
+            </span>
+          ) : (
+            /**
+             * El limbo se muestra en ámbar y no en gris: es stock real, pero
+             * nadie sabe dónde está parado. Que incomode al mirarlo es parte
+             * del diseño; un limbo cómodo se llena.
+             */
+            <span className="chip bg-amber-100 text-amber-900">
+              Sin ubicar
+            </span>
+          )}
           {mostrarPackaging && (
             <span className="chip bg-slate-100 text-slate-600">
               {ETIQUETA_PACKAGING[bulto.packaging]}
