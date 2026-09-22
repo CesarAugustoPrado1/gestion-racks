@@ -176,9 +176,36 @@ etiquetas, el código ya existe y solo se agrega el escaneo. Pero conviene
 decidirlo ahora, porque si hay etiquetas el flujo de "subir" empieza por escanear
 y se acorta mucho.
 
-**⟨pendiente 4⟩** ¿Un bulto es siempre de **un solo modelo**? Asumo que sí (así
-funciona la norma comercial). Si existen palets mezclados para armar un pedido,
-es una tabla de líneas por bulto y es mejor saberlo ahora.
+### 3.6 Bultos mezclados
+
+**Resuelto:** sí existen. Se arman poco —para completar un pedido— pero se
+arman, y traen una consecuencia que ordena el modelo entero:
+
+> **Un bulto mezclado nunca es normalizado.** La norma vive en
+> (modelo, packaging): *"un palet de Laja lleva 48 paquetes"*. Un bulto con dos
+> modelos no tiene contra qué compararse, porque no hay **un** modelo del cual
+> sea el palet.
+
+No es una limitación del sistema, es lo que la palabra significa. Por eso un
+bulto mezclado va siempre como **`suelto`**, y `palet` y `optimizado` quedan
+reservados para lo normalizado, que es lo que esas dos palabras quieren decir
+para el que vende. Si un mezclado pudiera registrarse como palet, el stock de
+"palets de Laja" incluiría bultos que nadie puede despachar como palet de Laja.
+
+De acá sale la decisión estructural: **el modelo no es un campo del bulto, es
+una tabla de contenido** (`bulto_contenido`), y el historial lleva sus líneas
+(`movimiento_lineas`). Es el mismo par `secadero_contenido` / `movimiento_lineas`
+de Control-Secaderos.
+
+Y se guarda **siempre** con líneas, incluso el bulto de un solo modelo, que es
+el caso normal. Tener dos representaciones —el modelo en la fila cuando es uno,
+la tabla cuando son varios— obligaría a cada consulta a cubrir los dos casos, y
+la que se olvide de uno miente en silencio.
+
+**En las cuatro solapas**: los 20 paquetes de Laja que viajan en un bulto
+mezclado se cuentan en la solapa de **sueltos** de Laja, marcados como
+mezclados. No inventamos una quinta solapa para algo que pasa poco, y no los
+escondemos: están en el rack y son stock.
 
 ---
 

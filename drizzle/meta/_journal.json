@@ -15,6 +15,13 @@
       "when": 1790071737254,
       "tag": "0001_dominio",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790090743726,
+      "tag": "0002_bultos-mezclados",
+      "breakpoints": true
     }
   ]
 }

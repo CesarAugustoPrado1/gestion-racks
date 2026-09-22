@@ -1,12 +1,15 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
+import { esMezclado, total, validarComposicion } from "./bultos";
 import {
+  bultoContenido,
   bultos,
   chequeos,
   lineas,
   modelos,
   motivos,
+  movimientoLineas,
   movimientos,
   normas,
   posiciones,
@@ -141,6 +144,7 @@ export type ResumenEjemplo = {
   racks: number;
   posiciones: number;
   bultos: number;
+  mezclados: number;
   movimientos: number;
   chequeos: number;
 };
@@ -156,6 +160,7 @@ export async function cargarDatosDeEjemplo(
     racks: 0,
     posiciones: 0,
     bultos: 0,
+    mezclados: 0,
     movimientos: 0,
     chequeos: 0,
   };
@@ -277,26 +282,76 @@ export async function cargarDatosDeEjemplo(
     const cuantos = pos.profundidad ? 1 + Math.floor(rnd() * pos.profundidad) : 1;
 
     for (let k = 0; k < cuantos; k++) {
-      const modelo = conModelo[Math.floor(rnd() * conModelo.length)];
+      /**
+       * Uno de cada quince es MEZCLADO: dos modelos de la misma línea en el
+       * mismo bulto. Se arma poco -para completar un pedido- pero se arma, y
+       * nunca es normalizado: la norma es de un modelo y un packaging, así que
+       * un mezclado no tiene contra qué compararse y va siempre como suelto.
+       *
+       * Van pocos a propósito. Si el ejemplo tuviera la mitad mezclados, las
+       * pantallas se diseñarían para un caso que en la planta es raro.
+       */
+      const mezclado = rnd() < 0.03;
 
-      // Dos de cada diez bultos son producto suelto: sin norma y con cantidad
-      // libre, que es el caso que rompe cualquier cuenta hecha a ojo.
+      const primero = conModelo[Math.floor(rnd() * conModelo.length)];
+
+      // Dos de cada diez son producto suelto: sin norma y con cantidad libre,
+      // que es el caso que rompe cualquier cuenta hecha a ojo.
       const dado = rnd();
-      const packaging: Packaging =
-        dado < 0.2 ? "suelto" : dado < 0.75 ? "palet" : "optimizado";
+      const packaging: Packaging = mezclado
+        ? "suelto"
+        : dado < 0.2
+          ? "suelto"
+          : dado < 0.75
+            ? "palet"
+            : "optimizado";
 
-      const norma = modelo.normas[packaging] ?? null;
-      let cantidad: number;
-      if (packaging === "suelto") {
-        cantidad = 3 + Math.floor(rnd() * 25);
-      } else if (norma != null && rnd() < 0.12) {
-        // Una de cada ocho fuera de norma: existen, y la pantalla las tiene que
-        // marcar.
-        cantidad = Math.max(1, norma - (1 + Math.floor(rnd() * 6)));
+      const contenido: Array<{ modeloId: number; nombre: string; cantidad: number }> = [];
+
+      if (mezclado) {
+        // El segundo modelo sale de la misma línea: mezclar placas con piedras
+        // no pasa, son dos depósitos distintos en la cabeza del operario.
+        const hermanos = conModelo.filter(
+          (m) => m.lineaCodigo === primero.lineaCodigo && m.id !== primero.id,
+        );
+        const segundo = hermanos[Math.floor(rnd() * hermanos.length)] ?? primero;
+        contenido.push({
+          modeloId: primero.id,
+          nombre: primero.nombre,
+          cantidad: 8 + Math.floor(rnd() * 20),
+        });
+        if (segundo.id !== primero.id) {
+          contenido.push({
+            modeloId: segundo.id,
+            nombre: segundo.nombre,
+            cantidad: 5 + Math.floor(rnd() * 15),
+          });
+        }
       } else {
-        cantidad = norma ?? 1;
+        const norma = primero.normas[packaging] ?? null;
+        let cantidad: number;
+        if (packaging === "suelto") {
+          cantidad = 3 + Math.floor(rnd() * 25);
+        } else if (norma != null && rnd() < 0.12) {
+          // Una de cada ocho fuera de norma: existen, y la pantalla las tiene
+          // que marcar.
+          cantidad = Math.max(1, norma - (1 + Math.floor(rnd() * 6)));
+        } else {
+          cantidad = norma ?? 1;
+        }
+        contenido.push({
+          modeloId: primero.id,
+          nombre: primero.nombre,
+          cantidad,
+        });
       }
 
+      // La misma regla que va a validar la pantalla de mover. Si el ejemplo
+      // pudiera generar algo que la app rechazaría, el ejemplo miente.
+      const problema = validarComposicion(packaging, contenido);
+      if (problema) throw new Error(`Ejemplo inválido: ${problema}`);
+
+      const cantidad = total(contenido);
       numero++;
       const codigo = `P-${String(numero).padStart(5, "0")}`;
       const creado = haceDias(5 + rnd() * 55);
@@ -306,7 +361,6 @@ export async function cargarDatosDeEjemplo(
         .insert(bultos)
         .values({
           codigo,
-          modeloId: modelo.id,
           packaging,
           cantidad,
           estado: "en_rack",
@@ -318,30 +372,53 @@ export async function cargarDatosDeEjemplo(
         })
         .returning({ id: bultos.id });
       resumen.bultos++;
+      if (esMezclado(contenido)) resumen.mezclados++;
+
+      await tx.insert(bultoContenido).values(
+        contenido.map((l) => ({
+          bultoId: bulto.id,
+          modeloId: l.modeloId,
+          cantidad: l.cantidad,
+        })),
+      );
 
       const comun = {
         bultoId: bulto.id,
         bultoCodigo: codigo,
-        modeloId: modelo.id,
-        modeloNombre: modelo.nombre,
-        lineaCodigo: modelo.lineaCodigo,
+        lineaCodigo: primero.lineaCodigo,
         packaging,
         cantidad,
         usuarioId: usuario.id,
         usuarioNombre: usuario.nombre,
       };
 
-      await tx.insert(movimientos).values([
-        { ...comun, tipo: "alta" as const, creadoEn: creado },
-        {
-          ...comun,
-          tipo: "subir" as const,
-          posicionHastaId: pos.id,
-          posicionHastaCodigo: pos.codigo,
-          creadoEn: subido,
-        },
-      ]);
-      resumen.movimientos += 2;
+      const creados = await tx
+        .insert(movimientos)
+        .values([
+          { ...comun, tipo: "alta" as const, creadoEn: creado },
+          {
+            ...comun,
+            tipo: "subir" as const,
+            posicionHastaId: pos.id,
+            posicionHastaCodigo: pos.codigo,
+            creadoEn: subido,
+          },
+        ])
+        .returning({ id: movimientos.id });
+      resumen.movimientos += creados.length;
+
+      // El detalle por modelo se repite en cada movimiento: el historial tiene
+      // que poder leerse sin mirar el estado actual del bulto.
+      await tx.insert(movimientoLineas).values(
+        creados.flatMap((m) =>
+          contenido.map((l) => ({
+            movimientoId: m.id,
+            modeloId: l.modeloId,
+            modeloNombre: l.nombre,
+            cantidad: l.cantidad,
+          })),
+        ),
+      );
     }
   }
 

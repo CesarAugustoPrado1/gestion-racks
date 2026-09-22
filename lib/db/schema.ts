@@ -301,9 +301,16 @@ export const posiciones = pgTable(
  * La unidad que se almacena: un palet, un optimizado, o producto suelto arriba
  * de un palet de madera.
  *
- * Un bulto es de UN SOLO modelo. Es como funciona la norma comercial; si algun
- * dia hay bultos mezclados para armar un pedido, es una tabla de lineas por
- * bulto y hay que planificarlo, no improvisarlo.
+ * El modelo NO es un campo de esta tabla: esta en `bultoContenido`, porque un
+ * bulto puede llevar mas de uno. Pasa poco -se arma para completar un pedido-
+ * pero pasa, y un bulto mezclado NUNCA es normalizado: no encaja ni en palet
+ * standard ni en optimizado, porque la norma es por (modelo, packaging) y aca
+ * no hay un solo modelo del cual hablar. Ver `bultoContenido`.
+ *
+ * Se guarda con una linea de contenido incluso cuando el bulto es de un solo
+ * modelo, que es el caso normal. Tener dos representaciones -el modelo en la
+ * fila cuando es uno, la tabla cuando son varios- obligaria a cada consulta a
+ * cubrir los dos casos, y la que se olvide de uno miente en silencio.
  *
  * `codigo` lo genera el sistema (B-00042) y sirve aunque no haya etiquetas
  * fisicas. `etiqueta` es para el numero o QR pegado al bulto, si algun dia se
@@ -323,10 +330,13 @@ export const bultos = pgTable(
     id: serial("id").primaryKey(),
     codigo: text("codigo").notNull().unique(),
     etiqueta: text("etiqueta"),
-    modeloId: integer("modelo_id")
-      .notNull()
-      .references(() => modelos.id),
     packaging: packagingEnum("packaging").notNull(),
+    /**
+     * Total del bulto, en la unidad de la linea. Es la SUMA de las lineas de
+     * contenido, guardada aca porque toda pantalla la muestra y ninguna quiere
+     * sumar para mostrarla. Quien escribe contenido escribe este numero en la
+     * misma transaccion.
+     */
     cantidad: integer("cantidad").notNull(),
     estado: estadoBultoEnum("estado").notNull().default("en_piso"),
     posicionId: integer("posicion_id").references(() => posiciones.id),
@@ -344,7 +354,43 @@ export const bultos = pgTable(
   },
   (t) => [
     index("bultos_posicion").on(t.posicionId),
-    index("bultos_modelo_packaging").on(t.modeloId, t.packaging, t.estado),
+    index("bultos_packaging").on(t.packaging, t.estado),
+  ],
+);
+
+/**
+ * Que hay adentro de un bulto. Es un SNAPSHOT VIVO, no un historial: se
+ * reemplaza entero en cada movimiento que cambie el contenido.
+ *
+ * Una fila cuando el bulto es de un modelo -el caso normal- y varias cuando es
+ * mezclado.
+ *
+ * **Mezclado implica sin norma.** La norma vive en (modelo, packaging), asi que
+ * un bulto con dos modelos no tiene contra que compararse: por eso un bulto
+ * mezclado va siempre como `suelto`, y `palet` y `optimizado` quedan
+ * reservados para lo normalizado, que es lo que esas dos palabras significan
+ * para el que vende. La regla se valida en `lib/bultos.ts`.
+ *
+ * Consecuencia en las cuatro solapas del modelo: los paquetes de Laja que viajan
+ * en un bulto mezclado se cuentan en la solapa de sueltos de Laja, marcados como
+ * mezclados. No inventamos una quinta solapa para algo que pasa poco, y no los
+ * escondemos: estan en el rack y son stock.
+ */
+export const bultoContenido = pgTable(
+  "bulto_contenido",
+  {
+    id: serial("id").primaryKey(),
+    bultoId: integer("bulto_id")
+      .notNull()
+      .references(() => bultos.id, { onDelete: "cascade" }),
+    modeloId: integer("modelo_id")
+      .notNull()
+      .references(() => modelos.id),
+    cantidad: integer("cantidad").notNull(),
+  },
+  (t) => [
+    uniqueIndex("bulto_contenido_bulto_modelo").on(t.bultoId, t.modeloId),
+    index("bulto_contenido_modelo").on(t.modeloId),
   ],
 );
 
@@ -382,12 +428,9 @@ export const movimientos = pgTable(
       .notNull()
       .references(() => bultos.id),
     bultoCodigo: text("bulto_codigo").notNull(),
-    modeloId: integer("modelo_id")
-      .notNull()
-      .references(() => modelos.id),
-    modeloNombre: text("modelo_nombre").notNull(),
     lineaCodigo: text("linea_codigo").notNull(),
     packaging: packagingEnum("packaging").notNull(),
+    /** Total movido. El detalle por modelo esta en `movimientoLineas`. */
     cantidad: integer("cantidad").notNull(),
     tipo: tipoMovimientoEnum("tipo").notNull(),
     posicionDesdeId: integer("posicion_desde_id").references(
@@ -450,6 +493,28 @@ export const chequeos = pgTable(
       .defaultNow(),
   },
   (t) => [index("chequeos_posicion").on(t.posicionId, t.creadoEn)],
+);
+
+/**
+ * El contenido del bulto en el momento del movimiento, modelo por modelo.
+ *
+ * Guarda `modeloNombre` ademas de la FK, como todo el historial: el modelo se
+ * puede renombrar y lo que se movio ese dia no cambia.
+ */
+export const movimientoLineas = pgTable(
+  "movimiento_lineas",
+  {
+    id: serial("id").primaryKey(),
+    movimientoId: integer("movimiento_id")
+      .notNull()
+      .references(() => movimientos.id, { onDelete: "cascade" }),
+    modeloId: integer("modelo_id")
+      .notNull()
+      .references(() => modelos.id),
+    modeloNombre: text("modelo_nombre").notNull(),
+    cantidad: integer("cantidad").notNull(),
+  },
+  (t) => [index("movimiento_lineas_movimiento").on(t.movimientoId)],
 );
 
 export type Linea = typeof lineas.$inferSelect;
