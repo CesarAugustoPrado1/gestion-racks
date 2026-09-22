@@ -23,6 +23,12 @@ la pantalla de las cuatro solapas —suelto, palet, optimizado y el total en la
 unidad de la línea—, con la ubicación de cada bulto, las marcas de fuera de
 norma y mezclado, y el índice de confiabilidad.
 
+**Control funcionando**: `/control` es la recorrida ordenada por
+`(1 − confianza) × cantidad` —primero lo que hace más que no se mira y más
+producto tiene— y `/control/[id]` es el chequeo: confirmar en un toque, o
+corregir. Una corrección escribe el chequeo y un movimiento de `ajuste` en la
+misma transacción.
+
 **Mover funcionando**: `/mover` es la pantalla del autoelevador —buscar por
 código, ubicación o modelo; la cola de los que están sin ubicar; la actividad del
 día— más meter, sacar (entero o parcial, con motivo) y cambiar de lugar. El motor
@@ -177,7 +183,7 @@ también contesta 200.
 app/
   (app)/          pantallas con sesión
     mover/        autoelevador: meter, sacar, cambiar de lugar
-    control/      chequeos y ajustes asentados                    (fase 4)
+    control/      recorrida, chequeos y ajustes asentados
     racks/        la foto de la planta                            (fase 3)
     stock/        por modelo, con las cuatro solapas de packaging
     admin/        ABM de líneas, modelos, normas, racks, usuarios  (fase 1)
@@ -186,6 +192,7 @@ app/
 lib/
   acciones/motor.ts  bloqueo, validaciones y escritura de movimientos
   acciones/flujo.ts  meter, sacar y mover
+  acciones/control.ts  confirmar y corregir
   consultas.ts    TODAS las lecturas de pantalla
   confiabilidad.ts  el índice (módulo puro)
   bultos.ts       reglas de composición (módulo puro)

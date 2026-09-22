@@ -541,3 +541,160 @@ export async function actividadDeHoy(): Promise<MovimientoDelDia[]> {
     creadoEn: comoFecha(f.creado_en)!,
   }));
 }
+
+/* -------------------------------------------------------------------------- */
+/* Lecturas para control                                                      */
+/* -------------------------------------------------------------------------- */
+
+export type PosicionParaChequear = {
+  id: number;
+  codigo: string;
+  rack: string;
+  penetrable: boolean;
+  bultos: number;
+  unidades: number;
+  unidadPlural: string | null;
+  contenido: string | null;
+  chequeadoEn: Date | null;
+  chequeosOk: number;
+  chequeosTotal: number;
+};
+
+/**
+ * Todas las posiciones activas con lo que el sistema dice que tienen.
+ *
+ * El orden lo decide la pantalla y no el SQL, porque la urgencia depende de la
+ * semivida configurada: `(1 - confianza) × cantidad`. Primero lo que hace más
+ * que no se mira y más producto tiene, que es lo que convierte el índice en el
+ * plan del día en vez de un número de adorno.
+ */
+export async function posicionesParaChequear(): Promise<PosicionParaChequear[]> {
+  const filas = (await db.execute(sql`
+    select p.id,
+           r.codigo || '-' || p.codigo as codigo,
+           r.codigo as rack,
+           r.accesibilidad,
+           p.chequeado_en, p.chequeos_ok, p.chequeos_total,
+           count(b.id)::int as bultos,
+           coalesce(sum(b.cantidad), 0)::int as unidades,
+           (select string_agg(x.txt, ' · ')
+              from (select m.nombre || ' ' || c.cantidad as txt
+                      from bultos b2
+                      join bulto_contenido c on c.bulto_id = b2.id
+                      join modelos m on m.id = c.modelo_id
+                     where b2.posicion_id = p.id and b2.estado = 'ubicado'
+                     order by b2.profundidad nulls first, m.nombre) x
+           ) as contenido,
+           (select l.unidad_plural
+              from bultos b3
+              join bulto_contenido c on c.bulto_id = b3.id
+              join modelos m on m.id = c.modelo_id
+              join lineas l on l.id = m.linea_id
+             where b3.posicion_id = p.id and b3.estado = 'ubicado' limit 1
+           ) as unidad_plural
+      from posiciones p
+      join racks r on r.id = p.rack_id
+      left join bultos b on b.posicion_id = p.id and b.estado = 'ubicado'
+     where p.activa and r.activo
+     group by p.id, r.id, r.codigo, r.accesibilidad
+  `)) as unknown as Array<{
+    id: number;
+    codigo: string;
+    rack: string;
+    accesibilidad: string;
+    chequeado_en: Date | string | null;
+    chequeos_ok: number;
+    chequeos_total: number;
+    bultos: number;
+    unidades: number;
+    contenido: string | null;
+    unidad_plural: string | null;
+  }>;
+
+  return filas.map((f) => ({
+    id: f.id,
+    codigo: f.codigo,
+    rack: f.rack,
+    penetrable: f.accesibilidad === "penetrable",
+    bultos: f.bultos,
+    unidades: f.unidades,
+    unidadPlural: f.unidad_plural,
+    contenido: f.contenido,
+    chequeadoEn: comoFecha(f.chequeado_en),
+    chequeosOk: f.chequeos_ok,
+    chequeosTotal: f.chequeos_total,
+  }));
+}
+
+export type BultoEnPosicion = {
+  id: number;
+  codigo: string;
+  packaging: Packaging;
+  cantidad: number;
+  profundidad: number | null;
+  unidadPlural: string;
+  contenido: Array<{ modeloId: number; nombre: string; cantidad: number }>;
+};
+
+export async function posicionConBultos(id: number): Promise<{
+  posicion: PosicionParaChequear;
+  bultos: BultoEnPosicion[];
+} | null> {
+  const todas = await posicionesParaChequear();
+  const posicion = todas.find((p) => p.id === id);
+  if (!posicion) return null;
+
+  const filas = (await db.execute(sql`
+    select b.id, b.codigo, b.packaging, b.cantidad, b.profundidad,
+           c.modelo_id, m.nombre as modelo_nombre, c.cantidad as cantidad_modelo,
+           l.unidad_plural
+      from bultos b
+      join bulto_contenido c on c.bulto_id = b.id
+      join modelos m on m.id = c.modelo_id
+      join lineas l on l.id = m.linea_id
+     where b.posicion_id = ${id} and b.estado = 'ubicado'
+     order by b.profundidad nulls first, b.codigo, m.orden, m.nombre
+  `)) as unknown as Array<{
+    id: number;
+    codigo: string;
+    packaging: Packaging;
+    cantidad: number;
+    profundidad: number | null;
+    modelo_id: number;
+    modelo_nombre: string;
+    cantidad_modelo: number;
+    unidad_plural: string;
+  }>;
+
+  const bultos = new Map<number, BultoEnPosicion>();
+  for (const f of filas) {
+    if (!bultos.has(f.id)) {
+      bultos.set(f.id, {
+        id: f.id,
+        codigo: f.codigo,
+        packaging: f.packaging,
+        cantidad: f.cantidad,
+        profundidad: f.profundidad,
+        unidadPlural: f.unidad_plural,
+        contenido: [],
+      });
+    }
+    bultos.get(f.id)!.contenido.push({
+      modeloId: f.modelo_id,
+      nombre: f.modelo_nombre,
+      cantidad: f.cantidad_modelo,
+    });
+  }
+
+  return { posicion, bultos: [...bultos.values()] };
+}
+
+export async function motivosDeAjuste(): Promise<
+  Array<{ id: number; nombre: string }>
+> {
+  const filas = (await db.execute(sql`
+    select id, nombre from motivos
+     where ambito = 'ajuste' and activo order by orden, nombre
+  `)) as unknown as Array<{ id: number; nombre: string }>;
+  return filas;
+}
