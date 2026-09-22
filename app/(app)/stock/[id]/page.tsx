@@ -5,7 +5,13 @@ import { detalleDeModelo, type BultoDeModelo } from "@/lib/consultas";
 import { semividaDias } from "@/lib/configuracion";
 import { confianza, indice } from "@/lib/confiabilidad";
 import { fueraDeNorma } from "@/lib/bultos";
-import { ETIQUETA_PACKAGING, PACKAGINGS, numero, unidades } from "@/lib/formato";
+import {
+  ETIQUETA_PACKAGING,
+  PACKAGINGS,
+  medidaDeSolapa,
+  numero,
+  unidades,
+} from "@/lib/formato";
 import { ChipConfianza, Indice } from "@/components/confiabilidad";
 import { Titulo } from "@/components/ui";
 import type { Packaging } from "@/lib/db/schema";
@@ -49,7 +55,18 @@ export default async function PantallaModelo({
     bultos.reduce((s, b) => s + b.unidades, 0);
 
   const visibles = solapa === "total" ? modelo.bultos : porPackaging(solapa);
-  const total = totalDe(modelo.bultos);
+
+  /** Lo que se cuenta en cada solapa. Ver `medidaDeSolapa`: no es lo mismo. */
+  const medidaDe = (s: Solapa) => {
+    const bultos = s === "total" ? modelo.bultos : porPackaging(s as Packaging);
+    return medidaDeSolapa(
+      s,
+      { bultos: bultos.length, unidades: totalDe(bultos) },
+      modelo.unidadSingular,
+      modelo.unidadPlural,
+    );
+  };
+  const medida = medidaDe(solapa);
 
   const confianzas = visibles.map((b) => confianza(b, semivida));
   const resumen = indice(confianzas);
@@ -71,8 +88,7 @@ export default async function PantallaModelo({
       <nav className="mb-4 flex gap-1.5 overflow-x-auto">
         {SOLAPAS.map((s) => {
           const activa = s === solapa;
-          const cuantos =
-            s === "total" ? total : totalDe(porPackaging(s as Packaging));
+          const m = medidaDe(s);
           return (
             <Link
               key={s}
@@ -86,7 +102,17 @@ export default async function PantallaModelo({
               <span className="text-[11px] font-medium">
                 {s === "total" ? "Total" : ETIQUETA_PACKAGING[s]}
               </span>
-              <span className="cifra text-lg">{numero(cuantos)}</span>
+              <span className="cifra text-lg leading-tight">
+                {numero(m.valor)}
+              </span>
+              {/* La unidad va en la solapa y no solo en el detalle: sin esto,
+                  "Suelto 20" y "Palet 3" se leen como la misma clase de número,
+                  y no lo son. */}
+              <span
+                className={`text-[10px] leading-tight ${activa ? "text-slate-300" : "text-slate-400"}`}
+              >
+                {m.unidad}
+              </span>
             </Link>
           );
         })}
@@ -99,16 +125,27 @@ export default async function PantallaModelo({
             : `En ${ETIQUETA_PACKAGING[solapa].toLowerCase()}`}
         </p>
         <p className="cifra mt-1 text-3xl text-slate-900">
-          {unidades(
-            solapa === "total" ? total : totalDe(porPackaging(solapa)),
-            modelo.unidadSingular,
-            modelo.unidadPlural,
-          )}
+          {numero(medida.valor)} {medida.unidad}
         </p>
         <p className="mt-1 text-sm text-slate-500">
-          en {visibles.length} bulto{visibles.length === 1 ? "" : "s"}
+          {medida.equivale != null ? (
+            <>
+              {medida.valor === 1 ? "equivale a" : "equivalen a"}{" "}
+              <strong className="text-slate-700">
+                {unidades(
+                  medida.equivale,
+                  modelo.unidadSingular,
+                  modelo.unidadPlural,
+                )}
+              </strong>
+            </>
+          ) : (
+            <>
+              en {visibles.length} bulto{visibles.length === 1 ? "" : "s"}
+            </>
+          )}
           {solapa !== "total" && modelo.normas[solapa] != null && (
-            <> · la norma es {numero(modelo.normas[solapa]!)} por bulto</>
+            <> · la norma es {numero(modelo.normas[solapa]!)} por palet</>
           )}
         </p>
         <div className="mt-3 border-t border-slate-100 pt-3">

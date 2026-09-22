@@ -20,3 +20,63 @@ export const ETIQUETA_PACKAGING: Record<string, string> = {
 
 /** El orden de las solapas, que es el que pidió la planta. */
 export const PACKAGINGS = ["suelto", "palet", "optimizado"] as const;
+
+/**
+ * Qué se cuenta en cada solapa, que NO es lo mismo en todas.
+ *
+ * El suelto se cuenta en unidades -20 paquetes sueltos-, porque no hay otra
+ * cosa que contar: son paquetes arriba de un palet de madera.
+ *
+ * El palet y el optimizado se cuentan EN PALETS. Si hay 3 palets de Laja, el
+ * número es 3: es lo que el autoelevador levanta, lo que entra en el camión y
+ * lo que el cliente pide. Decir 144 ahí es dar un número que quien pregunta no
+ * puede usar para nada, y peor: se confunde con los 20 de la solapa de al lado,
+ * que sí son paquetes.
+ *
+ * El equivalente en unidades no se esconde, va al lado: 3 palets (144 paquetes).
+ * Los dos números hacen falta, pero uno es el principal y el otro la
+ * traducción.
+ */
+export function medidaDeSolapa(
+  solapa: string,
+  cuenta: { bultos: number; unidades: number },
+  unidadSingular: string,
+  unidadPlural: string,
+): { valor: number; unidad: string; equivale: number | null } {
+  if (solapa === "palet" || solapa === "optimizado") {
+    return {
+      valor: cuenta.bultos,
+      unidad: cuenta.bultos === 1 ? "palet" : "palets",
+      equivale: cuenta.unidades,
+    };
+  }
+  return {
+    valor: cuenta.unidades,
+    unidad: cuenta.unidades === 1 ? unidadSingular : unidadPlural,
+    equivale: null,
+  };
+}
+
+/**
+ * "3 palets", "Suelto: 21 placas", "5 optimizados". Para listas compactas.
+ *
+ * El suelto va como etiqueta y no como adjetivo -"Suelto: 21 placas" y no
+ * "21 placas sueltas"- porque la unidad sale de la línea y no sabemos su
+ * género: placa y caja son femeninas, paquete masculino. Un adjetivo obligaría
+ * a cargar el género de cada unidad para que la app no escriba "21 placas
+ * sueltos", y no vale un campo más por una `s`.
+ */
+export function resumenPackaging(
+  packaging: string,
+  cuenta: { bultos: number; unidades: number },
+  unidadSingular: string,
+  unidadPlural: string,
+): string {
+  if (packaging === "palet") {
+    return `${numero(cuenta.bultos)} palet${cuenta.bultos === 1 ? "" : "s"}`;
+  }
+  if (packaging === "optimizado") {
+    return `${numero(cuenta.bultos)} optimizado${cuenta.bultos === 1 ? "" : "s"}`;
+  }
+  return `Suelto: ${unidades(cuenta.unidades, unidadSingular, unidadPlural)}`;
+}

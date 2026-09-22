@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
 import { stockPorLinea } from "@/lib/consultas";
-import { ETIQUETA_PACKAGING, PACKAGINGS, numero } from "@/lib/formato";
+import { PACKAGINGS, numero, resumenPackaging } from "@/lib/formato";
 import { Titulo } from "@/components/ui";
 
 export const metadata = { title: "Stock · Racks" };
@@ -51,15 +51,21 @@ export default async function PantallaStock() {
                         {m.nombre}
                       </p>
                       <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-slate-500">
+                        {/* Cada packaging con SU unidad: el suelto en
+                            paquetes o placas, el palet y el optimizado en
+                            palets. Un "3" y un "20" acá no son la misma clase
+                            de número, y la línea lo tiene que decir. */}
                         {PACKAGINGS.map((p) => {
                           const t = m.porPackaging[p];
                           if (!t) return null;
                           return (
                             <span key={p}>
-                              {ETIQUETA_PACKAGING[p]}:{" "}
-                              <span className="cifra text-slate-700">
-                                {numero(t.unidades)}
-                              </span>
+                              {resumenPackaging(
+                                p,
+                                t,
+                                m.unidadSingular,
+                                m.unidadPlural,
+                              )}
                             </span>
                           );
                         })}
