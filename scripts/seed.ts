@@ -24,6 +24,15 @@ import { config, usuarios, type Rol } from "../lib/db/schema";
 const conExamples = process.argv.includes("--con-ejemplos");
 
 /**
+ * El modo prueba NO se enciende solo.
+ *
+ * Mientras esta encendido, el admin puede borrar toda la instalacion desde una
+ * pantalla. Que eso exija un flag explicito al sembrar -y no venga de fabrica-
+ * es lo que evita que una base productiva nazca con el boton puesto.
+ */
+const conModoPrueba = process.argv.includes("--modo-prueba");
+
+/**
  * Parametros con los que arranca el sistema.
  *
  * `confiabilidad_semivida_dias`: a los cuantos dias un chequeo vale la mitad.
@@ -69,6 +78,14 @@ async function main() {
       rol: "admin",
     });
     console.log("✓ admin creado (PIN: el de ADMIN_PIN)");
+  }
+
+  if (conModoPrueba) {
+    await db
+      .insert(config)
+      .values({ clave: "modo_prueba", valor: "si" })
+      .onConflictDoUpdate({ target: config.clave, set: { valor: "si" } });
+    console.log("✓ modo prueba ENCENDIDO: el borrado masivo está habilitado");
   }
 
   for (const p of PARAMETROS) {

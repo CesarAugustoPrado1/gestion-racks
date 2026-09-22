@@ -431,6 +431,39 @@ Convenciones heredadas, que atraviesan todo (§4.2 de secaderos):
 | 4 | Control: chequeos, `ajuste` asentado, índice de confiabilidad y recorrida ordenada |
 | 5 | Pisos flotantes: se enciende la línea y se cargan modelos y normas. **Sin tocar código** |
 
+### Decisiones que se tomaron sin esperar respuesta
+
+El esquema de la fase 1 se escribió antes de tener contestados los ⟨pendiente⟩,
+resolviéndolos con **columnas nullable**, que es el mismo `null` con significado
+propio de §3.3: *el sistema no opina*.
+
+- `posiciones.nivel`, `posiciones.profundidad` y `posiciones.altura_max_cm` nacen
+  en `null`. Si la planta usa niveles o carriles con fondo, se llenan; si no, no
+  se muestran. Ninguna de las tres identifica la posición: `codigo` es único
+  dentro del rack y es el que se dice por handy.
+- `bultos.etiqueta` es nullable, para el número o QR pegado al bulto si algún día
+  se usa. El `codigo` que genera el sistema funciona con etiquetas y sin ellas.
+- Un bulto es de **un solo modelo**. Si aparecen bultos mezclados para armar un
+  pedido, es una tabla de líneas por bulto: hay que planificarlo, no improvisarlo.
+
+Contestar los pendientes ahora es barato —llenar columnas que ya existen—, y por
+eso se avanzó en vez de esperar. Lo que sigue siendo caro es el último punto.
+
+### Etapa de prueba
+
+Cargar datos inventados, mirarlos, borrarlos y volver a empezar es parte del
+diseño y no un andamio: un borrado masivo agregado al final es el que se lleva
+puestos los datos reales.
+
+Vive en `config.modo_prueba`, en la base y no en una variable de entorno, porque
+"esto es una instalación de prueba" es un hecho de **esta base** y tiene que
+viajar con ella: una variable de entorno se la lleva puesta el día que alguien
+clone el proyecto para otra planta.
+
+Tres candados sobre el borrado, y ninguno sobra: solo `admin` revalidado contra
+la base, solo con el modo encendido, y hay que escribir la palabra exacta —un
+"¿estás seguro?" con botón Aceptar se contesta que sí sin leerlo—.
+
 La fase 0 termina con la app desplegada en Vercel, logueando, contra Neon. La
 fase 1 necesita los datos de planta: los racks con su accesibilidad, las
 posiciones y la tabla de modelo × packaging → cantidad.

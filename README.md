@@ -11,8 +11,14 @@ tocar el código.
 ## Estado
 
 **Fase 0 hecha**: la app se levanta, loguea por usuario + PIN, manda a cada rol a
-su pantalla y expone `/api/version`. Las pantallas de trabajo están en blanco a
-propósito, cada una diciendo en qué fase se construye.
+su pantalla y expone `/api/version`.
+
+**Esquema del dominio listo** (migración `0001_dominio`): líneas, modelos,
+normas, racks, posiciones, bultos, movimientos, chequeos y motivos. Con los datos
+de ejemplo se puede llenar y vaciar la base desde la app.
+
+Las pantallas de trabajo están en blanco a propósito, cada una diciendo en qué
+fase se construye.
 
 Pendiente antes de seguir con la fase 1:
 
@@ -26,6 +32,34 @@ Pendiente antes de seguir con la fase 1:
       `lib/db/index.ts`.
 - [ ] Contestar las decisiones marcadas ⟨pendiente⟩ en DISENO.md, que son las
       que definen el esquema de la fase 1.
+
+## Etapa de prueba
+
+Mientras la instalación está en **modo prueba**, el admin tiene en
+`/admin/datos-prueba` tres cosas: cargar un juego de datos inventados, borrar
+todo, y terminar la etapa. Se enciende con `npm run db:seed -- --modo-prueba`, o
+con una fila en `config`:
+
+```sql
+insert into config (clave, valor) values ('modo_prueba', 'si')
+  on conflict (clave) do update set valor = 'si';
+```
+
+**No se enciende solo, y el default cuando la fila no existe es apagado.** Ese
+default es la decisión importante: si fuera al revés, una base recién creada
+vendría con el botón de borrar todo puesto. Lo peligroso tiene que exigir un acto
+explícito para existir.
+
+*Terminar la etapa de prueba* borra todo y apaga el modo en una sola operación,
+porque es una sola decisión: "esto que hay es basura de prueba, empecemos en
+serio". Separarlas dejaría el estado intermedio peligroso —modo apagado con datos
+de prueba adentro, o datos reales con el botón de borrar a mano—. Desde la app no
+se vuelve a encender; desde la base sí, con el SQL de arriba, y que cueste eso es
+la diferencia entre un error de un clic y un acto deliberado.
+
+Los **usuarios nunca se borran** en ninguna de las dos operaciones: un borrado que
+se los lleva te deja afuera de tu propia app, y el que lo descubre es el que
+apretó el botón.
 
 ## Stack
 
