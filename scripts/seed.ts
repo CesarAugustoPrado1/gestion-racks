@@ -17,6 +17,7 @@ import { eq } from "drizzle-orm";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import bcrypt from "bcryptjs";
+import { normalizarUrl } from "../lib/db";
 import * as schema from "../lib/db/schema";
 import { config, usuarios, type Rol } from "../lib/db/schema";
 
@@ -44,7 +45,7 @@ async function main() {
   const url = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
   if (!url) throw new Error("Falta DATABASE_URL (o DIRECT_URL) en .env.local");
 
-  const cliente = postgres(url, { prepare: false, max: 1 });
+  const cliente = postgres(normalizarUrl(url), { prepare: false, max: 1 });
   const db = drizzle(cliente, { schema });
 
   const pinAdmin = process.env.ADMIN_PIN;

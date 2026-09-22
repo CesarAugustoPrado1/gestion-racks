@@ -22,6 +22,7 @@ import { config as cargarEnv } from "dotenv";
 cargarEnv({ path: [".env.local", ".env"], quiet: true });
 
 import postgres from "postgres";
+import { normalizarUrl } from "../lib/db";
 
 const EN_PARALELO = 10;
 
@@ -45,8 +46,9 @@ async function main() {
   }
   console.log(`Base: ${host}\n`);
 
-  // Mismas opciones que lib/db/index.ts: probar otra cosa no probaria nada.
-  const sql = postgres(url, {
+  // Misma URL normalizada y mismas opciones que lib/db/index.ts: probar otra
+  // cosa no probaria nada.
+  const sql = postgres(normalizarUrl(url), {
     prepare: false,
     max: 1,
     idle_timeout: 20,

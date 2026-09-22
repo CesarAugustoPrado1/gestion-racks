@@ -73,6 +73,13 @@ galpón anda mal".
 | `DATABASE_URL` | pooled (host con `-pooler`) | La app. Muchas instancias de Vercel, una conexión cada una |
 | `DIRECT_URL` | directo (mismo host sin `-pooler`) | `drizzle-kit`: migraciones y studio |
 
+**Borrá `channel_binding=require` de la URL que te da Neon.** `postgres-js`
+manda todo parámetro que no reconoce en el paquete de arranque, y Postgres
+rechaza la conexión con `unrecognized configuration parameter "channel_binding"`
+—la app entera caída, con un mensaje que no menciona ni a Neon ni a la URL—.
+`lib/db/index.ts` lo saca solo, porque esa URL se copia a mano en un panel donde
+nadie va a leer esto, pero conviene no ponerlo.
+
 El pooler de Neon es PgBouncer en **modo transacción**, que es el modo que en
 Control-Secaderos colgaba las consultas concurrentes con `postgres-js`. Acá el
 cliente va con `prepare: false` y por eso funciona; `npm run probar-base` lo

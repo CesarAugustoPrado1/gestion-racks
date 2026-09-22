@@ -21,6 +21,50 @@ const global_ = globalThis as unknown as {
  */
 let cache: Db | undefined;
 
+/**
+ * Parametros que Neon pone en la connection string y postgres-js no puede
+ * honrar. Hay que sacarlos, no ignorarlos.
+ *
+ * El caso concreto es `channel_binding=require`, que el dashboard de Neon
+ * incluye en la URL que te da para copiar. postgres-js mete todo parametro que
+ * no reconoce en el paquete de arranque de la conexion, y Postgres rechaza la
+ * conexion entera con:
+ *
+ *   unrecognized configuration parameter "channel_binding"
+ *
+ * Verificado contra PostgreSQL 16: con el parametro la conexion falla, sin el
+ * anda. No es un warning ni una consulta lenta: es la app entera caida, con un
+ * mensaje que no menciona ni a Neon ni a la URL.
+ *
+ * Por que sacarlo y no pedirle a la persona que lo borre: esta URL se copia y
+ * pega a mano en el panel de Vercel, donde nadie va a leer un README. El unico
+ * lugar que se ejecuta siempre es este.
+ *
+ * Sobre la seguridad: el channel binding de SCRAM protege contra un
+ * man-in-the-middle que tenga un certificado valido. postgres-js no lo
+ * implementa, asi que el parametro no agrega proteccion ni sacandolo ni
+ * dejandolo; lo unico que hace es romper. La conexion sigue yendo por TLS por
+ * `sslmode=require`.
+ */
+const NO_SOPORTADOS = ["channel_binding"];
+
+export function normalizarUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const sacados = NO_SOPORTADOS.filter((p) => u.searchParams.has(p));
+    if (sacados.length === 0) return url;
+    sacados.forEach((p) => u.searchParams.delete(p));
+    console.warn(
+      `[db] Se ignoran parámetros que el driver no soporta: ${sacados.join(", ")}. ` +
+        "Con ellos el servidor rechaza la conexión. Ver lib/db/index.ts.",
+    );
+    return u.toString();
+  } catch {
+    // Si no parsea como URL, que falle postgres-js con su propio mensaje.
+    return url;
+  }
+}
+
 function conectar(): Db {
   if (cache) return cache;
   if (global_.drizzleDb) return (cache = global_.drizzleDb);
@@ -37,7 +81,7 @@ function conectar(): Db {
 
   const client =
     global_.pgClient ??
-    postgres(connectionString, {
+    postgres(normalizarUrl(connectionString), {
       /**
        * OBLIGATORIO, y es la linea que mas cuidado pide de todo el archivo.
        *
