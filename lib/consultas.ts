@@ -917,3 +917,237 @@ export async function fichaDePosicion(id: number): Promise<{
   }
   return null;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Historial de movimientos                                                   */
+/* -------------------------------------------------------------------------- */
+
+export type FiltrosHistorial = {
+  desde?: string | null;
+  hasta?: string | null;
+  tipo?: string | null;
+  modeloId?: number | null;
+  usuarioId?: number | null;
+  /** Busca por código de bulto o por posición. */
+  texto?: string | null;
+  /** Los anulados NO se muestran salvo que se los pida. Ver abajo. */
+  incluirAnulados?: boolean;
+};
+
+/**
+ * El WHERE del historial, compartido por la pantalla y el export.
+ *
+ * Uno solo y no dos: si el CSV filtrara distinto que la pantalla, el número que
+ * alguien lleva a una reunión no sería el que vio al exportarlo, y no habría
+ * forma de saber cuál de los dos está mal.
+ *
+ * **Los anulados quedan afuera por defecto.** Un movimiento corregido sigue en
+ * la base con sus datos originales -el error también es un dato- y sumarlo
+ * contaría dos veces. Acá se pueden pedir, marcados, porque este es el único
+ * lugar donde interesa ver qué se corrigió.
+ */
+function dondeHistorial(f: FiltrosHistorial) {
+  const partes = [sql`1 = 1`];
+
+  if (!f.incluirAnulados) partes.push(sql`m.anulado_en is null`);
+  if (f.desde) partes.push(sql`m.creado_en >= ${f.desde}::date`);
+  // `< hasta + 1 día` y no `<= hasta`: con timestamps, `<=` deja afuera todo lo
+  // que pasó ese día después de medianoche, que es el día entero.
+  if (f.hasta) partes.push(sql`m.creado_en < (${f.hasta}::date + interval '1 day')`);
+  if (f.tipo) partes.push(sql`m.tipo = ${f.tipo}`);
+  if (f.usuarioId) partes.push(sql`m.usuario_id = ${f.usuarioId}`);
+  if (f.modeloId) {
+    partes.push(sql`exists (select 1 from movimiento_lineas l
+                             where l.movimiento_id = m.id and l.modelo_id = ${f.modeloId})`);
+  }
+  if (f.texto) {
+    const patron = `%${f.texto.trim()}%`;
+    partes.push(sql`(m.bulto_codigo ilike ${patron}
+                     or m.posicion_desde_codigo ilike ${patron}
+                     or m.posicion_hasta_codigo ilike ${patron})`);
+  }
+
+  return sql.join(partes, sql` and `);
+}
+
+export type MovimientoDelHistorial = {
+  id: number;
+  tipo: string;
+  bultoCodigo: string;
+  lineaCodigo: string;
+  packaging: Packaging;
+  packagingAntes: Packaging | null;
+  cantidadAntes: number;
+  cantidad: number;
+  desde: string | null;
+  hasta: string | null;
+  motivo: string | null;
+  usuario: string;
+  nota: string | null;
+  creadoEn: Date;
+  anulado: boolean;
+  motivoAnulacion: string | null;
+  lineas: Array<{ modelo: string; antes: number; despues: number }>;
+};
+
+const POR_PAGINA = 50;
+
+export async function historial(
+  f: FiltrosHistorial,
+  pagina = 0,
+): Promise<{ movimientos: MovimientoDelHistorial[]; total: number }> {
+  const donde = dondeHistorial(f);
+
+  const [filas, conteo] = await Promise.all([
+    db.execute(sql`
+      select m.id, m.tipo, m.bulto_codigo, m.linea_codigo, m.packaging,
+             m.packaging_antes, m.cantidad_antes, m.cantidad,
+             m.posicion_desde_codigo, m.posicion_hasta_codigo,
+             m.motivo_nombre, m.usuario_nombre, m.nota, m.creado_en,
+             m.anulado_en, m.motivo_anulacion,
+             (select json_agg(json_build_object(
+                'modelo', l.modelo_nombre, 'antes', l.cantidad_antes, 'despues', l.cantidad)
+                order by l.modelo_nombre)
+                from movimiento_lineas l where l.movimiento_id = m.id) as lineas
+        from movimientos m
+       where ${donde}
+       order by m.creado_en desc, m.id desc
+       limit ${POR_PAGINA} offset ${pagina * POR_PAGINA}
+    `) as unknown as Promise<
+      Array<{
+        id: number;
+        tipo: string;
+        bulto_codigo: string;
+        linea_codigo: string;
+        packaging: Packaging;
+        packaging_antes: Packaging | null;
+        cantidad_antes: number;
+        cantidad: number;
+        posicion_desde_codigo: string | null;
+        posicion_hasta_codigo: string | null;
+        motivo_nombre: string | null;
+        usuario_nombre: string;
+        nota: string | null;
+        creado_en: Date | string;
+        anulado_en: Date | string | null;
+        motivo_anulacion: string | null;
+        lineas: Array<{ modelo: string; antes: number; despues: number }> | null;
+      }>
+    >,
+    db.execute(sql`
+      select count(*)::int as total from movimientos m where ${donde}
+    `) as unknown as Promise<Array<{ total: number }>>,
+  ]);
+
+  return {
+    total: conteo[0]?.total ?? 0,
+    movimientos: filas.map((f2) => ({
+      id: f2.id,
+      tipo: f2.tipo,
+      bultoCodigo: f2.bulto_codigo,
+      lineaCodigo: f2.linea_codigo,
+      packaging: f2.packaging,
+      packagingAntes: f2.packaging_antes,
+      cantidadAntes: f2.cantidad_antes,
+      cantidad: f2.cantidad,
+      desde: f2.posicion_desde_codigo,
+      hasta: f2.posicion_hasta_codigo,
+      motivo: f2.motivo_nombre,
+      usuario: f2.usuario_nombre,
+      nota: f2.nota,
+      creadoEn: comoFecha(f2.creado_en)!,
+      anulado: f2.anulado_en != null,
+      motivoAnulacion: f2.motivo_anulacion,
+      lineas: f2.lineas ?? [],
+    })),
+  };
+}
+
+/**
+ * El historial abierto POR MODELO, una fila por movimiento y modelo.
+ *
+ * Es la forma que sirve para una tabla dinámica: "cuánto salió de Laja en
+ * septiembre" es una suma de una columna, no una lectura de notas. Por eso el
+ * CSV sale así y no con los modelos concatenados en una celda.
+ */
+export async function historialPlano(f: FiltrosHistorial): Promise<
+  Array<Record<string, string | number>>
+> {
+  const filas = (await db.execute(sql`
+    select m.creado_en, m.tipo, m.bulto_codigo, m.linea_codigo,
+           m.packaging_antes, m.packaging,
+           l.modelo_nombre, l.cantidad_antes, l.cantidad,
+           m.posicion_desde_codigo, m.posicion_hasta_codigo,
+           m.motivo_nombre, m.usuario_nombre, m.nota,
+           m.anulado_en, m.motivo_anulacion
+      from movimientos m
+      join movimiento_lineas l on l.movimiento_id = m.id
+     where ${dondeHistorial(f)}
+     order by m.creado_en desc, m.id desc, l.modelo_nombre
+     limit 20000
+  `)) as unknown as Array<{
+    creado_en: Date | string;
+    tipo: string;
+    bulto_codigo: string;
+    linea_codigo: string;
+    packaging_antes: string | null;
+    packaging: string;
+    modelo_nombre: string;
+    cantidad_antes: number;
+    cantidad: number;
+    posicion_desde_codigo: string | null;
+    posicion_hasta_codigo: string | null;
+    motivo_nombre: string | null;
+    usuario_nombre: string;
+    nota: string | null;
+    anulado_en: Date | string | null;
+    motivo_anulacion: string | null;
+  }>;
+
+  return filas.map((f2) => {
+    const cuando = comoFecha(f2.creado_en)!;
+    return {
+      Fecha: cuando.toLocaleDateString("es-AR"),
+      Hora: cuando.toLocaleTimeString("es-AR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      Movimiento: f2.tipo,
+      Bulto: f2.bulto_codigo,
+      Linea: f2.linea_codigo,
+      Modelo: f2.modelo_nombre,
+      "Packaging antes": f2.packaging_antes ?? "",
+      Packaging: f2.packaging,
+      "Cantidad antes": f2.cantidad_antes,
+      "Cantidad despues": f2.cantidad,
+      // La columna que se suma. El signo lo pone la resta, no el tipo.
+      Diferencia: f2.cantidad - f2.cantidad_antes,
+      Desde: f2.posicion_desde_codigo ?? "",
+      Hasta: f2.posicion_hasta_codigo ?? "",
+      Motivo: f2.motivo_nombre ?? "",
+      Usuario: f2.usuario_nombre,
+      Nota: f2.nota ?? "",
+      Anulado: f2.anulado_en ? "sí" : "",
+      "Motivo de anulación": f2.motivo_anulacion ?? "",
+    };
+  });
+}
+
+export async function opcionesDeHistorial(): Promise<{
+  usuarios: Array<{ id: number; nombre: string }>;
+  modelos: Array<{ id: number; nombre: string; linea: string }>;
+}> {
+  const [usuarios, modelos] = await Promise.all([
+    db.execute(sql`
+      select id, nombre from usuarios order by nombre
+    `) as unknown as Promise<Array<{ id: number; nombre: string }>>,
+    db.execute(sql`
+      select m.id, m.nombre, l.nombre as linea
+        from modelos m join lineas l on l.id = m.linea_id
+       order by l.orden, m.orden
+    `) as unknown as Promise<
+      Array<{ id: number; nombre: string; linea: string }>
+    >,
+  ]);
+  return { usuarios, modelos };
+}

@@ -441,7 +441,14 @@ la lista de los bultos que lo componen, con su posición.
 - **Tablero de racks**: la foto de la planta, rack por rack, con ocupación y
   confiabilidad. Es el mapa, y muestra los huecos.
 - **Stock**: por línea y modelo, con las cuatro vistas de packaging.
-- **Movimientos**: historial filtrable + export.
+- **Movimientos**: historial filtrable + export a CSV. Dos decisiones acá.
+  La primera: la pantalla y el CSV comparten la misma cláusula `where`
+  (`dondeHistorial`), porque si filtraran distinto, el número que alguien lleva a
+  una reunión no sería el que vio al exportarlo. La segunda: el CSV sale con una
+  fila por movimiento **y modelo**, no con los modelos concatenados en una celda,
+  para que una tabla dinámica sume la columna `Diferencia` sin tener que partir
+  texto. Esa columna es `cantidad − cantidad_antes`: el signo lo pone la resta, no
+  el tipo de movimiento (§4).
 - **Confiabilidad**: el índice abierto por línea, modelo y posición, y el ranking
   de posiciones más olvidadas.
 - **Admin**: ABM de líneas, modelos, normas, racks, posiciones y usuarios.

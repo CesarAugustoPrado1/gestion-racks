@@ -22,6 +22,9 @@ const REGLAS: Array<{ prefijo: string; roles: Rol[] }> = [
   // se puede tocar lo decide la regla del servidor, no la ruta.
   { prefijo: "/corregir", roles: ["autoelevador", "control", "admin"] },
   { prefijo: "/stock", roles: ["comercial", "admin", "auditor", "control"] },
+  // El historial es la trazabilidad: quién movió qué y cuándo. Lo mira quien
+  // audita y quien vende, no quien opera -el operario ve lo suyo en /mover-.
+  { prefijo: "/movimientos", roles: ["admin", "auditor", "comercial", "control"] },
   { prefijo: "/racks", roles: ["admin", "auditor", "autoelevador", "control", "comercial"] },
 ];
 
@@ -79,6 +82,7 @@ const NAV: ItemNav[] = [
   { href: "/control", etiqueta: "Control", icono: "control" },
   { href: "/racks", etiqueta: "Racks", icono: "grid" },
   { href: "/stock", etiqueta: "Stock", icono: "pallet" },
+  { href: "/movimientos", etiqueta: "Movimientos", icono: "lista" },
   { href: "/admin", etiqueta: "Administración", icono: "config" },
 ];
 

@@ -47,6 +47,18 @@ código, ubicación o modelo; la cola de los que están sin ubicar; la actividad
 día— más meter, sacar (entero o parcial, con motivo) y cambiar de lugar. El motor
 está en `lib/acciones/motor.ts` y es el único lugar que escribe un movimiento.
 
+**Movimientos funcionando**: `/movimientos` es el historial completo —qué pasó,
+quién lo hizo y cuándo— con presets de fecha, búsqueda por bulto o posición y
+filtros por tipo, modelo y usuario. Cada renglón muestra el `antes → después` de
+cada modelo y la diferencia con signo, que es de dónde sale el stock. Los
+anulados no se listan salvo que se los pida: siguen guardados porque el error
+también es un dato.
+
+El botón **Descargar CSV** baja exactamente lo que se está viendo —los filtros
+viven en la URL y el export usa la misma consulta que la pantalla—, con una fila
+por movimiento y modelo y una columna `Diferencia` lista para una tabla
+dinámica. Sale con `;` y BOM para que Excel en castellano lo abra bien.
+
 Las demás pantallas de trabajo están en blanco a propósito, cada una diciendo en
 qué fase se construye.
 
@@ -199,6 +211,7 @@ app/
     control/      recorrida, chequeos y ajustes asentados
     racks/        el tablero: el mapa de la planta
     stock/        por modelo, con las cuatro solapas de packaging
+    movimientos/  el historial filtrable, con export a CSV
     admin/        ABM, datos de prueba y diagnóstico de base
   login/
   api/version/    qué commit está desplegado

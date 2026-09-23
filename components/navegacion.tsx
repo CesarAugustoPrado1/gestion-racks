@@ -10,6 +10,7 @@ const ICONOS: Record<string, string> = {
   control: "✅",
   grid: "🗄",
   pallet: "📦",
+  lista: "☰",
   config: "⚙",
 };
 
