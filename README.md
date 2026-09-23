@@ -68,7 +68,12 @@ Pendiente antes de seguir con la fase 1:
       `npm run db:migrate` y `npm run db:seed`; sin terminal, pegando el SQL en
       el editor de Neon (ver más abajo).
 - [ ] Mirar el **diagnóstico de base**: `npm run probar-base` desde una terminal,
-      o la pantalla `/admin/diagnostico` una vez desplegado. Es la validación de
+      o la pantalla `/admin/diagnostico` una vez desplegado. Esa pantalla también
+      dice si el **esquema está al día**, y es la forma de comprobar que una
+      migración entró: no se conforma con la tabla de control, chequea que estén
+      las tablas y columnas que cada migración tenía que dejar. Acá las
+      migraciones se aplican a mano, en dos pasos —el SQL y después la fila de
+      control—, y el segundo puede salir bien con el primero a medias. Es la validación de
       concurrencia contra el pooler de Neon, y es la que decide si seguimos con
       `postgres-js` o pasamos a `neon-serverless`. Ver el comentario largo en
       `lib/db/index.ts`.
