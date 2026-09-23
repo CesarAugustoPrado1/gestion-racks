@@ -136,44 +136,24 @@ export type PosicionVivo = {
  * Bloquear la POSICIÓN y no solo el bulto es lo que evita que dos operarios
  * manden dos bultos distintos al mismo lugar en el mismo segundo: los dos leen
  * "está libre", los dos escriben, y la posición queda con dos.
+ *
+ * SE BLOQUEA UNA SOLA FILA, la propia, aunque un bulto alto se coma el hueco de
+ * arriba. Llego a haber acá un lock sobre las vecinas verticales, para el caso
+ * de dos operarios cargando niveles contiguos de la misma calle al mismo
+ * tiempo. Ese caso no existe: en una calle o una columna entra UN SOLO
+ * autoelevador, así que dos cargas simultáneas sobre la misma pila no pueden
+ * pasar. Se sacó porque una defensa contra algo imposible no es gratis: hay que
+ * leerla, mantenerla y razonar sobre su orden de bloqueo cada vez que se toca
+ * esta función.
+ *
+ * Volvería a hacer falta el día que dos autoelevadores puedan trabajar la misma
+ * calle, o que se cargue desde dos lugares a la vez -la pantalla del operario y
+ * una corrección desde la oficina- sobre la misma pila.
  */
 export async function bloquearPosicion(
   tx: Tx,
   id: number,
 ): Promise<PosicionVivo> {
-  /**
-   * Se bloquea la posicion Y SUS VECINAS DE ARRIBA Y DE ABAJO.
-   *
-   * Desde que un bulto alto puede comerse el hueco de arriba, dos posiciones
-   * vecinas en vertical dejaron de ser independientes: un operario metiendo un
-   * optimizado en el nivel 2 y otro metiendo cualquier cosa en el nivel 3 estan
-   * peleando por el mismo espacio fisico aunque las filas sean distintas. Con un
-   * `for update` sobre una sola fila los dos leerian "libre" y los dos
-   * escribirian, que es justo el choque que este lock existe para evitar.
-   *
-   * Se toman en orden de `id` -el `order by` antes del `for update`- porque dos
-   * transacciones que tomen las mismas filas en ORDEN DISTINTO se abrazan en un
-   * deadlock. El orden lo fija la base, no el codigo que llama.
-   */
-  await tx.execute(sql`
-    select v.id from posiciones v
-     where v.id in (
-       select p2.id from posiciones p2
-        join posiciones p on p.id = ${id}
-       where p2.grupo_id = p.grupo_id
-         and p2.unidad = p.unidad
-         -- Las DOS, y por eso ninguna sobra: en un selectivo la columna es lo
-         -- que separa una pila de la de al lado y la profundidad es null; en un
-         -- penetrable es al reves. Con una sola, un selectivo hace match contra
-         -- todas las columnas del modulo y se bloquea la posicion equivocada.
-         and p2.columna is not distinct from p.columna
-         and p2.profundidad is not distinct from p.profundidad
-         and p2.nivel between p.nivel - 1 and p.nivel + 1
-     )
-     order by v.id
-     for update
-  `);
-
   const filas = (await tx.execute(sql`
     select p.id, p.unidad, p.nivel, p.profundidad, p.activa, p.altura_max_cm,
            g.codigo || '-' || p.codigo as codigo,
@@ -202,6 +182,7 @@ export async function bloquearPosicion(
       left join bultos arrocu on arrocu.posicion_id = arr.id and arrocu.estado = 'ubicado'
       left join bultos arrinv on arrinv.id = arr.bloqueada_por_bulto_id
      where p.id = ${id}
+     for update of p
   `)) as unknown as Array<{
     id: number;
     unidad: number;
@@ -399,6 +380,23 @@ export async function exigirAltura(
    */
   const m = (cm: number) => (cm / 100).toFixed(2).replace(".", ",");
   const quien = `un ${bulto.packaging} de ${filas[0].nombre} mide ${m(altura)} m`;
+
+  /**
+   * 0. SOLO EN PENETRABLES.
+   *
+   * En un selectivo cada posicion esta entre largueros y el palet se apoya en
+   * ellos: no hay hacia donde sobresalir, el hierro esta ahi. En un penetrable
+   * el palet se apoya en el piso o en la carga de abajo y el hueco de arriba es
+   * aire, asi que sobresalir es posible. La diferencia no es de criterio, es de
+   * como esta construido el rack, y por eso la decide la accesibilidad del
+   * grupo y no una preferencia configurable.
+   */
+  if (!pos.penetrable) {
+    fallar(
+      `No entra: ${quien} y en ${pos.codigo} entran ${m(pos.alturaMaxCm)} m. ` +
+        `Es un rack selectivo, así que no puede sobresalir hacia el nivel de arriba.`,
+    );
+  }
 
   // 1. No hay nivel arriba: es el ultimo, y arriba esta el techo.
   if (!pos.arriba) {

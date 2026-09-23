@@ -454,11 +454,18 @@ pueda mentir.
 
 ### 4.5 Un bulto alto ocupa dos posiciones
 
-Un optimizado que mide más que su nivel **entra igual en la práctica**:
-sobresale hacia el hueco de arriba. Prohibirlo no evitaba que lo hicieran, solo
-lograba que el palet terminara en el rack sin que el sistema lo supiera, que es
-peor que las dos cosas. Así que se permite, y a cambio se marcan **las dos
-posiciones**.
+**Solo en penetrables.** En un selectivo cada posición está entre largueros y el
+palet se apoya en ellos: no hay hacia dónde sobresalir, el hierro está ahí. En un
+penetrable el palet se apoya en el piso o en la carga de abajo, y el hueco de
+arriba es aire. La diferencia no es de criterio sino de cómo está construido el
+rack, y por eso la decide la accesibilidad del grupo y no una opción
+configurable.
+
+En un penetrable, un optimizado que mide más que su nivel **entra igual en la
+práctica**: sobresale hacia el hueco de arriba. Prohibirlo no evitaba que lo
+hicieran, solo lograba que el palet terminara en el rack sin que el sistema lo
+supiera, que es peor que las dos cosas. Así que se permite, y a cambio se marcan
+**las dos posiciones**.
 
 Dónde vive el dato: **`posiciones.bloqueada_por_bulto_id`**, del lado de la
 víctima. Es del lado de la víctima donde se pregunta —toda consulta de "¿está
@@ -472,9 +479,10 @@ bulto tuviera, sin preguntar dónde, y después toma el nuevo si corresponde. Po
 eso el hueco se libera solo cuando el bulto baja, se mueve o sale, y no hay una
 secuencia de parches que haya que acertar en orden.
 
-Tres razones distintas para decir que no, cada una con su mensaje porque cada
+Cuatro razones distintas para decir que no, cada una con su mensaje porque cada
 una se resuelve distinto:
 
+0. **Es un selectivo.** No sobresale nada: están los largueros.
 1. **No hay nivel arriba.** Es el más alto y arriba está el techo.
 2. **El hueco de arriba está tomado.** Van a chocar. Es el único caso donde
    permitirlo rompe algo físico, y el mensaje nombra qué bulto hay que bajar.
@@ -487,12 +495,19 @@ una sola, un selectivo hace match contra todas las columnas del módulo —se
 comprobó: C-02-2 daba dos posiciones "de arriba", C-01-3 y C-02-3— y se marcaría
 como ocupada la posición equivocada.
 
-**El bloqueo tuvo que crecer.** Desde que un bulto alto se come el hueco de
-arriba, dos posiciones vecinas en vertical dejaron de ser independientes: un
-operario metiendo un optimizado en el nivel 2 y otro metiendo cualquier cosa en
-el nivel 3 pelean por el mismo espacio físico aunque las filas sean distintas.
-`bloquearPosicion` toma ahora la posición **y sus vecinas de arriba y de abajo**,
-en orden de `id` para que dos transacciones no se abracen en un deadlock.
+**El bloqueo NO tuvo que crecer, y eso se decidió mirando la planta.** Con un
+bulto alto comiéndose el hueco de arriba, dos posiciones vecinas en vertical
+dejan de ser independientes en el papel: dos operarios cargando niveles contiguos
+de la misma calle leerían los dos "está libre". Llegó a haber acá un lock sobre
+las vecinas verticales por eso. Se sacó porque ese caso no existe: **en una calle
+o una columna entra un solo autoelevador**, así que dos cargas simultáneas sobre
+la misma pila no pueden pasar. Una defensa contra algo imposible no es gratis —
+hay que leerla, mantenerla y razonar sobre su orden de bloqueo cada vez que se
+toca `bloquearPosicion`.
+
+Volvería a hacer falta el día que dos autoelevadores puedan trabajar la misma
+calle, o que se cargue desde dos lugares a la vez sobre la misma pila —la
+pantalla del operario y una corrección desde la oficina—.
 
 Y la pantalla de chequeo de una posición tapada **no dice "Nada. Vacía."**: dice
 que el hueco está tomado por el bulto de abajo y que si se lo ve así está bien.
