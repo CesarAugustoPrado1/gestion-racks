@@ -152,3 +152,63 @@ export function indice(confianzas: Array<Confianza | null>): {
     sinDatos,
   };
 }
+
+/**
+ * El piso de olvido: qué posiciones suben al tope por viejas, no por grandes.
+ *
+ * POR QUÉ EXISTE. La recorrida ordena por `(1 − confianza) × cantidad`, y esa
+ * multiplicación tiene un agujero: la urgencia máxima de una posición es su
+ * cantidad, porque la confianza no baja de cero. Entonces una posición chica
+ * puede quedar POR DEBAJO de una grande para siempre, no "mucho tiempo" sino
+ * literalmente siempre. Medido con los datos de ejemplo: una posición de 90
+ * unidades recién chequeada tiene urgencia 4.1, y una de 4 unidades que nadie
+ * miró nunca tiene urgencia 4.0. La segunda no la alcanza jamás, por años que
+ * pasen, y el sistema decide no mirar ese rincón nunca.
+ *
+ * CÓMO SE ARREGLA. Lo que hace mucho que nadie mira sube al tope, por chico que
+ * sea. Adentro de ese grupo se sigue ordenando por urgencia, así que el
+ * operario ve primero lo olvidado Y grande.
+ *
+ * POR QUÉ SOLO LAS QUE TIENEN PRODUCTO. Una posición que el sistema cree vacía
+ * no guarda stock: si estuviera ocupada, el error aparece solo la primera vez
+ * que alguien intente poner algo ahí. La dirección peligrosa es la otra -el
+ * sistema dice que hay y no hay-, y esa tiene cantidad > 0, así que queda
+ * cubierta. Sin esta condición el tope de la recorrida se llenaría de
+ * posiciones vacías sin chequear (en el ejemplo son 67) y el operario tendría
+ * que pasar por todas antes de llegar a un palet.
+ *
+ * `null` en `chequeadoEn` -nunca chequeada- cuenta como olvidada: es la que más
+ * tiempo lleva sin mirarse, no la que menos.
+ */
+export function estaOlvidada(
+  fila: { chequeadoEn: Date | string | null; unidades: number },
+  pisoDias: number,
+  ahora: Date = new Date(),
+): boolean {
+  if (pisoDias <= 0) return false; // 0 = piso desactivado
+  if (fila.unidades <= 0) return false;
+  if (!fila.chequeadoEn) return true;
+
+  const cuando =
+    fila.chequeadoEn instanceof Date
+      ? fila.chequeadoEn
+      : new Date(fila.chequeadoEn);
+  const dias = (ahora.getTime() - cuando.getTime()) / (24 * 60 * 60 * 1000);
+  return dias >= pisoDias;
+}
+
+/**
+ * Ordena la recorrida: primero lo olvidado, después lo demás, y adentro de cada
+ * grupo por urgencia.
+ *
+ * Ordena una copia y no la lista que recibe: una función que reordena el array
+ * de quien la llama sorprende a alguien tarde o temprano.
+ */
+export function ordenarRecorrida<T extends { olvidada: boolean; urgencia: number }>(
+  filas: T[],
+): T[] {
+  return [...filas].sort(
+    (a, b) =>
+      Number(b.olvidada) - Number(a.olvidada) || b.urgencia - a.urgencia,
+  );
+}

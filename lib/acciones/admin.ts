@@ -16,7 +16,7 @@ import {
   usuarios,
   type Packaging,
 } from "../db/schema";
-import { CLAVE_SEMIVIDA, escribirConfig } from "../configuracion";
+import { CLAVE_OLVIDO, CLAVE_SEMIVIDA, escribirConfig } from "../configuracion";
 import { ROLES } from "../permisos";
 import { codigoDePosicion, posicionesDe, type Geometria } from "../posiciones";
 import { ejecutar, fallar, type Resultado } from "./comun";
@@ -603,6 +603,38 @@ export async function guardarSemivida(
      * recorrida, en la ficha de cada bulto y en el detalle de posición. Cambiar
      * esto cambia un número que está en media app.
      */
+    revalidatePath("/", "layout");
+  });
+}
+
+/**
+ * A los cuántos días sin mirarla una posición con producto sube al tope.
+ *
+ * El 0 es un valor legítimo y significa "sin piso": vuelve al orden puro por
+ * urgencia. Se permite porque quien lo apague tiene que poder apagarlo, pero el
+ * default viene prendido (ver `olvidoDias`).
+ *
+ * El mínimo distinto de cero es 7: un piso más corto que una semana pondría
+ * arriba media planta todos los lunes y dejaría de señalar algo.
+ */
+const esquemaOlvido = z.object({
+  dias: z.coerce
+    .number({ invalid_type_error: "Poné un número de días." })
+    .int("Tiene que ser un número entero de días.")
+    .min(0)
+    .max(730, "Más de dos años es como no tener piso.")
+    .refine((d) => d === 0 || d >= 7, {
+      message: "Poné 0 para desactivarlo, o 7 días como mínimo.",
+    }),
+});
+
+export async function guardarOlvido(
+  entrada: z.input<typeof esquemaOlvido>,
+): Promise<Resultado<void>> {
+  return ejecutar(async () => {
+    await autorizar("admin");
+    const d = esquemaOlvido.parse(entrada);
+    await escribirConfig(CLAVE_OLVIDO, String(d.dias));
     revalidatePath("/", "layout");
   });
 }

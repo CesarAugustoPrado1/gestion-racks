@@ -455,6 +455,39 @@ control**. La pantalla de control abre con las posiciones ordenadas por
 `(1 − confianza) × cantidad`: primero lo que hace más que no se mira y más
 producto tiene. Eso convierte el indicador en el plan del día.
 
+**Y esa multiplicación tiene un agujero, que se tapó con un piso.** La urgencia
+máxima de una posición es su cantidad, porque la confianza no baja de cero.
+Entonces una posición chica puede quedar debajo de una grande no "mucho tiempo"
+sino **siempre**: medido sobre los datos de ejemplo, una posición de 90 unidades
+recién chequeada tiene urgencia 4.1, y una de 4 unidades que nadie miró nunca
+tiene urgencia 4.0. La segunda no la alcanza jamás, y el sistema decide no mirar
+ese rincón del galpón nunca. La regla aproximada es que queda condenada toda
+posición con menos de `1/(chequeos + 2)` de la cantidad de la más grande.
+
+El piso: **lo que hace más de N días que nadie mira sube al tope, por chico que
+sea** (`confiabilidad_olvido_dias`, 60 por defecto, configurable, 0 lo apaga).
+Adentro de ese grupo se sigue ordenando por urgencia, así que primero va lo
+olvidado *y* grande.
+
+Dos detalles que no son caprichos:
+
+- **Solo entran las posiciones que el sistema cree con producto.** Una que cree
+  vacía no guarda stock, y si estuviera ocupada el error aparece solo la primera
+  vez que alguien intente poner algo ahí. La dirección peligrosa —el sistema dice
+  que hay y no hay— tiene cantidad > 0 y queda cubierta. Sin esta condición el
+  tope de la recorrida se llenaría de confirmaciones de vacío: en el ejemplo son
+  67 posiciones, y el operario tendría que pasar por todas antes de llegar a un
+  palet.
+- **Nunca chequeada cuenta como olvidada**: es la que más lleva sin mirarse, no
+  la que menos. Y el día uno, con todo sin chequear, el piso alcanza a todas y el
+  orden vuelve a ser el de la urgencia: degenera al comportamiento anterior en vez
+  de a un orden raro.
+
+El costo aceptado: algún día el operario arranca por cuatro paquetes en vez de
+por noventa. Es un día cada tanto contra tener un rincón que el sistema decidió
+no mirar nunca, y por eso el número es configurable: si en la planta resulta
+molesto, se sube.
+
 ---
 
 ## 6. Vistas

@@ -5,6 +5,7 @@ import { config } from "./db/schema";
 
 export const CLAVE_MODO_PRUEBA = "modo_prueba";
 export const CLAVE_SEMIVIDA = "confiabilidad_semivida_dias";
+export const CLAVE_OLVIDO = "confiabilidad_olvido_dias";
 
 export async function leerConfig(clave: string): Promise<string | null> {
   const [fila] = await db
@@ -39,4 +40,20 @@ export async function enModoPrueba(): Promise<boolean> {
 export async function semividaDias(): Promise<number> {
   const valor = Number(await leerConfig(CLAVE_SEMIVIDA));
   return Number.isFinite(valor) && valor > 0 ? valor : 30;
+}
+
+/**
+ * A los cuantos dias sin mirarla una posicion con producto sube al tope de la
+ * recorrida, por chica que sea. `0` desactiva el piso. Ver DISENO.md §5.5.
+ *
+ * El default es 60 -el doble de la semivida que viene por defecto-, no cero:
+ * si viniera apagado, el agujero que esto tapa seguiria abierto en cualquier
+ * instalacion que no lo configure, y es un agujero que no se nota mirando la
+ * pantalla. Lo que protege tiene que venir prendido.
+ */
+export async function olvidoDias(): Promise<number> {
+  const crudo = await leerConfig(CLAVE_OLVIDO);
+  if (crudo === null) return 60;
+  const valor = Number(crudo);
+  return Number.isFinite(valor) && valor >= 0 ? valor : 60;
 }

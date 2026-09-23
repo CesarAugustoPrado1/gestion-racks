@@ -1,8 +1,15 @@
 import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
 import { posicionesParaChequear } from "@/lib/consultas";
-import { semividaDias } from "@/lib/configuracion";
-import { confianza, etiquetaDeEstado, indice, nivel } from "@/lib/confiabilidad";
+import { olvidoDias, semividaDias } from "@/lib/configuracion";
+import {
+  confianza,
+  estaOlvidada,
+  etiquetaDeEstado,
+  indice,
+  nivel,
+  ordenarRecorrida,
+} from "@/lib/confiabilidad";
 import { Indice } from "@/components/confiabilidad";
 import { numero } from "@/lib/formato";
 import { describirPosicion } from "@/lib/posiciones";
@@ -13,9 +20,10 @@ export const dynamic = "force-dynamic";
 
 export default async function PantallaControl() {
   const sesion = await requerirRol("control", "admin");
-  const [posiciones, semivida] = await Promise.all([
+  const [posiciones, semivida, piso] = await Promise.all([
     posicionesParaChequear(),
     semividaDias(),
+    olvidoDias(),
   ]);
 
   const conDatos = posiciones.map((p) => {
@@ -31,11 +39,21 @@ export default async function PantallaControl() {
        * confirmar un vacío también es información.
        */
       urgencia: (1 - (c?.valor ?? 0)) * Math.max(p.unidades, 1),
+      /**
+       * Y el piso: lo que hace mucho que nadie mira sube igual, por chico que
+       * sea. Sin esto una posición chica puede quedar debajo de una grande para
+       * siempre, no mucho tiempo: siempre. Ver `estaOlvidada`.
+       */
+      olvidada: estaOlvidada(
+        { chequeadoEn: p.chequeadoEn, unidades: p.unidades },
+        piso,
+      ),
     };
   });
 
-  conDatos.sort((a, b) => b.urgencia - a.urgencia);
-  const resumen = indice(conDatos.map((p) => p.confianza));
+  const ordenadas = ordenarRecorrida(conDatos);
+  const olvidadas = ordenadas.filter((p) => p.olvidada).length;
+  const resumen = indice(ordenadas.map((p) => p.confianza));
 
   return (
     <>
@@ -49,10 +67,20 @@ export default async function PantallaControl() {
           Un chequeo vale la mitad a los {semivida} días. Tocá una posición para
           chequearla.
         </p>
+        {olvidadas > 0 && (
+          <p className="mt-1 text-xs text-slate-500">
+            <strong className="text-slate-700">
+              {olvidadas} {olvidadas === 1 ? "posición va" : "posiciones van"}{" "}
+              primero por olvidada{olvidadas === 1 ? "" : "s"}
+            </strong>
+            : hace más de {piso} días que nadie las mira, así que suben por más
+            chicas que sean.
+          </p>
+        )}
       </div>
 
       <ul className="space-y-2">
-        {conDatos.map((p) => (
+        {ordenadas.map((p) => (
           <li key={p.id}>
             <Link
               href={`/control/${p.id}`}
@@ -76,6 +104,11 @@ export default async function PantallaControl() {
                   <span className="text-xs text-slate-500">
                     {describirPosicion(p).split(" · ")[1]}
                   </span>
+                  {p.olvidada && (
+                    <span className="chip bg-vencido-suave text-vencido">
+                      olvidada
+                    </span>
+                  )}
                 </div>
                 <p className="mt-0.5 truncate text-sm text-slate-600">
                   {p.contenido ?? "El sistema dice que está vacía"}

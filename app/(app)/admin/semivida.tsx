@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { guardarSemivida } from "@/lib/acciones/admin";
+import { guardarOlvido, guardarSemivida } from "@/lib/acciones/admin";
 import {
   COLOR_NIVEL,
   ETIQUETA_NIVEL,
@@ -139,6 +139,95 @@ export function AjusteSemivida({ actual }: { actual: number }) {
           ))}
         </ul>
       </div>
+    </div>
+  );
+}
+
+
+/**
+ * El piso de olvido, al lado de la semivida porque se leen juntos: uno dice
+ * cuándo algo se ve viejo, el otro cuándo deja de poder esperar.
+ */
+export function AjusteOlvido({ actual }: { actual: number }) {
+  const router = useRouter();
+  const { ejecutar, enviando, error, limpiar } = useAccion();
+  const [dias, setDias] = useState(String(actual));
+  const [guardado, setGuardado] = useState(false);
+
+  const n = Number(dias);
+  const valido = Number.isInteger(n) && (n === 0 || (n >= 7 && n <= 730));
+  const cambio = n !== actual;
+
+  return (
+    <div className="tarjeta mt-4 p-5">
+      <h2 className="text-base font-bold text-slate-900">
+        Piso de la recorrida
+      </h2>
+      <p className="mt-1 text-sm text-slate-600">
+        A los cuántos días sin mirarla, una posición con producto sube al tope
+        de la recorrida <strong>por más chica que sea</strong>.
+      </p>
+      <p className="mt-1 text-sm text-slate-600">
+        Existe porque la recorrida ordena por cantidad, y eso solo dejaría a las
+        posiciones chicas abajo para siempre: una de 4 unidades nunca alcanza a
+        una de 90, por años que pasen. Con el piso, lo olvidado sube igual.
+      </p>
+
+      {error && <Aviso>{error}</Aviso>}
+      {guardado && !cambio && (
+        <div className="mt-3">
+          <Aviso tono="exito">
+            {actual === 0
+              ? "Guardado. El piso quedó desactivado."
+              : `Guardado. Lo que nadie mira hace ${actual} días sube al tope.`}
+          </Aviso>
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-end gap-3">
+        <label className="block">
+          <span className="etiqueta">Días</span>
+          <input
+            className="campo w-28 text-right"
+            inputMode="numeric"
+            value={dias}
+            onChange={(e) => {
+              setDias(e.target.value);
+              setGuardado(false);
+              limpiar();
+            }}
+            aria-label="Días del piso de la recorrida"
+          />
+        </label>
+        <button
+          type="button"
+          className="boton-primario"
+          disabled={!valido || !cambio || enviando}
+          onClick={() => {
+            limpiar();
+            void ejecutar(
+              () => guardarOlvido({ dias: n }),
+              () => {
+                setGuardado(true);
+                router.refresh();
+              },
+            );
+          }}
+        >
+          {enviando ? "Guardando…" : "Guardar"}
+        </button>
+        {!valido && dias !== "" && (
+          <p className="text-sm text-red-700">
+            Poné 0 para desactivarlo, o entre 7 y 730 días.
+          </p>
+        )}
+      </div>
+
+      <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
+        {valido && n === 0
+          ? "Desactivado: la recorrida vuelve a ordenarse solo por urgencia, y una posición chica puede no salir nunca."
+          : `Con ${valido ? n : actual} días: lo que nadie miró en ese plazo va primero, y adentro de ese grupo sigue mandando la cantidad. Las posiciones que el sistema cree vacías no entran, para que el tope no se llene de confirmaciones de vacío.`}
+      </p>
     </div>
   );
 }
