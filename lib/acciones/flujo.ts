@@ -14,6 +14,7 @@ import {
   exigirAccesible,
   exigirComposicion,
   exigirAltura,
+  type Encaje,
   exigirEnStock,
   exigirLibre,
   exigirMotivo,
@@ -70,10 +71,11 @@ export async function meter(
         ? await bloquearPosicion(tx, datos.posicionId)
         : null;
 
+      let encaje: Encaje = { invadeArriba: false };
       if (destino) {
         exigirLibre(destino);
         await exigirAccesible(tx, destino);
-        await exigirAltura(tx, destino, {
+        encaje = await exigirAltura(tx, destino, {
           packaging: datos.packaging as Packaging,
           contenido: datos.contenido,
         });
@@ -106,6 +108,7 @@ export async function meter(
         posicionDestino: destino
           ? { id: destino.id, codigo: destino.codigo }
           : null,
+        invadeArriba: encaje.invadeArriba ? encaje.arriba : null,
         usuario: { id: sesion.uid, nombre: sesion.nombre },
         nota: datos.nota,
       });
@@ -255,10 +258,11 @@ export async function mover(
         ? await bloquearPosicion(tx, datos.posicionId)
         : null;
 
+      let encaje: Encaje = { invadeArriba: false };
       if (destino) {
         exigirLibre(destino);
         await exigirAccesible(tx, destino);
-        await exigirAltura(tx, destino, bulto);
+        encaje = await exigirAltura(tx, destino, bulto);
       }
 
       await aplicarMovimiento(tx, {
@@ -275,6 +279,7 @@ export async function mover(
         posicionDestino: destino
           ? { id: destino.id, codigo: destino.codigo }
           : null,
+        invadeArriba: encaje.invadeArriba ? encaje.arriba : null,
         usuario: { id: sesion.uid, nombre: sesion.nombre },
         nota: datos.nota,
       });

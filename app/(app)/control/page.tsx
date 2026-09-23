@@ -111,7 +111,10 @@ export default async function PantallaControl() {
                   )}
                 </div>
                 <p className="mt-0.5 truncate text-sm text-slate-600">
-                  {p.contenido ?? "El sistema dice que está vacía"}
+                  {p.contenido ??
+                    (p.invasor
+                      ? `La ocupa ${p.invasor}, que sobresale desde abajo`
+                      : "El sistema dice que está vacía")}
                 </p>
                 <p className="mt-0.5 text-xs text-slate-400">
                   {etiquetaDeEstado(p, p.confianza)}

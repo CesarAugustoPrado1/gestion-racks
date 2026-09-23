@@ -50,6 +50,7 @@ const DIARIO: Array<{ tag: string; when: number }> = [
   { tag: "0002_bultos-mezclados", when: 1790090743726 },
   { tag: "0003_movimientos", when: 1790105452228 },
   { tag: "0004_grupos", when: 1790120489325 },
+  { tag: "0005_altura-invasora", when: 1790200000000 },
 ];
 
 /**
@@ -94,6 +95,8 @@ const HUELLAS: Huella[] = [
   { migracion: "0004_grupos", que: "el grupo al que pertenece la posición (antes era rack_id)", objeto: "posiciones.grupo_id" },
   { migracion: "0004_grupos", que: "la altura que admite el modelo así empaquetado", objeto: "normas.altura_cm" },
   { migracion: "0004_grupos", que: "la tabla vieja de racks, que pasó a llamarse grupos", objeto: "racks", debeEstar: false },
+
+  { migracion: "0005_altura-invasora", que: "la posición que se come un bulto alto de abajo", objeto: "posiciones.bloqueada_por_bulto_id" },
   { migracion: "0004_grupos", que: "el rack viejo de la posición, que pasó a llamarse grupo_id", objeto: "posiciones.rack_id", debeEstar: false },
   { migracion: "0004_grupos", que: "la capacidad por posición, que ya no se usa: una posición lleva un bulto", objeto: "posiciones.capacidad_bultos", debeEstar: false },
   { migracion: "0004_grupos", que: "la profundidad en el bulto, que es de la posición y no del bulto", objeto: "bultos.profundidad", debeEstar: false },

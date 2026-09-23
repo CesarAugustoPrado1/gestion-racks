@@ -31,6 +31,20 @@ export function pintarCelda(
     };
   }
 
+  /**
+   * Tapada por un bulto alto de abajo: no hay nada parado acá, pero tampoco
+   * entra nada. Se dibuja distinto del vacío Y distinto del lleno, porque no es
+   * ninguno de los dos, y la flecha hacia abajo dice de dónde viene.
+   */
+  if (!celda.bulto && celda.invasor) {
+    return {
+      fondo: "bg-slate-200 ring-1 ring-slate-300",
+      texto: "text-slate-500",
+      letra: "↓",
+      titulo: `${p} · la ocupa ${celda.invasor}, que sobresale desde abajo`,
+    };
+  }
+
   if (!celda.bulto) {
     // El vacío no es un estado malo: es lugar disponible. Va en el fondo de la
     // página, sin color, para que lo lleno salte solo.

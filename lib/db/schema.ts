@@ -359,6 +359,28 @@ export const posiciones = pgTable(
     profundidad: integer("profundidad"),
     /** Sobrescribe la altura del nivel. `null` = usa la del nivel. */
     alturaMaxCm: integer("altura_max_cm"),
+    /**
+     * El bulto de ABAJO que se comio este hueco por alto.
+     *
+     * Un optimizado que mide mas que su nivel entra igual en la practica, pero
+     * sobresale e inutiliza la posicion de arriba. La app lo permite -porque en
+     * el galpon pasa- y a cambio marca las dos: esta queda ocupada por un bulto
+     * que no esta parado aca, sino justo debajo.
+     *
+     * POR QUE ACA Y NO UNA BANDERA EN EL BULTO. Se guarda del lado de la victima
+     * porque es del lado de la victima donde se pregunta: toda consulta de
+     * "¿esta libre?" mira esta fila, y con la bandera del otro lado cada una de
+     * esas consultas tendria que hacer un self-join de posiciones para buscar la
+     * de abajo. Una columna, una fuente de verdad, y "que bultos invaden" sigue
+     * siendo una busqueda por este indice.
+     *
+     * La escribe y la limpia `aplicarMovimiento`, en la misma transaccion que
+     * mueve el bulto, que es el unico escritor de movimientos. Si el bulto se
+     * va o baja, esto vuelve a `null` solo.
+     */
+    bloqueadaPorBultoId: integer("bloqueada_por_bulto_id").references(
+      (): AnyPgColumn => bultos.id,
+    ),
     activa: boolean("activa").notNull().default(true),
     orden: integer("orden").notNull().default(0),
     chequeadoEn: timestamp("chequeado_en", { withTimezone: true }),
@@ -368,6 +390,7 @@ export const posiciones = pgTable(
   (t) => [
     uniqueIndex("posiciones_grupo_codigo").on(t.grupoId, t.codigo),
     index("posiciones_grupo_unidad").on(t.grupoId, t.unidad, t.nivel),
+    index("posiciones_bloqueada_por").on(t.bloqueadaPorBultoId),
   ],
 );
 

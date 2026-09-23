@@ -23,7 +23,7 @@ export function Chequeo({
   motivos,
   modelos,
 }: {
-  posicion: { id: number; codigo: string; bultos: number };
+  posicion: { id: number; codigo: string; bultos: number; invasor: string | null };
   bultos: BultoEnPosicion[];
   motivos: Array<{ id: number; nombre: string }>;
   modelos: ModeloParaCargar[];
@@ -47,7 +47,24 @@ export function Chequeo({
           El sistema dice que acá hay
         </h2>
 
-        {bultos.length === 0 ? (
+        {bultos.length === 0 && posicion.invasor ? (
+          /**
+           * Tapada por un bulto alto de abajo. Decir "Nada. Vacía." acá sería
+           * mentirle al operario en la pantalla donde justamente viene a
+           * comparar con la realidad: si mira y ve el palet asomando, iba a
+           * reportar una diferencia que no existe.
+           */
+          <>
+            <p className="text-base font-semibold text-slate-700">
+              Nada parado acá, pero el hueco está tomado.
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              El bulto <span className="codigo">{posicion.invasor}</span>, que
+              está en la posición de abajo, es más alto que su nivel y sobresale
+              hasta acá. Si lo ves así, está bien.
+            </p>
+          </>
+        ) : bultos.length === 0 ? (
           <p className="text-base font-semibold text-slate-700">Nada. Vacía.</p>
         ) : (
           <ul className="space-y-3">

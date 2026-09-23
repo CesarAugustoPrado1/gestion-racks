@@ -52,6 +52,7 @@ export default async function PantallaChequeo({
           id: datos.posicion.id,
           codigo: datos.posicion.codigo,
           bultos: datos.posicion.bultos,
+          invasor: datos.posicion.invasor,
         }}
         bultos={datos.bultos}
         motivos={motivos}

@@ -286,6 +286,9 @@ export async function posicionesLibres(): Promise<PosicionLibre[]> {
       join grupos g on g.id = p.grupo_id
       left join bultos b on b.posicion_id = p.id and b.estado = 'ubicado'
      where p.activa and g.activo and b.id is null
+       -- Y tampoco es libre la que un bulto alto de abajo se comió por
+       -- sobresalir: no hay nada parado ahí, pero el hueco está tomado.
+       and p.bloqueada_por_bulto_id is null
      order by g.orden, p.orden
   `)) as unknown as Array<{
     id: number;
@@ -567,6 +570,8 @@ export type PosicionParaChequear = {
   unidades: number;
   unidadPlural: string | null;
   contenido: string | null;
+  /** Código del bulto de abajo que se comió este hueco por alto, si lo hay. */
+  invasor: string | null;
   chequeadoEn: Date | null;
   chequeosOk: number;
   chequeosTotal: number;
@@ -604,7 +609,8 @@ export async function posicionesParaChequear(): Promise<PosicionParaChequear[]> 
               join modelos m on m.id = c.modelo_id
               join lineas l on l.id = m.linea_id
              where b3.posicion_id = p.id and b3.estado = 'ubicado' limit 1
-           ) as unidad_plural
+           ) as unidad_plural,
+           (select bi.codigo from bultos bi where bi.id = p.bloqueada_por_bulto_id) as invasor
       from posiciones p
       join grupos g on g.id = p.grupo_id
       left join bultos b on b.posicion_id = p.id and b.estado = 'ubicado'
@@ -626,6 +632,7 @@ export async function posicionesParaChequear(): Promise<PosicionParaChequear[]> 
     unidades: number;
     contenido: string | null;
     unidad_plural: string | null;
+    invasor: string | null;
   }>;
 
   return filas.map((f) => ({
@@ -641,6 +648,8 @@ export async function posicionesParaChequear(): Promise<PosicionParaChequear[]> 
     unidades: f.unidades,
     unidadPlural: f.unidad_plural,
     contenido: f.contenido,
+    /** Si la tapa un bulto alto de abajo, su código. Ver §5.6 de DISENO.md. */
+    invasor: f.invasor,
     chequeadoEn: comoFecha(f.chequeado_en),
     chequeosOk: f.chequeos_ok,
     chequeosTotal: f.chequeos_total,
@@ -746,6 +755,12 @@ export type CeldaDelMapa = {
     chequeosOk: number;
     chequeosTotal: number;
   } | null;
+  /**
+   * Código del bulto de abajo que se comió este hueco por sobresalir. Si está,
+   * la celda está ocupada aunque `bulto` sea null: no hay nada parado acá, pero
+   * tampoco entra nada.
+   */
+  invasor: string | null;
 };
 
 export type GrupoDelMapa = {
@@ -780,7 +795,8 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
            l.nombre as linea_nombre, l.orden as linea_orden, l.unidad_plural,
            (select string_agg(m2.nombre || ' ' || c2.cantidad, ' + ' order by m2.nombre)
               from bulto_contenido c2 join modelos m2 on m2.id = c2.modelo_id
-             where c2.bulto_id = b.id) as contenido
+             where c2.bulto_id = b.id) as contenido,
+           (select bi.codigo from bultos bi where bi.id = p.bloqueada_por_bulto_id) as invasor
       from posiciones p
       join grupos g on g.id = p.grupo_id
       left join bultos b on b.posicion_id = p.id and b.estado = 'ubicado'
@@ -820,6 +836,7 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
     linea_orden: number | null;
     unidad_plural: string | null;
     contenido: string | null;
+    invasor: string | null;
   }>;
 
   const grupos = new Map<number, GrupoDelMapa>();
@@ -861,6 +878,7 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
               chequeosTotal: f.chequeos_total ?? 0,
             }
           : null,
+      invasor: f.invasor,
     });
   }
 

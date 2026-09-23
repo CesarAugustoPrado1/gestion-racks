@@ -113,6 +113,20 @@ export type PosicionVivo = {
   alturaMaxCm: number | null;
   /** El bulto que ya está ahí, si hay. Una posición aloja UNO. */
   ocupante: { id: number; codigo: string } | null;
+  /**
+   * El código del bulto de ABAJO que se comió este hueco por sobresalir. Si
+   * está, la posición está ocupada aunque no tenga `ocupante`.
+   */
+  invasor: string | null;
+  /** La de arriba en la misma calle y profundidad, si el rack tiene nivel. */
+  arriba: {
+    id: number;
+    codigo: string;
+    alturaMaxCm: number | null;
+    libre: boolean;
+    /** Quién la tiene, para poder nombrarlo en el error. */
+    ocupante: string | null;
+  } | null;
 };
 
 /**
@@ -127,19 +141,67 @@ export async function bloquearPosicion(
   tx: Tx,
   id: number,
 ): Promise<PosicionVivo> {
+  /**
+   * Se bloquea la posicion Y SUS VECINAS DE ARRIBA Y DE ABAJO.
+   *
+   * Desde que un bulto alto puede comerse el hueco de arriba, dos posiciones
+   * vecinas en vertical dejaron de ser independientes: un operario metiendo un
+   * optimizado en el nivel 2 y otro metiendo cualquier cosa en el nivel 3 estan
+   * peleando por el mismo espacio fisico aunque las filas sean distintas. Con un
+   * `for update` sobre una sola fila los dos leerian "libre" y los dos
+   * escribirian, que es justo el choque que este lock existe para evitar.
+   *
+   * Se toman en orden de `id` -el `order by` antes del `for update`- porque dos
+   * transacciones que tomen las mismas filas en ORDEN DISTINTO se abrazan en un
+   * deadlock. El orden lo fija la base, no el codigo que llama.
+   */
+  await tx.execute(sql`
+    select v.id from posiciones v
+     where v.id in (
+       select p2.id from posiciones p2
+        join posiciones p on p.id = ${id}
+       where p2.grupo_id = p.grupo_id
+         and p2.unidad = p.unidad
+         -- Las DOS, y por eso ninguna sobra: en un selectivo la columna es lo
+         -- que separa una pila de la de al lado y la profundidad es null; en un
+         -- penetrable es al reves. Con una sola, un selectivo hace match contra
+         -- todas las columnas del modulo y se bloquea la posicion equivocada.
+         and p2.columna is not distinct from p.columna
+         and p2.profundidad is not distinct from p.profundidad
+         and p2.nivel between p.nivel - 1 and p.nivel + 1
+     )
+     order by v.id
+     for update
+  `);
+
   const filas = (await tx.execute(sql`
     select p.id, p.unidad, p.nivel, p.profundidad, p.activa, p.altura_max_cm,
            g.codigo || '-' || p.codigo as codigo,
            g.id as grupo_id, g.accesibilidad, g.niveles,
            g.profundidad as profundidad_max,
            n.altura_max_cm as altura_nivel,
-           o.id as ocupante_id, o.codigo as ocupante_codigo
+           o.id as ocupante_id, o.codigo as ocupante_codigo,
+           inv.codigo as invasor_codigo,
+           arr.id as arriba_id,
+           g.codigo || '-' || arr.codigo as arriba_codigo,
+           coalesce(narr.altura_max_cm, arr.altura_max_cm) as arriba_altura,
+           arrocu.codigo as arriba_ocupante,
+           arrinv.codigo as arriba_invasor,
+           arr.activa as arriba_activa
       from posiciones p
       join grupos g on g.id = p.grupo_id
       left join niveles n on n.grupo_id = g.id and n.nivel = p.nivel
       left join bultos o on o.posicion_id = p.id and o.estado = 'ubicado'
+      left join bultos inv on inv.id = p.bloqueada_por_bulto_id
+      left join posiciones arr
+             on arr.grupo_id = p.grupo_id and arr.unidad = p.unidad
+            and arr.columna is not distinct from p.columna
+            and arr.profundidad is not distinct from p.profundidad
+            and arr.nivel = p.nivel + 1
+      left join niveles narr on narr.grupo_id = g.id and narr.nivel = arr.nivel
+      left join bultos arrocu on arrocu.posicion_id = arr.id and arrocu.estado = 'ubicado'
+      left join bultos arrinv on arrinv.id = arr.bloqueada_por_bulto_id
      where p.id = ${id}
-     for update of p
   `)) as unknown as Array<{
     id: number;
     unidad: number;
@@ -155,6 +217,13 @@ export async function bloquearPosicion(
     profundidad_max: number | null;
     ocupante_id: number | null;
     ocupante_codigo: string | null;
+    invasor_codigo: string | null;
+    arriba_id: number | null;
+    arriba_codigo: string | null;
+    arriba_altura: number | null;
+    arriba_ocupante: string | null;
+    arriba_invasor: string | null;
+    arriba_activa: boolean | null;
   }>;
 
   if (filas.length === 0) fallar("Esa posición no existe.");
@@ -176,6 +245,26 @@ export async function bloquearPosicion(
     ocupante:
       p.ocupante_id != null
         ? { id: p.ocupante_id, codigo: p.ocupante_codigo! }
+        : null,
+    /** El bulto de abajo que se comió este hueco por alto. */
+    invasor: p.invasor_codigo,
+    /**
+     * La de arriba, si existe. `libre` incluye estar activa: una posición dada
+     * de baja no presta su espacio, porque justamente puede estar de baja por
+     * una viga o un caño que ocupa ese aire.
+     */
+    arriba:
+      p.arriba_id != null
+        ? {
+            id: p.arriba_id,
+            codigo: p.arriba_codigo!,
+            alturaMaxCm: p.arriba_altura,
+            libre:
+              p.arriba_activa === true &&
+              p.arriba_ocupante == null &&
+              p.arriba_invasor == null,
+            ocupante: p.arriba_ocupante ?? p.arriba_invasor,
+          }
         : null,
   };
 }
@@ -248,6 +337,18 @@ export function exigirLibre(pos: PosicionVivo) {
         `Elegí otra posición, o dejalo sin ubicar.`,
     );
   }
+  /**
+   * Y el hueco puede estar ocupado sin que haya nada parado acá: un bulto alto
+   * de abajo que sobresale. El mensaje lo nombra y dice dónde está, porque el
+   * operario que mira el rack ve un espacio libre y necesita entender por qué
+   * la app le dice que no.
+   */
+  if (pos.invasor) {
+    fallar(
+      `${pos.codigo} está tapada: el bulto ${pos.invasor}, que está justo ` +
+        `abajo, sobresale y ocupa este hueco. Primero hay que bajarlo.`,
+    );
+  }
 }
 
 /**
@@ -259,15 +360,21 @@ export function exigirLibre(pos: PosicionVivo) {
  * el nivel sin medir- tampoco se valida: `null` es "el sistema no opina", y así
  * se puede usar la app antes de tener toda la planta medida.
  */
+export type Encaje = {
+  /** Si el bulto sobresale y se come tambien la posicion de arriba. */
+  invadeArriba: boolean;
+  arriba?: { id: number; codigo: string };
+};
+
 export async function exigirAltura(
   tx: Tx,
   pos: PosicionVivo,
   bulto: { packaging: Packaging; contenido: Array<{ modeloId: number }> },
-) {
-  if (bulto.packaging === "suelto") return;
-  if (pos.alturaMaxCm == null) return;
+): Promise<Encaje> {
+  if (bulto.packaging === "suelto") return { invadeArriba: false };
+  if (pos.alturaMaxCm == null) return { invadeArriba: false };
   const modeloId = bulto.contenido[0]?.modeloId;
-  if (modeloId == null) return;
+  if (modeloId == null) return { invadeArriba: false };
 
   const filas = (await tx.execute(sql`
     select n.altura_cm, m.nombre
@@ -277,15 +384,52 @@ export async function exigirAltura(
   `)) as unknown as Array<{ altura_cm: number | null; nombre: string }>;
 
   const altura = filas[0]?.altura_cm;
-  if (altura == null) return;
+  if (altura == null) return { invadeArriba: false };
 
-  if (altura > pos.alturaMaxCm) {
-    const m = (cm: number) => (cm / 100).toFixed(2).replace(".", ",");
+  if (altura <= pos.alturaMaxCm) return { invadeArriba: false };
+
+  /**
+   * No entra en su nivel. Pero en el galpon entra igual, sobresaliendo hacia el
+   * hueco de arriba, y prohibirlo no evita que lo hagan: solo hace que el palet
+   * termine en el rack sin que el sistema lo sepa, que es peor que las dos
+   * cosas. Asi que se permite, a cambio de ocupar las dos posiciones.
+   *
+   * Tres razones distintas para decir que no, y cada una tiene su mensaje porque
+   * cada una se resuelve distinto:
+   */
+  const m = (cm: number) => (cm / 100).toFixed(2).replace(".", ",");
+  const quien = `un ${bulto.packaging} de ${filas[0].nombre} mide ${m(altura)} m`;
+
+  // 1. No hay nivel arriba: es el ultimo, y arriba esta el techo.
+  if (!pos.arriba) {
     fallar(
-      `No entra: un ${bulto.packaging} de ${filas[0].nombre} mide ${m(altura)} m ` +
-        `y en ${pos.codigo} entran ${m(pos.alturaMaxCm)} m.`,
+      `No entra: ${quien} y en ${pos.codigo} entran ${m(pos.alturaMaxCm)} m. ` +
+        `Es el nivel más alto, así que no hay hueco arriba para que sobresalga.`,
     );
   }
+
+  // 2. El hueco de arriba esta tomado: van a chocar. Es el caso que mas
+  //    importa, porque es el unico donde permitirlo rompe algo fisico.
+  if (!pos.arriba.libre) {
+    fallar(
+      `No se puede: ${quien} y en ${pos.codigo} entran ${m(pos.alturaMaxCm)} m, ` +
+        `así que sobresale hacia ${pos.arriba.codigo}` +
+        (pos.arriba.ocupante
+          ? `, que tiene el bulto ${pos.arriba.ocupante}. Van a chocar: primero hay que bajar ese.`
+          : `, que está dada de baja. Elegí otra posición.`),
+    );
+  }
+
+  // 3. Ni con el hueco de arriba alcanza.
+  const juntas = pos.alturaMaxCm + (pos.arriba.alturaMaxCm ?? 0);
+  if (pos.arriba.alturaMaxCm != null && altura > juntas) {
+    fallar(
+      `No entra ni ocupando dos: ${quien} y entre ${pos.codigo} y ` +
+        `${pos.arriba.codigo} hay ${m(juntas)} m.`,
+    );
+  }
+
+  return { invadeArriba: true, arriba: pos.arriba };
 }
 
 export async function exigirMotivo(
@@ -320,6 +464,11 @@ export type Aplicacion = {
   packagingDespues: Packaging;
   estadoDespues: EstadoBulto;
   posicionDestino: { id: number; codigo: string } | null;
+  /**
+   * Si el bulto sobresale y se come tambien la posicion de arriba, cual es.
+   * Sale de `exigirAltura`, que es quien lo puede saber.
+   */
+  invadeArriba?: { id: number; codigo: string } | null;
   usuario: { id: number; nombre: string };
   motivo?: { id: number; nombre: string };
   nota?: string | null;
@@ -429,6 +578,29 @@ export async function aplicarMovimiento(tx: Tx, a: Aplicacion): Promise<number> 
         : { chequeadoEn: null, chequeosOk: 0, chequeosTotal: 0 }),
     })
     .where(eq(bultos.id, a.bulto.id));
+
+  /**
+   * La invasion de altura viaja con el bulto, y por eso se rehace entera en cada
+   * movimiento en vez de parchearse.
+   *
+   * Primero se suelta TODO lo que este bulto tuviera tomado, sin preguntar
+   * dónde: si bajó, si salió, si se movió a otra calle, el hueco de arriba se
+   * libera solo y nadie tiene que acordarse. Después, si en el destino vuelve a
+   * sobresalir, se toma el nuevo. Soltar-y-tomar es lo que hace que no existan
+   * huecos tomados por un bulto que ya no está: el estado sale del bulto, no de
+   * una secuencia de parches que hay que acertar en orden.
+   */
+  await tx
+    .update(posiciones)
+    .set({ bloqueadaPorBultoId: null })
+    .where(eq(posiciones.bloqueadaPorBultoId, a.bulto.id));
+
+  if (a.invadeArriba) {
+    await tx
+      .update(posiciones)
+      .set({ bloqueadaPorBultoId: a.bulto.id })
+      .where(eq(posiciones.id, a.invadeArriba.id));
+  }
 
   /**
    * Y le borra el chequeo a las POSICIONES que el movimiento tocó, por la misma
