@@ -207,22 +207,34 @@ Si falta cualquiera de los dos datos —la norma sin medir, el nivel sin medir�
 se valida nada**. Se puede usar la app antes de tener toda la planta medida, y
 cada altura que se carga empieza a proteger sola.
 
-### 3.7 Identidad del bulto ⟨pendiente — la más importante⟩
+### 3.7 Identidad del bulto
 
-Todo el diseño del chequeo depende de esto: **¿el bulto tiene una identidad física
-propia?** ¿Lleva etiqueta con número o QR, o lo único que lo identifica es "lo que
-hay en B-4"?
+**Resuelto: por ahora los bultos NO llevan etiqueta ni QR.** Lo único que
+identifica físicamente a un bulto es dónde está parado.
 
-- **Con etiqueta**: el chequeo es exacto (*"el palet P-01234 está en B-4"*), se
-  puede seguir la vida de un bulto entero y el operario escanea en vez de tipear.
-- **Sin etiqueta**: el chequeo solo puede validar el **contenido de la posición**
-  (*"en B-4 hay 1 palet de Laja de 60 paquetes"*), que para el inventario alcanza.
+La consecuencia es que **el chequeo valida el contenido de la posición**, no la
+identidad del bulto: lo que control puede afirmar es *"en B-4 hay un palet de
+Laja de 60 paquetes"*, no *"el palet P-01234 está en B-4"*. Para el inventario
+alcanza, que es de lo que se trata.
 
-El diseño de abajo funciona en los dos casos: el bulto tiene un `codigo` que
-genera el sistema, y el flujo de chequeo es **por posición**. Si mañana ponen
-etiquetas, el código ya existe y solo se agrega el escaneo. Pero conviene
-decidirlo ahora, porque si hay etiquetas el flujo de "subir" empieza por escanear
-y se acorta mucho.
+El `codigo` del bulto (P-00019 y así) lo sigue generando el sistema y sigue
+sirviendo: es lo que hace legible el historial —se puede leer la vida entera de
+un bulto: entró, salió parcial, se movió— y es como se lo nombra en pantalla
+cuando hay dos en la misma recorrida. Lo que no es, es algo que alguien pueda
+leer parado frente al rack.
+
+Dos cosas que se siguen de esto y conviene tener presentes:
+
+- **Un bulto que aparece en el lugar equivocado no se puede reconocer.** Si
+  control encuentra un palet de Laja donde el sistema decía que había
+  Patagónica, no hay forma de saber si es *el* palet que falta en otra posición
+  o uno distinto. Por eso el flujo de corrección tiene "hay algo que el sistema
+  no tiene" y "no está acá" como dos hechos separados, y no como un movimiento:
+  unirlos sería inventar una identidad que nadie puede verificar.
+- **Si mañana ponen etiquetas, no hay que rehacer nada.** El código ya existe y
+  ya es único; se agrega el escaneo en la pantalla de meter —que hoy empieza
+  eligiendo modelo y packaging— y el chequeo pasa a poder ser por bulto además
+  de por posición. Es una mejora aditiva, no un cambio de modelo.
 
 ### 3.8 Bultos mezclados
 
