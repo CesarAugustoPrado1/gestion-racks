@@ -719,3 +719,200 @@ export async function motivosDeAjuste(): Promise<
   `)) as unknown as Array<{ id: number; nombre: string }>;
   return filas;
 }
+
+/* -------------------------------------------------------------------------- */
+/* El tablero: la foto de la planta                                           */
+/* -------------------------------------------------------------------------- */
+
+export type CeldaDelMapa = {
+  posicionId: number;
+  codigo: string;
+  unidad: number;
+  columna: number | null;
+  nivel: number;
+  profundidad: number | null;
+  activa: boolean;
+  bulto: {
+    id: number;
+    codigo: string;
+    packaging: Packaging;
+    cantidad: number;
+    lineaNombre: string;
+    lineaOrden: number;
+    unidadPlural: string;
+    contenido: string;
+    chequeadoEn: Date | null;
+    chequeosOk: number;
+    chequeosTotal: number;
+  } | null;
+};
+
+export type GrupoDelMapa = {
+  id: number;
+  codigo: string;
+  nombre: string | null;
+  penetrable: boolean;
+  ancho: number | null;
+  niveles: number;
+  profundidad: number | null;
+  unidades: number;
+  celdas: CeldaDelMapa[];
+};
+
+/**
+ * Todas las posiciones de la planta con lo que tienen adentro.
+ *
+ * Es una sola consulta y no una por grupo: son cientos de posiciones, no
+ * millones, y traerlas juntas evita que la pantalla haga una consulta por rack
+ * -que es como un tablero que hoy anda se vuelve lento el día que se agrega un
+ * galpón-.
+ */
+export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
+  const filas = (await db.execute(sql`
+    select g.id as grupo_id, g.codigo as grupo_codigo, g.nombre as grupo_nombre,
+           g.accesibilidad, g.ancho, g.niveles, g.profundidad as profundidad_max,
+           g.unidades,
+           p.id as posicion_id, p.codigo, p.unidad, p.columna, p.nivel,
+           p.profundidad, p.activa,
+           b.id as bulto_id, b.codigo as bulto_codigo, b.packaging, b.cantidad,
+           b.chequeado_en, b.chequeos_ok, b.chequeos_total,
+           l.nombre as linea_nombre, l.orden as linea_orden, l.unidad_plural,
+           (select string_agg(m2.nombre || ' ' || c2.cantidad, ' + ' order by m2.nombre)
+              from bulto_contenido c2 join modelos m2 on m2.id = c2.modelo_id
+             where c2.bulto_id = b.id) as contenido
+      from posiciones p
+      join grupos g on g.id = p.grupo_id
+      left join bultos b on b.posicion_id = p.id and b.estado = 'ubicado'
+      left join lateral (
+        select m.linea_id from bulto_contenido c
+          join modelos m on m.id = c.modelo_id
+         where c.bulto_id = b.id
+         order by m.orden limit 1
+      ) primero on true
+      left join lineas l on l.id = primero.linea_id
+     where g.activo
+     order by g.orden, p.nivel desc, p.unidad, p.profundidad nulls last, p.columna
+  `)) as unknown as Array<{
+    grupo_id: number;
+    grupo_codigo: string;
+    grupo_nombre: string | null;
+    accesibilidad: string;
+    ancho: number | null;
+    niveles: number;
+    profundidad_max: number | null;
+    unidades: number;
+    posicion_id: number;
+    codigo: string;
+    unidad: number;
+    columna: number | null;
+    nivel: number;
+    profundidad: number | null;
+    activa: boolean;
+    bulto_id: number | null;
+    bulto_codigo: string | null;
+    packaging: Packaging | null;
+    cantidad: number | null;
+    chequeado_en: Date | string | null;
+    chequeos_ok: number | null;
+    chequeos_total: number | null;
+    linea_nombre: string | null;
+    linea_orden: number | null;
+    unidad_plural: string | null;
+    contenido: string | null;
+  }>;
+
+  const grupos = new Map<number, GrupoDelMapa>();
+  for (const f of filas) {
+    if (!grupos.has(f.grupo_id)) {
+      grupos.set(f.grupo_id, {
+        id: f.grupo_id,
+        codigo: f.grupo_codigo,
+        nombre: f.grupo_nombre,
+        penetrable: f.accesibilidad === "penetrable",
+        ancho: f.ancho,
+        niveles: f.niveles,
+        profundidad: f.profundidad_max,
+        unidades: f.unidades,
+        celdas: [],
+      });
+    }
+    grupos.get(f.grupo_id)!.celdas.push({
+      posicionId: f.posicion_id,
+      codigo: f.codigo,
+      unidad: f.unidad,
+      columna: f.columna,
+      nivel: f.nivel,
+      profundidad: f.profundidad,
+      activa: f.activa,
+      bulto:
+        f.bulto_id != null
+          ? {
+              id: f.bulto_id,
+              codigo: f.bulto_codigo!,
+              packaging: f.packaging!,
+              cantidad: f.cantidad!,
+              lineaNombre: f.linea_nombre ?? "Sin línea",
+              lineaOrden: f.linea_orden ?? 99,
+              unidadPlural: f.unidad_plural ?? "unidades",
+              contenido: f.contenido ?? "",
+              chequeadoEn: comoFecha(f.chequeado_en),
+              chequeosOk: f.chequeos_ok ?? 0,
+              chequeosTotal: f.chequeos_total ?? 0,
+            }
+          : null,
+    });
+  }
+
+  return [...grupos.values()];
+}
+
+/** Una posición con todo lo que hace falta para su ficha. */
+export async function fichaDePosicion(id: number): Promise<{
+  grupo: GrupoDelMapa;
+  celda: CeldaDelMapa;
+  movimientos: MovimientoDelDia[];
+} | null> {
+  const mapa = await mapaDeRacks();
+  for (const g of mapa) {
+    const celda = g.celdas.find((c) => c.posicionId === id);
+    if (!celda) continue;
+
+    const filas = (await db.execute(sql`
+      select id, tipo, bulto_codigo, posicion_desde_codigo, posicion_hasta_codigo,
+             cantidad_antes, cantidad, motivo_nombre, usuario_nombre, creado_en
+        from movimientos
+       where anulado_en is null
+         and (posicion_desde_id = ${id} or posicion_hasta_id = ${id})
+       order by creado_en desc limit 10
+    `)) as unknown as Array<{
+      id: number;
+      tipo: string;
+      bulto_codigo: string;
+      posicion_desde_codigo: string | null;
+      posicion_hasta_codigo: string | null;
+      cantidad_antes: number;
+      cantidad: number;
+      motivo_nombre: string | null;
+      usuario_nombre: string;
+      creado_en: Date | string;
+    }>;
+
+    return {
+      grupo: g,
+      celda,
+      movimientos: filas.map((f) => ({
+        id: f.id,
+        tipo: f.tipo,
+        bultoCodigo: f.bulto_codigo,
+        desde: f.posicion_desde_codigo,
+        hasta: f.posicion_hasta_codigo,
+        cantidadAntes: f.cantidad_antes,
+        cantidad: f.cantidad,
+        motivo: f.motivo_nombre,
+        usuario: f.usuario_nombre,
+        creadoEn: comoFecha(f.creado_en)!,
+      })),
+    };
+  }
+  return null;
+}

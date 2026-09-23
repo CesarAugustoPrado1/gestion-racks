@@ -23,6 +23,11 @@ la pantalla de las cuatro solapas —suelto, palet, optimizado y el total en la
 unidad de la línea—, con la ubicación de cada bulto, las marcas de fuera de
 norma y mezclado, y el índice de confiabilidad.
 
+**Tablero funcionando**: `/racks` dibuja cada grupo como está parado en la
+planta —el nivel de arriba arriba, el piso abajo— con dos vistas: qué hay
+(color por línea) y confiabilidad (días desde el último chequeo). Cada celda es
+una puerta a la ficha de la posición.
+
 **ABM funcionando**: líneas, modelos con sus normas (cantidad y altura), grupos
 de racks con su geometría, motivos y usuarios. Nada se borra: todo se suspende.
 
@@ -192,7 +197,7 @@ app/
   (app)/          pantallas con sesión
     mover/        autoelevador: meter, sacar, cambiar de lugar
     control/      recorrida, chequeos y ajustes asentados
-    racks/        la foto de la planta                            (fase 3)
+    racks/        el tablero: el mapa de la planta
     stock/        por modelo, con las cuatro solapas de packaging
     admin/        ABM, datos de prueba y diagnóstico de base
   login/

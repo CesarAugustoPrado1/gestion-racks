@@ -1,6 +1,22 @@
 @import "tailwindcss";
 
 @theme {
+  /* Colores por línea de producto, para el tablero.
+
+     Son los tres primeros slots de la paleta categórica de referencia (azul,
+     naranja, aqua), en ese orden fijo y nunca ciclados. Validados con el script
+     del skill de visualización en modo all-pairs -que es el que corresponde a
+     una grilla, donde cualquier celda puede quedar al lado de cualquier otra-:
+     peor par CVD ΔE 9.2 y visión normal 24.0, los dos sobre el piso.
+
+     El aqua queda por debajo de 3:1 contra el fondo claro, así que rige la regla
+     de relieve: cada celda lleva ADEMÁS la abreviatura de su línea. El color
+     ordena de un vistazo; la letra es la que dice qué es. */
+  --color-linea-1: #2a78d6;
+  --color-linea-2: #eb6834;
+  --color-linea-3: #1baf7a;
+  --color-linea-otra: oklch(0.65 0.02 250);
+
   /* Colores de confiabilidad. Son los del indice de DISENO.md §5.3: el verde
      es "chequeado hace poco y siempre dio bien", el gris es "nunca se chequeo",
      que no es una respuesta mala sino una pregunta sin hacer. */

@@ -80,3 +80,37 @@ export function resumenPackaging(
   }
   return `Suelto: ${unidades(cuenta.unidades, unidadSingular, unidadPlural)}`;
 }
+
+/**
+ * Abreviaturas de dos letras, únicas entre sí.
+ *
+ * En el tablero cada celda lleva la abreviatura de su línea además del color:
+ * el color solo no puede cargar la identidad -hay quien no lo distingue, y una
+ * pantalla al sol tampoco-. Y "Placas" y "Piedras" empiezan igual, así que la
+ * abreviatura se calcula mirando a las demás en vez de cortar las dos primeras
+ * letras y rezar.
+ */
+export function abreviaturas(nombres: string[]): Record<string, string> {
+  const salida: Record<string, string> = {};
+  const usadas = new Set<string>();
+
+  for (const nombre of nombres) {
+    const limpio = nombre
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toUpperCase();
+    const palabras = limpio.split(/\s+/).filter(Boolean);
+
+    const candidatos = [
+      // Iniciales de las palabras: "Pisos Flotantes" -> PF.
+      palabras.length > 1 ? palabras[0][0] + palabras[1][0] : "",
+      limpio.slice(0, 2),
+      ...[...limpio.slice(1)].map((c) => limpio[0] + c),
+    ].filter((c) => c.length === 2);
+
+    const elegida = candidatos.find((c) => !usadas.has(c)) ?? limpio.slice(0, 2);
+    usadas.add(elegida);
+    salida[nombre] = elegida;
+  }
+  return salida;
+}
