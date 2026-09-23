@@ -412,8 +412,41 @@ Se agrega en los cuatro niveles que pediste — **global, por línea, por modelo
 por posición** — promediando por bulto, con variante ponderada por cantidad (un
 palet de 60 paquetes mal cargado duele más que uno de 4).
 
-**⟨pendiente 5⟩** ¿Te cierra la semivida de 30 días, o el ritmo real de recorrida
-es otro? Es un parámetro de `config`, pero define los colores que ve todo el mundo.
+### 5.4.1 La semivida: qué es y cómo se elige
+
+**Resuelto: arranca en 30 días y se ajusta desde Administración.**
+
+Lo primero es lo que **no** es: no es cada cuánto se recorre el galpón. Es
+cuánto tarda en envejecer un chequeo que ya se hizo. A los `semivida` días vale
+la mitad; al doble, un cuarto.
+
+Lo que el parámetro cambia, medido y no supuesto:
+
+- **Los colores, mucho.** Con los datos de ejemplo, las posiciones "Poco
+  confiable" pasan de 37 a 18 a 5 según la semivida sea 15, 30 o 60. Es lo que
+  ve todo el mundo al abrir la app.
+- **El orden de la recorrida, casi nada.** Barriendo todos los pares de
+  (días, cantidad), 716 cambian de orden entre semivida 15 y 30, pero siempre
+  son empates: 14.2 contra 14.6. El orden lo manda la cantidad, no la curva.
+- **Los "nunca chequeado", nada.** Se quedan en 38 con cualquier valor, que es
+  como tiene que ser: `null` no es un número chico, es la ausencia de dato.
+
+De ahí sale el criterio para elegirlo: **poner la semivida igual al ciclo real
+de la recorrida**. Si control cubre todo en tres semanas, 21. Así una posición
+recién chequeada está en verde y una que se saltó una vuelta entera se pone
+amarilla, y "amarillo" pasa a significar algo que se puede accionar: *se pasó
+de turno*.
+
+El error a evitar es ponerla más larga que el ciclo. Con semivida 30 y una
+recorrida que cierra en 20, **nunca nada se pone amarillo**: el tablero queda
+verde para siempre y deja de distinguir un galpón controlado de uno abandonado,
+que es justamente para lo que se pidió el índice.
+
+Por eso el valor es editable desde `/admin` y no una constante en el código: se
+calibra mirando el tablero contra la realidad de la planta, no de una vez en el
+diseño. La pantalla muestra en vivo qué significa el número —"a los 30 días: A
+chequear"— usando la misma función que el servidor, para que la vista previa no
+pueda mentir.
 
 ### 5.5 El índice es una cola de trabajo, no un adorno
 

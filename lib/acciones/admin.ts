@@ -16,6 +16,7 @@ import {
   usuarios,
   type Packaging,
 } from "../db/schema";
+import { CLAVE_SEMIVIDA, escribirConfig } from "../configuracion";
 import { ROLES } from "../permisos";
 import { codigoDePosicion, posicionesDe, type Geometria } from "../posiciones";
 import { ejecutar, fallar, type Resultado } from "./comun";
@@ -563,3 +564,45 @@ export async function suspenderModelo(
   });
 }
 
+
+/* -------------------------------------------------------------------------- */
+/* Ajustes del índice de confiabilidad                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A los cuántos días un chequeo vale la mitad. Ver DISENO.md §5.3.
+ *
+ * El rango no es decorativo. Por abajo, menos de 5 días hace que todo se ponga
+ * rojo en una semana y la recorrida deje de distinguir lo urgente de lo demás:
+ * si todo grita, nada grita. Por arriba, más de 365 es lo mismo al revés —nada
+ * envejece nunca y el tablero queda verde para siempre—, y un tablero siempre
+ * verde no distingue un galpón controlado de uno abandonado.
+ *
+ * Entero y en días porque es lo que alguien puede comparar con su propia
+ * recorrida: "tardo tres semanas en dar la vuelta" se escribe 21.
+ */
+const esquemaSemivida = z.object({
+  dias: z.coerce
+    .number({ invalid_type_error: "Poné un número de días." })
+    .int("Tiene que ser un número entero de días.")
+    .min(5, "Menos de 5 días hace que todo se ponga rojo en una semana.")
+    .max(365, "Más de un año es como no tener vencimiento."),
+});
+
+export async function guardarSemivida(
+  entrada: z.input<typeof esquemaSemivida>,
+): Promise<Resultado<void>> {
+  return ejecutar(async () => {
+    await autorizar("admin");
+    const d = esquemaSemivida.parse(entrada);
+
+    await escribirConfig(CLAVE_SEMIVIDA, String(d.dias));
+
+    /**
+     * `layout` y no una ruta: la confianza se muestra en el tablero, en la
+     * recorrida, en la ficha de cada bulto y en el detalle de posición. Cambiar
+     * esto cambia un número que está en media app.
+     */
+    revalidatePath("/", "layout");
+  });
+}

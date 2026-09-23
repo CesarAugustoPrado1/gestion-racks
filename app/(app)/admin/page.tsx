@@ -2,8 +2,9 @@ import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { requerirRol } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { enModoPrueba } from "@/lib/configuracion";
+import { enModoPrueba, semividaDias } from "@/lib/configuracion";
 import { Titulo } from "@/components/ui";
+import { AjusteSemivida } from "./semivida";
 
 export const metadata = { title: "Administración · Racks" };
 export const dynamic = "force-dynamic";
@@ -31,7 +32,11 @@ async function conteos() {
 
 export default async function PantallaAdmin() {
   await requerirRol("admin");
-  const [prueba, n] = await Promise.all([enModoPrueba(), conteos()]);
+  const [prueba, n, semivida] = await Promise.all([
+    enModoPrueba(),
+    conteos(),
+    semividaDias(),
+  ]);
 
   const secciones = [
     {
@@ -111,6 +116,8 @@ export default async function PantallaAdmin() {
           </li>
         ))}
       </ul>
+
+      <AjusteSemivida actual={semivida} />
 
       <div className="tarjeta mt-5 p-5">
         <h2 className="text-base font-bold text-slate-900">Datos de prueba</h2>
