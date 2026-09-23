@@ -4,9 +4,13 @@ Borrador para discutir. Hermano de `Control-Secaderos`: misma fábrica, mismo
 stack, y **las mismas convenciones**, porque las lecciones que costaron caro allá
 valen igual acá (ver `ARQUITECTURA.md` de ese repo, §9 y §10).
 
-Las decisiones marcadas **⟨pendiente⟩** necesitan una respuesta de planta antes
-de escribir el esquema definitivo. Están puestas a propósito en el documento y no
-en un chat: son las que no se pueden cambiar barato después.
+Las decisiones que necesitaban una respuesta de planta estaban marcadas
+**⟨pendiente⟩**, puestas a propósito en el documento y no en un chat, porque son
+las que no se pueden cambiar barato después. **Ya están todas contestadas**, y
+cada una quedó escrita en su sección junto con lo que se sigue de ella: la
+identidad del bulto (§3.7), los bultos mezclados (§3.8), la semivida (§5.4.1) y
+los roles (§6.3). Se dejan las respuestas y no solo la decisión, porque el
+razonamiento es lo que permite revisarlas cuando cambie la planta.
 
 ---
 
@@ -531,23 +535,39 @@ la lista de los bultos que lo componen, con su posición.
   de posiciones más olvidadas.
 - **Admin**: ABM de líneas, modelos, normas, racks, posiciones y usuarios.
 
-### 6.3 Roles ⟨pendiente 6⟩
+### 6.3 Roles
 
-Propuesta, a confirmar contra los puestos reales:
+**Resuelto: quedan los cinco como están.**
 
-| Rol | Qué hace |
-| --- | --- |
-| `admin` | Todo |
-| `autoelevador` | Subir, bajar, mover, entregar. Corrige lo último propio |
-| `control` | Chequea y corrige, con la corrección asentada |
-| `comercial` | Ve stock y ubicaciones. No opera |
-| `auditor` | Ve todo, no modifica nada |
+| Rol | Qué hace | Qué ve |
+| --- | --- | --- |
+| `admin` | Todo, incluida la configuración | Todo |
+| `autoelevador` | Mete, saca y cambia de lugar | Mover, Racks |
+| `control` | Chequea y corrige, con la corrección asentada | Control, Stock, Racks, Movimientos |
+| `comercial` | No opera, solo consulta | Stock, Racks, Movimientos |
+| `auditor` | No modifica nada | Stock, Racks, Movimientos |
 
 Igual que en secaderos: **lo que se separa es la navegación, no el permiso de
 mover un bulto**, y **cada server action revalida por su cuenta** con `autorizar()`,
 porque el middleware no es una frontera suficiente. Una excepción real: el
 `ajuste` de control sí es exclusivo de `control` y `admin`, porque es la medida
 del error y quien lo comete no lo puede borrar.
+
+**`comercial` y `auditor` hoy son el mismo rol, y está decidido así.** No es un
+descuido: se miró y se dejó. Ven las mismas tres pantallas, y ninguna server
+action acepta a ninguno de los dos —todas las escrituras son `admin`, `control`
+o `autoelevador`—, así que los dos son de solo lectura en la frontera que
+importa. La única diferencia real es dónde caen al entrar: `comercial` en Stock,
+`auditor` en Racks.
+
+Se mantienen separados porque el nombre del rol es lo que el administrador elige
+al dar de alta a alguien, y "comercial" y "auditor" describen dos puestos
+distintos aunque hoy necesiten lo mismo. Si mañana hay que diferenciarlos, el
+candidato natural es dar al auditor lectura de la configuración —normas,
+geometría, usuarios—, porque auditar incluye revisar contra qué se mide.
+
+Si alguien vuelve a encontrar esta igualdad, que no la trate como un bug: está
+acá anotada a propósito.
 
 ---
 
@@ -616,9 +636,10 @@ Convenciones heredadas, que atraviesan todo (§4.2 de secaderos):
 
 ### Decisiones que se tomaron sin esperar respuesta
 
-El esquema de la fase 1 se escribió antes de tener contestados los ⟨pendiente⟩,
-resolviéndolos con **columnas nullable**, que es el mismo `null` con significado
-propio de §3.3: *el sistema no opina*.
+El esquema de la fase 1 se escribió antes de tener contestadas esas preguntas,
+resolviéndolas con **columnas nullable**, que es el mismo `null` con significado
+propio de §3.3: *el sistema no opina*. Visto en retrospectiva la apuesta salió
+bien, y abajo está qué pasó con cada una.
 
 - `posiciones.nivel`, `posiciones.profundidad` y `posiciones.altura_max_cm` nacen
   en `null`. Si la planta usa niveles o carriles con fondo, se llenan; si no, no
@@ -629,8 +650,16 @@ propio de §3.3: *el sistema no opina*.
 - Un bulto es de **un solo modelo**. Si aparecen bultos mezclados para armar un
   pedido, es una tabla de líneas por bulto: hay que planificarlo, no improvisarlo.
 
-Contestar los pendientes ahora es barato —llenar columnas que ya existen—, y por
-eso se avanzó en vez de esperar. Lo que sigue siendo caro es el último punto.
+Qué pasó con cada una:
+
+- Las tres columnas de `posiciones` se usan: la planta tiene niveles y los
+  penetrables tienen fondo (§3.9), y la altura es restrictiva.
+- `bultos.etiqueta` sigue en `null` y va a seguir: los bultos **no** llevan
+  etiqueta ni QR (§3.7). La columna costó nada y queda lista por si eso cambia.
+- El último punto era el caro, y efectivamente lo fue: los bultos mezclados
+  existen, hubo que planificarlo, y de ahí salió `bulto_contenido` más
+  `movimiento_lineas` (§3.8). Haberlo marcado como caro antes de escribir el
+  esquema es lo que evitó improvisarlo con el sistema ya andando.
 
 ### Etapa de prueba
 

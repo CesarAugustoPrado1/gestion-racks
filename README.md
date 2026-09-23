@@ -99,8 +99,12 @@ serializando del otro lado (no se arregla con `max`; ahí la salida es
       concurrencia contra el pooler de Neon, y es la que decide si seguimos con
       `postgres-js` o pasamos a `neon-serverless`. Ver el comentario largo en
       `lib/db/index.ts`.
-- [ ] Contestar las decisiones marcadas ⟨pendiente⟩ en DISENO.md, que son las
-      que definen el esquema de la fase 1.
+- [x] Contestar las decisiones marcadas ⟨pendiente⟩ en DISENO.md, que son las
+      que definen el esquema de la fase 1. **Están todas contestadas**: identidad
+      del bulto (§3.7), bultos mezclados (§3.8), semivida (§5.4.1) y roles (§6.3).
+- [ ] Cargar los datos reales de planta: los grupos con su geometría, la altura
+      de cada nivel, y la tabla modelo × packaging → cantidad y altura. Es lo
+      único que falta para dejar de trabajar sobre datos inventados.
 
 ## Etapa de prueba
 

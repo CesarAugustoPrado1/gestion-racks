@@ -28,6 +28,19 @@ const REGLAS: Array<{ prefijo: string; roles: Rol[] }> = [
   { prefijo: "/racks", roles: ["admin", "auditor", "autoelevador", "control", "comercial"] },
 ];
 
+/**
+ * `comercial` y `auditor` son de solo lectura, y no hace falta una funcion que
+ * lo diga: NINGUNA server action los acepta. Todas las escrituras piden `admin`,
+ * `control` o `autoelevador` en su propio `autorizar()`.
+ *
+ * Aca vivia un `esSoloLectura()` que no llamaba nadie. Se borro a proposito:
+ * codigo muerto con forma de control de seguridad es peor que no tenerlo,
+ * porque el dia que alguien lo lea va a suponer que algo lo esta aplicando. La
+ * proteccion real esta en cada action y se comprueba leyendolas.
+ *
+ * Los dos roles ven hoy exactamente las mismas pantallas. Es una decision
+ * tomada, no un descuido: esta anotada en DISENO.md §6.3.
+ */
 export function puedeVer(rol: Rol, ruta: string): boolean {
   const regla = REGLAS.filter((r) => ruta.startsWith(r.prefijo)).sort(
     (a, b) => b.prefijo.length - a.prefijo.length,
@@ -48,11 +61,6 @@ export function rutaInicial(rol: Rol): string {
     default:
       return "/racks";
   }
-}
-
-/** El auditor ve todo pero no escribe nada, en ninguna pantalla. */
-export function esSoloLectura(rol: Rol): boolean {
-  return rol === "auditor";
 }
 
 export const ETIQUETA_ROL: Record<Rol, string> = {
