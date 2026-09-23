@@ -46,6 +46,12 @@ let cache: Db | undefined;
  * dejandolo; lo unico que hace es romper. La conexion sigue yendo por TLS por
  * `sslmode=require`.
  */
+/**
+ * Conexiones por instancia. Lo lee el diagnostico para medir con el numero
+ * real: una medicion que asume el tamaño del pool no mide nada.
+ */
+export const MAX_CONEXIONES: number = 5;
+
 const NO_SOPORTADOS = ["channel_binding"];
 
 export function normalizarUrl(url: string): string {
@@ -103,11 +109,26 @@ function conectar(): Db {
        */
       prepare: false,
       /**
-       * Con pipelining andando una conexion alcanza y sobra para este volumen,
-       * y ademas cada instancia de Vercel abre la suya: subir esto multiplica
-       * conexiones por instancia, no por usuario.
+       * Cuantas conexiones abre cada instancia. Estuvo en 1 y estaba mal.
+       *
+       * El razonamiento viejo era "con pipelining, una conexion alcanza". La
+       * medicion dice que con `prepare: false` NO hay pipelining: postgres-js
+       * manda cada consulta con parametros en dos viajes y no los superpone. Con
+       * un proxy que simula los 20 ms de ida y vuelta que hay hasta Neon, cinco
+       * consultas con parametros lanzadas juntas dieron 214 ms con `max: 1` y
+       * 43 ms con `max: 5`. Casi todas las consultas de las pantallas llevan
+       * parametros, asi que la cuenta era la suma y no el maximo, siempre.
+       *
+       * Y lo que arregla eso no es el pipelining sino tener mas de una conexion:
+       * un backend de Postgres ejecuta una sentencia por vez, asi que sobre una
+       * sola conexion no hay nada que superponer ni con pipelining perfecto.
+       *
+       * Cinco y no mas: es lo que lanza junta la pantalla mas pesada. Subirlo
+       * multiplica conexiones por instancia de Vercel y no compra nada, porque
+       * lo que sobre queda ocioso. El pooler de Neon esta hecho para aguantar
+       * muchas conexiones de cliente; es su trabajo.
        */
-      max: 1,
+      max: MAX_CONEXIONES,
       // Devuelve el cupo rapido entre picos.
       idle_timeout: 20,
       /**

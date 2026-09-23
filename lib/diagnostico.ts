@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "./db";
+import { db, MAX_CONEXIONES } from "./db";
 
 /**
  * Las mismas tres mediciones que scripts/probar-base.ts, pero corriendo DENTRO
@@ -30,8 +30,25 @@ export type Diagnostico = {
   problema: string | null;
 };
 
-const EN_PARALELO = 10;
+/**
+ * Cuantas consultas lanza junta la pantalla mas pesada. Es lo que hay que medir.
+ *
+ * Numero fijo, no el tamaño del pool: si se midiera con el pool, con `max: 1` la
+ * prueba lanzaria una sola consulta y daria bien siempre, que es medir para no
+ * enterarse. La pregunta no es si el pool se sirve a si mismo, es si la app
+ * consigue la concurrencia que pide.
+ *
+ * Y la version anterior lanzaba 10 con el pool en 1 y despues se quejaba de que
+ * habian tardado 500 ms. Tenian que tardar 500: un backend de Postgres ejecuta
+ * una sentencia por vez, asi que diez esperas de 50 ms sobre una sola conexion
+ * son medio segundo por definicion, con pipelining y sin el. La medicion estaba
+ * mal, no la base, y la pantalla venia avisando de un problema inexistente.
+ */
+const EN_PARALELO = 5;
 const MS_DORMIDO = 50;
+
+/** En cuantas tandas entran, con el pool que hay. */
+const TANDAS = Math.ceil(EN_PARALELO / MAX_CONEXIONES);
 
 /** Solo el host: la connection string lleva la password y no se muestra nunca. */
 function hostDeLaBase(): string {
@@ -75,12 +92,33 @@ export async function correrDiagnostico(): Promise<Diagnostico> {
   );
 
   /**
-   * El caso que importa, y el que rompia en Control-Secaderos: varias consultas
-   * lanzadas juntas sobre la misma conexion. postgres-js las pipelinea, y un
-   * pooler en modo transaccion que no lo tolere las cuelga en vez de fallar.
+   * Abrir el pool ANTES de medir el reparto, y fuera del cronometro.
    *
-   * Cada una duerme 50 ms. Si se pipelinearon, el total se parece a 50 ms; si
-   * se serializaron, se parece a 500. Esa comparacion es toda la prueba.
+   * Sin esto la medicion incluye levantar las cinco conexiones, y cada una
+   * cuesta varios viajes de ida y vuelta hasta Neon. Contra la base local no se
+   * notaba; con 20 ms de latencia simulada daba 181 ms y la pantalla acusaba de
+   * encolarse a un pool que estaba naciendo. El arranque es un costo real -la
+   * primera pantalla de la mañana lo paga- pero es costo de conexion y no de
+   * reparto, y mezclarlos hace que la medicion no sirva para lo unico que tiene
+   * que decidir.
+   */
+  await Promise.all(
+    Array.from({ length: EN_PARALELO }, () => db.execute(sql`select 1`)),
+  ).catch(() => {
+    // Si falla, la medicion de abajo lo va a reportar con su mensaje.
+  });
+
+  /**
+   * Lo que de verdad importa: si una pantalla que lanza varias consultas juntas
+   * paga el maximo o la suma.
+   *
+   * Cada una duerme 50 ms y van tantas como conexiones tiene el pool. Si el
+   * pool las reparte, el total se parece a 50 ms; si se encolan sobre una sola
+   * conexion, se parece a 50 x N. Esa comparacion es toda la prueba.
+   *
+   * Tambien es el caso que rompia en Control-Secaderos: un pooler en modo
+   * transaccion que no tolera el pipelining de postgres-js cuelga en vez de
+   * fallar, y eso se ve aca como un timeout, no como lentitud.
    */
   mediciones.push(
     await medir(`${EN_PARALELO} consultas en paralelo`, async () => {
@@ -96,7 +134,7 @@ export async function correrDiagnostico(): Promise<Diagnostico> {
       if (filas.length !== EN_PARALELO) {
         throw new Error("volvieron menos respuestas que consultas");
       }
-      return "cada una duerme 50 ms";
+      return `cada una duerme ${MS_DORMIDO} ms y el pool tiene ${MAX_CONEXIONES === 1 ? "1 conexión" : `${MAX_CONEXIONES} conexiones`}: entran en ${TANDAS === 1 ? "una sola tanda" : `${TANDAS} tandas`}`;
     }),
   );
 
@@ -110,8 +148,30 @@ export async function correrDiagnostico(): Promise<Diagnostico> {
   );
 
   const paralelo = mediciones[1];
-  const seSerializaron =
-    paralelo.ok && paralelo.ms > EN_PARALELO * MS_DORMIDO * 0.8;
+
+  /**
+   * Dos preguntas distintas, y conviene no mezclarlas.
+   *
+   * La primera es del pool y se contesta sin medir nada: si tiene menos
+   * conexiones que consultas lanza una pantalla, sobran tandas y se paga de
+   * mas. Es configuracion nuestra.
+   *
+   * La segunda es de la base: dadas las conexiones que hay, ¿las atendio a la
+   * vez? Si tardo bastante mas que las tandas que le tocaban, algo las esta
+   * serializando del otro lado. Eso no se arregla con `max`.
+   *
+   * Lo que se espera sale de la medicion de arriba, no de una constante: cada
+   * tanda cuesta lo que duerme MAS un viaje hasta la base, y cuanto cuesta un
+   * viaje lo dice la consulta sola que ya se midio. Sin eso el calculo ignora la
+   * red: contra la base local daba parecido, y con 20 ms de latencia simulada
+   * predecia 250 ms donde medir daba 492, y la pantalla acusaba de serializar a
+   * una base que estaba haciendo exactamente lo que le tocaba.
+   */
+  const unViaje = mediciones[0].ok ? mediciones[0].ms : 0;
+  const esperado = TANDAS * (unViaje + MS_DORMIDO);
+
+  const poolCorto = MAX_CONEXIONES < EN_PARALELO;
+  const peorQueLasTandas = paralelo.ok && paralelo.ms > esperado * 1.8 + 50;
 
   let problema: string | null = null;
   if (mediciones.some((m) => !m.ok)) {
@@ -119,11 +179,20 @@ export async function correrDiagnostico(): Promise<Diagnostico> {
       "Algo falló. Si lo que falló son las consultas en paralelo, el pooler de " +
       "Neon no tolera el pipelining de postgres-js y hay que pasar a " +
       "drizzle-orm/neon-serverless por WebSocket. Está anotado en lib/db/index.ts.";
-  } else if (seSerializaron) {
+  } else if (peorQueLasTandas) {
     problema =
-      "Las consultas se serializaron en vez de pipelinearse: funciona, pero " +
-      "cada pantalla que use Promise.all va a tardar la suma y no el máximo. " +
-      "Conviene revisarlo antes de construir las pantallas de lectura.";
+      `Las ${EN_PARALELO} consultas tardaron ${paralelo.ms} ms, bastante más que ` +
+      `los ~${esperado} ms que les tocaban: ${TANDAS === 1 ? "una tanda" : `${TANDAS} tandas`} ` +
+      `de ${MS_DORMIDO} ms más ${unViaje} ms de viaje cada una. ` +
+      "Algo las está serializando del otro lado, y subir `max` no lo va a " +
+      "arreglar. Es el caso que rompió en Control-Secaderos: la salida es " +
+      "drizzle-orm/neon-serverless por WebSocket, anotada en lib/db/index.ts.";
+  } else if (poolCorto) {
+    problema =
+      `El pool tiene ${MAX_CONEXIONES} conexion${MAX_CONEXIONES === 1 ? "" : "es"} y ` +
+      `una pantalla puede lanzar ${EN_PARALELO} consultas juntas, así que van en ` +
+      `${TANDAS} tandas y se paga de más. La base responde bien; lo que conviene ` +
+      "revisar es `max` en lib/db/index.ts.";
   }
 
   return { host: hostDeLaBase(), mediciones, problema };

@@ -73,7 +73,29 @@ Pendiente antes de seguir con la fase 1:
       migración entró: no se conforma con la tabla de control, chequea que estén
       las tablas y columnas que cada migración tenía que dejar. Acá las
       migraciones se aplican a mano, en dos pasos —el SQL y después la fila de
-      control—, y el segundo puede salir bien con el primero a medias. Es la validación de
+      control—, y el segundo puede salir bien con el primero a medias.
+
+## Por qué el pool tiene 5 conexiones y no 1
+
+Porque con `prepare: false` —que es obligatorio contra el pooler de Neon— **no
+hay pipelining**: postgres-js manda cada consulta con parámetros en dos viajes y
+no los superpone. Y aunque lo hiciera no alcanzaría, porque un backend de
+Postgres ejecuta una sentencia por vez: sobre una sola conexión no hay nada que
+superponer.
+
+Medido con un proxy que simula los 20 ms de ida y vuelta que hay hasta Neon,
+cinco consultas con parámetros lanzadas juntas:
+
+| | `max: 1` | `max: 5` |
+| --- | --- | --- |
+| sin parámetros | 62 ms | 23 ms |
+| con parámetros | 214 ms | 43 ms |
+
+Casi todas las consultas de las pantallas llevan parámetros. `/admin/diagnostico`
+mide esto en cada visita y distingue las dos causas posibles: que el pool sea más
+chico que lo que lanza una pantalla (se arregla con `max`) o que algo las esté
+serializando del otro lado (no se arregla con `max`; ahí la salida es
+`neon-serverless`). Es la validación de
       concurrencia contra el pooler de Neon, y es la que decide si seguimos con
       `postgres-js` o pasamos a `neon-serverless`. Ver el comentario largo en
       `lib/db/index.ts`.
