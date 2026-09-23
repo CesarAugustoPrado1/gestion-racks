@@ -666,10 +666,11 @@ export async function posicionConBultos(id: number): Promise<{
   if (!posicion) return null;
 
   const filas = (await db.execute(sql`
-    select b.id, b.codigo, b.packaging, b.cantidad, p.profundidad,
+    select b.id, b.codigo, b.packaging, b.cantidad, pos.profundidad,
            c.modelo_id, m.nombre as modelo_nombre, c.cantidad as cantidad_modelo,
            l.unidad_plural
       from bultos b
+      join posiciones pos on pos.id = b.posicion_id
       join bulto_contenido c on c.bulto_id = b.id
       join modelos m on m.id = c.modelo_id
       join lineas l on l.id = m.linea_id

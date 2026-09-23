@@ -1,6 +1,6 @@
 import {
   COLOR_NIVEL,
-  ETIQUETA_NIVEL,
+  etiquetaDeEstado,
   hace,
   nivel,
   type Confianza,
@@ -16,33 +16,38 @@ import {
  */
 export function ChipConfianza({
   confianza,
+  fila,
   compacto = false,
 }: {
   confianza: Confianza | null;
+  /** Para distinguir "nunca se miró" de "se miró, pero después se movió". */
+  fila?: { chequeadoEn: Date | string | null; chequeosTotal: number };
   compacto?: boolean;
 }) {
   const n = nivel(confianza);
   const color = COLOR_NIVEL[n];
+  const texto = etiquetaDeEstado(
+    fila ?? { chequeadoEn: null, chequeosTotal: 0 },
+    confianza,
+  );
 
   if (compacto) {
     return (
       <span
         className="inline-flex items-center gap-1.5 text-xs text-slate-500"
-        title={ETIQUETA_NIVEL[n]}
+        title={texto}
       >
         <span className={`h-2 w-2 shrink-0 rounded-full ${color.punto}`} />
-        {confianza ? hace(confianza.diasDesdeElChequeo) : "sin chequear"}
+        {confianza
+          ? hace(confianza.diasDesdeElChequeo)
+          : fila && fila.chequeosTotal > 0
+            ? "se movió"
+            : "sin chequear"}
       </span>
     );
   }
 
-  return (
-    <span className={`chip ${color.chip}`}>
-      {confianza
-        ? `${ETIQUETA_NIVEL[n]} · ${hace(confianza.diasDesdeElChequeo)}`
-        : ETIQUETA_NIVEL[n]}
-    </span>
-  );
+  return <span className={`chip ${color.chip}`}>{texto}</span>;
 }
 
 /**

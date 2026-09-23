@@ -41,7 +41,10 @@ export default async function PantallaChequeo({
       </Titulo>
 
       <div className="mb-4">
-        <ChipConfianza confianza={confianza(datos.posicion, semivida)} />
+        <ChipConfianza
+          confianza={confianza(datos.posicion, semivida)}
+          fila={datos.posicion}
+        />
       </div>
 
       <Chequeo

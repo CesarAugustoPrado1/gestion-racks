@@ -80,10 +80,15 @@ export function nivel(c: Confianza | null): Nivel {
   return "baja";
 }
 
+/**
+ * Las etiquetas se componen con la fecha -"Confiable · hace 2 días"- así que
+ * ninguna puede hablar del tiempo por su cuenta: "Sin verificar hace mucho ·
+ * hace un mes" decía dos veces lo mismo y ninguna de las dos bien.
+ */
 export const ETIQUETA_NIVEL: Record<Nivel, string> = {
   alta: "Confiable",
   media: "A chequear",
-  baja: "Sin verificar hace mucho",
+  baja: "Poco confiable",
   sin_datos: "Nunca chequeado",
 };
 
@@ -97,6 +102,24 @@ export const COLOR_NIVEL: Record<Nivel, { chip: string; punto: string }> = {
     punto: "bg-sin-datos",
   },
 };
+
+/**
+ * Qué decir cuando no hay confianza que mostrar.
+ *
+ * "Nunca chequeado" y "se chequeó, pero después se movió" son dos cosas
+ * distintas, y las dos dan `null`. Una posición con historial que quedó sin
+ * fecha porque entró un bulto nuevo NO es una posición que nadie miró nunca, y
+ * decirle así sería mentirle al que decide adónde ir.
+ */
+export function etiquetaDeEstado(
+  fila: { chequeadoEn: Date | string | null; chequeosTotal: number },
+  c: Confianza | null,
+): string {
+  if (c) return `${ETIQUETA_NIVEL[nivel(c)]} · ${hace(c.diasDesdeElChequeo)}`;
+  return fila.chequeosTotal > 0
+    ? "Sin verificar desde el último movimiento"
+    : "Nunca chequeado";
+}
 
 /** "hace 3 días", "hace 2 meses". El número exacto de días no dice nada de lejos. */
 export function hace(dias: number): string {

@@ -337,7 +337,30 @@ alguien pasó; si solo quedara el chequeo, el stock quedaría mal.
 **Todo chequeo registra su hora**, y es lo único que hace avanzar el reloj de la
 confiabilidad.
 
-### 5.2 Un movimiento no es un chequeo
+### 5.2 Qué caduca un chequeo
+
+Un chequeo dice *"en B-04-2-1 hay este bulto"*. Cualquier cosa que haga falsa esa
+frase lo caduca:
+
+| Qué pasa | Qué se borra |
+| --- | --- |
+| El bulto se mueve, o sale, o le sacan una parte | el `chequeado_en` **del bulto** |
+| La posición cambia lo que tiene adentro | el `chequeado_en` **de la posición** |
+
+Los **contadores** `ok`/`total` de la posición **no se borran nunca**: son su
+historial, y una posición donde control viene encontrando diferencias lo sigue
+siendo aunque cambie el palet que tiene adentro. Caduca el *cuándo*, no el
+*cómo le fue*.
+
+Sin la segunda fila, una posición que acababa de recibir un palet seguía
+diciendo "chequeada hace 2 días" con adentro algo que nadie verificó ahí, y la
+recorrida la despriorizaba: justo la que más convenía ir a mirar.
+
+Y como "nunca se miró" y "se miró, pero después se movió" son dos cosas
+distintas que las dos dan `null`, la pantalla las dice distinto. Decirle "nunca
+chequeada" a una posición con historial sería mentirle al que decide adónde ir.
+
+### 5.3 Un movimiento no es un chequeo
 
 Decisión importante y discutible, así que la argumento: cuando el autoelevador
 mueve un bulto, *ve* la posición — pero es también **quien puede haberse
@@ -349,7 +372,7 @@ Guardamos las dos fechas por separado y significan cosas distintas:
 - `visto_en` → último movimiento. Útil en pantalla ("se tocó hoy").
 - `chequeado_en` → último chequeo de control. **Es el que alimenta el índice.**
 
-### 5.3 El índice
+### 5.4 El índice
 
 Un bulto chequeado ayer es más confiable que uno chequeado hace dos meses. Además,
 una posición donde el control **siempre encuentra errores** es menos confiable que
@@ -380,7 +403,7 @@ palet de 60 paquetes mal cargado duele más que uno de 4).
 **⟨pendiente 5⟩** ¿Te cierra la semivida de 30 días, o el ritmo real de recorrida
 es otro? Es un parámetro de `config`, pero define los colores que ve todo el mundo.
 
-### 5.4 El índice es una cola de trabajo, no un adorno
+### 5.5 El índice es una cola de trabajo, no un adorno
 
 El uso más valioso del índice no es el número: es **ordenar la recorrida del
 control**. La pantalla de control abre con las posiciones ordenadas por

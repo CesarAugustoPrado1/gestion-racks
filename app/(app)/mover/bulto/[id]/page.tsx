@@ -67,7 +67,7 @@ export default async function PantallaBulto({
           <span className="text-sm text-slate-500">
             Total: {numero(bulto.cantidad)} {bulto.unidadPlural}
           </span>
-          <ChipConfianza confianza={confianza(bulto, semivida)} compacto />
+          <ChipConfianza confianza={confianza(bulto, semivida)} fila={bulto} compacto />
         </div>
       </div>
 

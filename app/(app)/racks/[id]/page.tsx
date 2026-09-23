@@ -68,7 +68,10 @@ export default async function FichaDePosicion({
               <span className="codigo">{celda.bulto.codigo}</span>
             </p>
             <div className="mt-3">
-              <ChipConfianza confianza={confianza(celda.bulto, semivida)} />
+              <ChipConfianza
+                confianza={confianza(celda.bulto, semivida)}
+                fila={celda.bulto}
+              />
             </div>
           </>
         ) : (

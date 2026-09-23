@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
 import { posicionesParaChequear } from "@/lib/consultas";
 import { semividaDias } from "@/lib/configuracion";
-import { confianza, hace, indice, nivel } from "@/lib/confiabilidad";
+import { confianza, etiquetaDeEstado, indice, nivel } from "@/lib/confiabilidad";
 import { Indice } from "@/components/confiabilidad";
 import { numero } from "@/lib/formato";
 import { describirPosicion } from "@/lib/posiciones";
@@ -81,9 +81,7 @@ export default async function PantallaControl() {
                   {p.contenido ?? "El sistema dice que está vacía"}
                 </p>
                 <p className="mt-0.5 text-xs text-slate-400">
-                  {p.confianza
-                    ? `Chequeada ${hace(p.confianza.diasDesdeElChequeo)}`
-                    : "Nunca chequeada"}
+                  {etiquetaDeEstado(p, p.confianza)}
                 </p>
               </div>
               {p.unidades > 0 && (

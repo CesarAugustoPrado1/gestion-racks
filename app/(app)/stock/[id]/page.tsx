@@ -266,7 +266,7 @@ function FilaBulto({
         </p>
 
         <div className="mt-1.5">
-          <ChipConfianza confianza={c} compacto />
+          <ChipConfianza confianza={c} fila={bulto} compacto />
         </div>
       </div>
 

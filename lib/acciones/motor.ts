@@ -1,11 +1,12 @@
 import "server-only";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import {
   bultoContenido,
   bultos,
   movimientoLineas,
   movimientos,
+  posiciones,
   type EstadoBulto,
   type Packaging,
   type TipoMovimiento,
@@ -408,7 +409,8 @@ export async function aplicarMovimiento(tx: Tx, a: Aplicacion): Promise<number> 
    * control verificó ya no es lo que está.
    *
    * La excepción es el ajuste del operario de control, que trae su propio
-   * chequeo y por eso pasa `conservarChequeo`.
+   * chequeo y por eso pasa `conservarChequeo`. Lo mismo vale para la posición,
+   * abajo.
    *
    * Es deliberadamente severo: un bulto recién tocado tiene que verse sin
    * verificar, porque acaba de pasar por las manos donde se cometen los errores
@@ -427,6 +429,36 @@ export async function aplicarMovimiento(tx: Tx, a: Aplicacion): Promise<number> 
         : { chequeadoEn: null, chequeosOk: 0, chequeosTotal: 0 }),
     })
     .where(eq(bultos.id, a.bulto.id));
+
+  /**
+   * Y le borra el chequeo a las POSICIONES que el movimiento tocó, por la misma
+   * razón: un chequeo dice "en B-04-2-1 hay este bulto", y si entró otro -o si
+   * se fue el que estaba- eso dejó de ser cierto.
+   *
+   * Sin esto, una posición que acaba de recibir un palet seguía diciendo
+   * "chequeada hace 2 días" con adentro algo que nadie verificó ahí, y la
+   * recorrida de control la despriorizaba: justo la que más convenía ir a mirar.
+   *
+   * Los contadores `ok`/`total` de la posición NO se tocan: son su historial, y
+   * una posición donde control viene encontrando diferencias lo sigue siendo
+   * aunque cambie el palet que tiene adentro. Lo que caduca es el "cuándo", no
+   * el "cómo le fue".
+   */
+  if (!a.conservarChequeo) {
+    const tocadas = [
+      ...new Set(
+        [a.bulto.posicionId, a.posicionDestino?.id ?? null].filter(
+          (x): x is number => x != null,
+        ),
+      ),
+    ];
+    if (tocadas.length > 0) {
+      await tx
+        .update(posiciones)
+        .set({ chequeadoEn: null })
+        .where(inArray(posiciones.id, tocadas));
+    }
+  }
 
   return mov.id;
 }

@@ -335,6 +335,12 @@ export const nivelesDeGrupo = pgTable(
  * Los contadores de chequeo se mantienen al escribir y no se recalculan al leer,
  * por el mismo motivo que `duracion_min` en Control-Secaderos: que la pantalla no
  * reconstruya la historia posición por posición.
+ *
+ * `chequeadoEn` de la posición se BORRA cuando un movimiento cambia lo que
+ * tiene adentro: el chequeo decía "acá hay este bulto" y eso dejó de ser cierto.
+ * Los contadores `chequeosOk`/`chequeosTotal` en cambio NO se borran: son el
+ * historial de la posición, y una donde control viene encontrando diferencias lo
+ * sigue siendo aunque cambie el palet. Caduca el "cuándo", no el "cómo le fue".
  */
 export const posiciones = pgTable(
   "posiciones",
