@@ -212,3 +212,31 @@ export function ordenarRecorrida<T extends { olvidada: boolean; urgencia: number
       Number(b.olvidada) - Number(a.olvidada) || b.urgencia - a.urgencia,
   );
 }
+
+/**
+ * El indice de cada grupo: "por linea", "por modelo", "por rack".
+ *
+ * Vive aca y no en la pantalla porque tiene una regla que se puede romper sin
+ * que se note: los `null` de cada grupo se cuentan aparte, igual que en
+ * `indice()`. Una agrupacion escrita al paso en un componente los promediaria
+ * como cero, y el numero quedaria mal en la pantalla que existe justamente para
+ * decir de que fiarse.
+ *
+ * El orden de salida es el de APARICION, no alfabetico: quien arma la lista ya
+ * la trajo ordenada de la base -por `orden` de linea y de modelo- y reordenar
+ * aca le pisaria esa decision.
+ */
+export function agruparIndices<T>(
+  filas: T[],
+  clave: (f: T) => string,
+  confianzaDe: (f: T) => Confianza | null,
+): Array<{ clave: string; valor: number | null; medidos: number; sinDatos: number }> {
+  const mapa = new Map<string, Array<Confianza | null>>();
+  for (const f of filas) {
+    const k = clave(f);
+    const previas = mapa.get(k);
+    if (previas) previas.push(confianzaDe(f));
+    else mapa.set(k, [confianzaDe(f)]);
+  }
+  return [...mapa.entries()].map(([k, cs]) => ({ clave: k, ...indice(cs) }));
+}

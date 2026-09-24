@@ -1169,3 +1169,67 @@ export async function opcionesDeHistorial(): Promise<{
   ]);
   return { usuarios, modelos };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Confiabilidad abierta                                                      */
+/* -------------------------------------------------------------------------- */
+
+export type BultoConChequeo = {
+  modeloId: number;
+  modelo: string;
+  lineaId: number;
+  linea: string;
+  unidadPlural: string;
+  cantidad: number;
+  chequeadoEn: Date | null;
+  chequeosOk: number;
+  chequeosTotal: number;
+};
+
+/**
+ * Un renglón por bulto EN STOCK, con su modelo y su chequeo.
+ *
+ * Devuelve filas crudas y no promedios porque el promedio lo calcula
+ * `indice()`, que es el mismo que usa el tablero y la recorrida. Si esta
+ * consulta promediara por su cuenta, habría dos fórmulas del mismo número y un
+ * día iban a dar distinto -y el día que pase, nadie va a saber cuál creer-.
+ *
+ * Incluye los `sin_ubicar`: están en stock y son igual de opinables. Lo que sí
+ * quedan afuera son los `salido`, que ya no están en el galpón.
+ */
+export async function bultosConChequeo(): Promise<BultoConChequeo[]> {
+  const filas = (await db.execute(sql`
+    select c.modelo_id, m.nombre as modelo,
+           l.id as linea_id, l.nombre as linea, l.unidad_plural,
+           c.cantidad,
+           b.chequeado_en, b.chequeos_ok, b.chequeos_total
+      from bultos b
+      join bulto_contenido c on c.bulto_id = b.id
+      join modelos m on m.id = c.modelo_id
+      join lineas l on l.id = m.linea_id
+     where b.estado in ('ubicado', 'sin_ubicar')
+     order by l.orden, m.orden, m.nombre
+  `)) as unknown as Array<{
+    modelo_id: number;
+    modelo: string;
+    linea_id: number;
+    linea: string;
+    unidad_plural: string;
+    cantidad: number;
+    chequeado_en: Date | string | null;
+    chequeos_ok: number;
+    chequeos_total: number;
+  }>;
+
+  return filas.map((f) => ({
+    modeloId: f.modelo_id,
+    modelo: f.modelo,
+    lineaId: f.linea_id,
+    linea: f.linea,
+    unidadPlural: f.unidad_plural,
+    cantidad: f.cantidad,
+    chequeadoEn: comoFecha(f.chequeado_en),
+    chequeosOk: f.chequeos_ok,
+    chequeosTotal: f.chequeos_total,
+  }));
+}

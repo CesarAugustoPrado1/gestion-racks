@@ -11,6 +11,7 @@ const ICONOS: Record<string, string> = {
   grid: "🗄",
   pallet: "📦",
   lista: "☰",
+  medidor: "📊",
   config: "⚙",
 };
 

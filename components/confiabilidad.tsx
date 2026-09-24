@@ -90,3 +90,80 @@ export function Indice({
     </p>
   );
 }
+
+/**
+ * Una fila del índice abierto: nombre, medidor y número.
+ *
+ * Es un MEDIDOR, no una barra de un gráfico: mide un valor contra su límite
+ * -0 a 1- y por eso la pista vacía se dibuja siempre, en un tono claro del
+ * mismo color que el relleno. Sin la pista, una barra corta y una larga se leen
+ * como dos cantidades distintas en vez de como dos porciones del mismo total.
+ *
+ * UN SOLO TONO, Y NO LOS COLORES DE CONFIABILIDAD. Los de confiabilidad son de
+ * estado y tienen umbrales: 50% cae en verde y 48% en amarillo. Sobre una
+ * posición eso está bien, porque es la decisión de ir a mirarla o no. Sobre el
+ * promedio de una línea entera hace que dos números a dos puntos de distancia
+ * se vean como categorías opuestas, y ese escalón no existe en los datos.
+ * Comparar magnitudes pide escala secuencial. Se vio en pantalla: "50%
+ * Confiable" y "48% A chequear" a dos renglones de distancia parecían un
+ * capricho de la app.
+ *
+ * Y tampoco lleva la etiqueta de estado: "A chequear" sobre una línea entera es
+ * un error de categoría, porque no se chequea una línea, se chequean
+ * posiciones. El número ES la etiqueta, así que el color no queda solo.
+ */
+export function FilaDeIndice({
+  nombre,
+  detalle,
+  valor,
+  sinDatos,
+  cuantosSinDatos,
+}: {
+  nombre: string;
+  detalle?: string;
+  /** 0 a 1, o `null` si no hay ni un chequeo del cual hablar. */
+  valor: number | null;
+  /** Cuántos quedaron fuera del promedio por no tener ni un chequeo. */
+  sinDatos: number;
+  cuantosSinDatos?: string;
+}) {
+  return (
+    <div className="py-2">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="min-w-0 truncate text-sm font-medium text-slate-900">
+          {nombre}
+          {detalle && (
+            <span className="ml-2 font-normal text-slate-500">{detalle}</span>
+          )}
+        </span>
+        <span className="cifra shrink-0 text-sm font-semibold text-slate-900">
+          {valor == null ? (
+            <span className="font-normal text-slate-500">sin chequear</span>
+          ) : (
+            `${Math.round(valor * 100)}%`
+          )}
+        </span>
+      </div>
+
+      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-medida-suave">
+        {valor != null && (
+          <div
+            className="h-full rounded-full bg-medida"
+            style={{ width: `${Math.max(valor * 100, 2)}%` }}
+          />
+        )}
+      </div>
+
+      {/**
+       * La línea que el promedio esconde. Un 82% sobre el 30% de los bultos no
+       * es un 82%, y el que lo lea tiene derecho a saberlo sin ir a buscarlo.
+       */}
+      {sinDatos > 0 && (
+        <p className="mt-1 text-xs text-slate-500">
+          {sinDatos} {cuantosSinDatos ?? "sin chequear nunca"}, que no{" "}
+          {sinDatos === 1 ? "entra" : "entran"} en esa cuenta
+        </p>
+      )}
+    </div>
+  );
+}

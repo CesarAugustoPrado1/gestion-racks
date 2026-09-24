@@ -59,8 +59,15 @@ viven en la URL y el export usa la misma consulta que la pantalla—, con una fi
 por movimiento y modelo y una columna `Diferencia` lista para una tabla
 dinámica. Sale con `;` y BOM para que Excel en castellano lo abra bien.
 
-Las demás pantallas de trabajo están en blanco a propósito, cada una diciendo en
-qué fase se construye.
+**Confiabilidad funcionando**: `/confiabilidad` es el índice abierto —global, por
+línea y modelo, y por rack— más el ranking de lo que más conviene ir a mirar.
+Contesta una sola pregunta: *de qué se puede fiar el dato, y sobre todo dónde no*.
+
+Dos decisiones de lectura que importan. Los promedios se dibujan con una **escala
+secuencial de un solo tono**, no con los colores de confiabilidad: esos tienen
+umbrales, y sobre el promedio de una línea entera hacían que 50% se viera verde y
+48% amarillo, un escalón que no existe en los datos. Y la **cobertura va al lado
+del promedio**, porque un 90% sobre un tercio del galpón no es un 90% del galpón.
 
 Pendiente antes de seguir con la fase 1:
 
@@ -109,7 +116,7 @@ serializando del otro lado (no se arregla con `max`; ahí la salida es
 ## Tests
 
 ```
-npm test          # todo: 76 tests, ~1 segundo
+npm test          # todo: 81 tests, ~1 segundo
 npm run test:db   # solo los del motor, contra la base
 ```
 
@@ -119,7 +126,7 @@ cualquier módulo del servidor.
 
 Hay **dos clases de test y prueban cosas distintas**:
 
-- **Puros** (57): la geometría del rack y la regla del penetrable, el índice de
+- **Puros** (62): la geometría del rack y la regla del penetrable, el índice de
   confiabilidad, la composición de bultos, las unidades por solapa. Corren en
   cualquier lado, sin base.
 - **Del motor** (19): contra una base de PostgreSQL de verdad, creada y borrada
@@ -286,6 +293,7 @@ app/
     control/      recorrida, chequeos y ajustes asentados
     racks/        el tablero: el mapa de la planta
     stock/        por modelo, con las cuatro solapas de packaging
+    confiabilidad/ el índice abierto y el ranking de lo más olvidado
     movimientos/  el historial filtrable, con export a CSV
     admin/        ABM, datos de prueba y diagnóstico de base
   login/

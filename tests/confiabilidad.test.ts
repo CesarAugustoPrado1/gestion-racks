@@ -1,6 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
+  agruparIndices,
   confianza,
   estaOlvidada,
   indice,
@@ -151,5 +152,51 @@ describe("ordenarRecorrida", () => {
     ];
     ordenarRecorrida(original);
     assert.equal(original[0].urgencia, 1, "el array de quien llama quedó intacto");
+  });
+});
+
+describe("agruparIndices: el índice por línea, modelo y rack", () => {
+  const c = (dias: number | null) => confianza(fila(dias), 30, HOY);
+  const filas = [
+    { linea: "Placas", dias: 0 },
+    { linea: "Placas", dias: null },
+    { linea: "Piedras", dias: 10 },
+  ];
+  const agrupado = () =>
+    agruparIndices(filas, (f) => f.linea, (f) => c(f.dias));
+
+  /**
+   * La regla que se rompe sin que se note: si los sin dato se promediaran como
+   * cero, "Placas" daría la mitad de lo que da. El numero quedaria mal en la
+   * pantalla que existe justamente para decir de que fiarse.
+   */
+  test("los sin dato del grupo se cuentan aparte, no como cero", () => {
+    const placas = agrupado().find((g) => g.clave === "Placas")!;
+    assert.equal(placas.medidos, 1);
+    assert.equal(placas.sinDatos, 1);
+    assert.ok(placas.valor! > 0.6, "promedia solo el que tiene dato");
+  });
+
+  test("ningún renglón se pierde al agrupar", () => {
+    const total = agrupado().reduce((s, g) => s + g.medidos + g.sinDatos, 0);
+    assert.equal(total, filas.length);
+  });
+
+  test("un grupo sin ningún chequeo da null, no cero", () => {
+    const solos = agruparIndices([{ k: "x", d: null }], (f) => f.k, (f) => c(f.d));
+    assert.equal(solos[0].valor, null);
+    assert.equal(solos[0].sinDatos, 1);
+  });
+
+  /**
+   * El orden lo trae quien arma la lista -la base, por `orden` de linea y de
+   * modelo-. Reordenar aca le pisaria esa decision.
+   */
+  test("conserva el orden de aparición, no alfabetiza", () => {
+    assert.deepEqual(agrupado().map((g) => g.clave), ["Placas", "Piedras"]);
+  });
+
+  test("lista vacía devuelve lista vacía", () => {
+    assert.deepEqual(agruparIndices([], () => "x", () => null), []);
   });
 });

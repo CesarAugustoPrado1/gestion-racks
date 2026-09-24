@@ -28,6 +28,19 @@
   --color-vencido-suave: oklch(0.96 0.04 25);
   --color-sin-datos: oklch(0.72 0.02 250);
   --color-sin-datos-suave: oklch(0.96 0.005 250);
+
+  /* Escala SECUENCIAL para los promedios del indice abierto: un solo tono,
+     mas es mas lleno. No se usan los colores de confiabilidad ahi a proposito.
+
+     Los de confiabilidad son de ESTADO y tienen umbrales: 50% cae en verde y
+     48% en amarillo. Sobre una posicion eso esta bien -es la decision de ir a
+     mirarla o no-, pero sobre el promedio de una linea entera hace que dos
+     numeros a dos puntos de distancia se vean como categorias opuestas, y ese
+     escalon no existe en los datos. Comparar magnitudes pide escala secuencial.
+
+     El tono es el mismo azul del slot 1 de la paleta categorica, ya validado. */
+  --color-medida: #2a78d6;
+  --color-medida-suave: oklch(0.94 0.035 258);
 }
 
 @layer base {

@@ -26,6 +26,9 @@ const REGLAS: Array<{ prefijo: string; roles: Rol[] }> = [
   // audita y quien vende, no quien opera -el operario ve lo suyo en /mover-.
   { prefijo: "/movimientos", roles: ["admin", "auditor", "comercial", "control"] },
   { prefijo: "/racks", roles: ["admin", "auditor", "autoelevador", "control", "comercial"] },
+  // El índice abierto: de qué se puede fiar el que decide. No lo ve el
+  // autoelevador, que no decide sobre el dato sino que lo produce.
+  { prefijo: "/confiabilidad", roles: ["admin", "auditor", "control", "comercial"] },
 ];
 
 /**
@@ -90,6 +93,7 @@ const NAV: ItemNav[] = [
   { href: "/control", etiqueta: "Control", icono: "control" },
   { href: "/racks", etiqueta: "Racks", icono: "grid" },
   { href: "/stock", etiqueta: "Stock", icono: "pallet" },
+  { href: "/confiabilidad", etiqueta: "Confiabilidad", icono: "medidor" },
   { href: "/movimientos", etiqueta: "Movimientos", icono: "lista" },
   { href: "/admin", etiqueta: "Administración", icono: "config" },
 ];

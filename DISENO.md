@@ -593,8 +593,25 @@ la lista de los bultos que lo componen, con su posición.
   para que una tabla dinámica sume la columna `Diferencia` sin tener que partir
   texto. Esa columna es `cantidad − cantidad_antes`: el signo lo pone la resta, no
   el tipo de movimiento (§4).
-- **Confiabilidad**: el índice abierto por línea, modelo y posición, y el ranking
-  de posiciones más olvidadas.
+- **Confiabilidad**: el índice abierto por línea, modelo y rack, más el ranking
+  de lo que más conviene ir a mirar. Dos decisiones de lectura:
+
+  Los promedios usan **escala secuencial de un solo tono**, no los colores de
+  confiabilidad. Esos son de estado y tienen umbrales: 50% cae en verde y 48% en
+  amarillo. Sobre una posición está bien —es la decisión de ir a mirarla o no—,
+  pero sobre el promedio de una línea entera hace que dos números a dos puntos de
+  distancia se vean como categorías opuestas, y ese escalón no existe en los
+  datos. Se vio en pantalla antes de corregirlo.
+
+  Y la **cobertura va al lado del promedio**, no en otra pestaña: un 90% sobre un
+  tercio del galpón no es un 90% del galpón. Cada renglón dice además cuántos
+  quedaron afuera del promedio por no tener ni un chequeo.
+
+  Lo que NO tiene: una variante del índice ponderada por cantidad. Se consideró
+  —un palet de 60 mal cargado duele más que uno de 4— y se descartó: serían dos
+  números con el mismo nombre en dos pantallas distintas, y el día que difieran
+  nadie sabría cuál creer. La cantidad pesa donde corresponde, en el orden de la
+  recorrida, que multiplica por unidades.
 - **Admin**: ABM de líneas, modelos, normas, racks, posiciones y usuarios.
 
 ### 6.3 Roles
