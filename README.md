@@ -106,6 +106,50 @@ serializando del otro lado (no se arregla con `max`; ahí la salida es
       de cada nivel, y la tabla modelo × packaging → cantidad y altura. Es lo
       único que falta para dejar de trabajar sobre datos inventados.
 
+## Tests
+
+```
+npm test          # todo: 76 tests, ~1 segundo
+npm run test:db   # solo los del motor, contra la base
+```
+
+Sin dependencias nuevas: `node --test` con `tsx`. El `--conditions=react-server`
+no es decorativo — sin él, `import "server-only"` tira error apenas se importa
+cualquier módulo del servidor.
+
+Hay **dos clases de test y prueban cosas distintas**:
+
+- **Puros** (57): la geometría del rack y la regla del penetrable, el índice de
+  confiabilidad, la composición de bultos, las unidades por solapa. Corren en
+  cualquier lado, sin base.
+- **Del motor** (19): contra una base de PostgreSQL de verdad, creada y borrada
+  en cada corrida. Prueban lo único que un test puro no puede: que después de
+  una secuencia de movimientos reales, **sumar el historial siga dando el stock
+  vivo**. La migración 0003 dejó movimientos que sumaban en vez de restar — el
+  esquema estaba bien, las pantallas abrían, y el número estaba mal. No lo
+  encontró nadie mirando: lo encontró una consulta, y ahora es un test.
+
+**La suite nunca toca una base remota.** `urlDeTest()` devuelve `null` para
+cualquier host que no sea local, y los tests del motor se saltean con un aviso
+visible en vez de fallar. Esa función tiene tests propios porque es el único
+código de la suite cuyo fallo no se ve como un test en rojo sino como una base
+vacía: `baseDeTest()` hace `drop database`.
+
+### Que los tests tengan dientes
+
+Un test que pasa pase lo que pase no sirve. Estos se verificaron rompiendo el
+código a propósito, y los siete fallos se detectaron:
+
+| Qué se rompió | Tests en rojo |
+| --- | --- |
+| El `antes` de cada línea se escribe en 0 | 4 |
+| Un selectivo también puede sobresalir | 1 |
+| El hueco de arriba no se libera al salir el bulto | 2 |
+| Se olvida la regla del piso del penetrable | 2 |
+| Se saca la corrección de Laplace | 3 |
+| Las posiciones vacías entran al piso de la recorrida | 1 |
+| Se saca el chequeo que protege a Neon del `drop database` | 2 |
+
 ## Etapa de prueba
 
 Mientras la instalación está en **modo prueba**, el admin tiene en
