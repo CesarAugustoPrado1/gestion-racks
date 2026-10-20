@@ -18,6 +18,7 @@ import {
   exigirEnStock,
   exigirLibre,
   exigirMotivo,
+  exigirUsable,
 } from "./motor";
 import { ejecutar, fallar, type Resultado } from "./comun";
 
@@ -74,6 +75,7 @@ export async function meter(
       let encaje: Encaje = { invadeArriba: false };
       if (destino) {
         exigirLibre(destino);
+        exigirUsable(destino);
         await exigirAccesible(tx, destino);
         encaje = await exigirAltura(tx, destino, {
           packaging: datos.packaging as Packaging,
@@ -261,6 +263,7 @@ export async function mover(
       let encaje: Encaje = { invadeArriba: false };
       if (destino) {
         exigirLibre(destino);
+        exigirUsable(destino);
         await exigirAccesible(tx, destino);
         encaje = await exigirAltura(tx, destino, bulto);
       }

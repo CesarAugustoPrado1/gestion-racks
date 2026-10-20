@@ -109,6 +109,11 @@ export default async function PantallaControl() {
                       olvidada
                     </span>
                   )}
+                  {p.fueraDeUso && (
+                    <span className="chip bg-slate-100 text-slate-500" title={p.fueraDeUso}>
+                      fuera de uso
+                    </span>
+                  )}
                 </div>
                 <p className="mt-0.5 truncate text-sm text-slate-600">
                   {p.contenido ??

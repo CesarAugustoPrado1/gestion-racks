@@ -271,6 +271,76 @@ mezclado se cuentan en la solapa de **sueltos** de Laja, marcados como
 mezclados. No inventamos una quinta solapa para algo que pasa poco, y no los
 escondemos: están en el rack y son stock.
 
+### 3.9 Dónde no se puede poner nada: alcance del clark y lista de exclusión
+
+Una posición puede existir, estar libre, y aun así no servir. Hay dos razones y
+se tratan igual:
+
+- **El clark no llega.** Es un dato del **nivel del grupo** (`niveles.alcanzable`),
+  como la altura: en un grupo el nivel de arriba está a 6 m y en otro a 4. Se
+  marca en Administración → Grupos de racks, al lado de la altura de cada nivel.
+- **Está en la lista de exclusión** (`exclusiones`): decisión propia, reparación
+  u otro motivo, con una nota. Una fila cubre un **rango**, no una posición: las
+  columnas nulas son comodines, y así se excluye un grupo entero, una calle o
+  módulo, un nivel en todo el grupo, un nivel de una calle, o una posición
+  puntual. La regla está en `lib/uso.ts` (`cubre`) y en SQL en `lib/uso-sql.ts`,
+  y un test del motor compara las dos posición por posición.
+
+Qué hace cualquiera de las dos:
+
+1. **No se ofrece ni se acepta como destino** al meter o mover (`exigirUsable`
+   en el motor; la pantalla además no la lista).
+2. **Lo que ya está adentro se puede sacar.** El origen no se valida: si el
+   sistema atrapara el palet, en la planta lo bajarían igual con otra máquina y
+   el registro quedaría mal. Apagar un nivel o excluir una calle con bultos
+   adentro se permite, y la pantalla dice cuántos quedan.
+3. **Control no se frena.** Si encuentra un palet en una calle en reparación, el
+   ajuste lo tiene que poder registrar.
+4. **No cuenta como lugar disponible**: la ocupación del tablero es sobre los
+   lugares que se pueden usar, y las vacías fuera de uso no entran en la
+   recorrida (confirmar que un hueco al que nadie llega sigue vacío no informa
+   nada).
+5. **Un bulto alto no puede sobresalir hacia un hueco excluido** —no sabemos
+   por qué está fuera de uso, y si es un larguero doblado, meterle medio palet
+   es justo lo que no hay que hacer—, **pero sí hacia uno al que el clark no
+   llega**: ahí el problema es la horquilla, no el aire.
+
+Nada se borra: levantar una exclusión le pone fecha y autor. La pantalla muestra
+las últimas habilitadas, para contestar "¿la calle 7 no estaba en reparación?".
+
+Esto es distinto de **suspender una posición** (`posiciones.activa`), que es
+para lo que no existe —el grupo se achicó, hay una columna donde la geometría
+dice que hay un hueco—. La exclusión es para lo que existe y por ahora no se usa.
+
+### 3.10 Empresas: de quién es cada cosa
+
+En el galpón trabajan **Rustikas y Pirka**. Cada **grupo de racks** es de una
+(`grupos.empresa_id`) y cada **modelo** también (`modelos.empresa_id`). El bulto
+**hereda la empresa de lo que lleva adentro**: no hay empresa en el bulto,
+porque si estuviera en los dos lados un día dirían cosas distintas. Un mezclado
+con modelos de las dos es de las dos.
+
+Un bulto de una empresa en un rack de la otra **se permite y se marca**. Se
+permite porque pasa —no hay lugar en los propios— y prohibirlo solo haría que el
+palet quede ahí sin que el sistema lo sepa. Se marca:
+
+- al meter o mover, **antes de guardar**, con un aviso que nombra las dos
+  empresas;
+- en el tablero, con un **"!" en la esquina** de la celda (no un color: el fondo
+  ya dice la línea o la confiabilidad) y una **lista arriba** de todos los que
+  están en un rack ajeno, cada uno con su link;
+- en la ficha de la posición, la del bulto, la lista de Mover y el detalle de
+  stock.
+
+La regla (`esAjeno`) **solo opina cuando sabe**: un grupo o un modelo sin
+empresa cargada no generan aviso, porque si no el primer día estaría en todos
+lados y nadie lo leería nunca más. Los formularios sí la piden, y el índice de
+Administración cuenta cuántos grupos y modelos quedan sin empresa.
+
+Empresas es tabla y no enum: el nombre no tiene semántica en el código, solo se
+compara. Viene cargada por la migración y el borrado de datos de prueba no la
+toca, igual que los motivos.
+
 ---
 
 ## 4. Movimientos
@@ -612,7 +682,8 @@ la lista de los bultos que lo componen, con su posición.
   números con el mismo nombre en dos pantallas distintas, y el día que difieran
   nadie sabría cuál creer. La cantidad pesa donde corresponde, en el orden de la
   recorrida, que multiplica por unidades.
-- **Admin**: ABM de líneas, modelos, normas, racks, posiciones y usuarios.
+- **Admin**: ABM de empresas, líneas, modelos, normas, racks, posiciones y
+  usuarios, el alcance del clark por nivel y la lista de exclusión.
 
 ### 6.3 Roles
 

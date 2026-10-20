@@ -40,10 +40,14 @@ import { ejecutar, fallar, type Resultado } from "./comun";
  * justo al terminar la etapa de prueba -o sea, justo al empezar a trabajar en
  * serio- sería el peor momento posible. Se editan desde Administración.
  *
+ * `empresas` tampoco: las crea la migración y son de la instalación, no del
+ * ejemplo.
+ *
  * Tampoco están `usuarios` ni `config`, por la misma razón: un borrado que se
  * lleva los usuarios te deja afuera de tu propia app.
  */
 const TABLAS_EN_ORDEN = [
+  "exclusiones",
   "chequeos",
   "movimiento_lineas",
   "movimientos",

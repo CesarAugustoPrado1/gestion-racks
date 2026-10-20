@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { autorizar, hashPin } from "../auth";
 import {
+  empresas,
+  exclusiones,
   grupos,
   lineas,
   modelos,
@@ -19,6 +21,7 @@ import {
 import { CLAVE_OLVIDO, CLAVE_SEMIVIDA, escribirConfig } from "../configuracion";
 import { ROLES } from "../permisos";
 import { codigoDePosicion, posicionesDe, type Geometria } from "../posiciones";
+import { MOTIVOS_EXCLUSION } from "../uso";
 import { ejecutar, fallar, type Resultado } from "./comun";
 
 /**
@@ -104,6 +107,7 @@ export async function guardarLinea(
 const esquemaModelo = z.object({
   id: z.number().int().positive().optional(),
   lineaId: z.number().int().positive("Elegí una línea."),
+  empresaId: z.number({ invalid_type_error: "Elegí de qué empresa es." }).int().positive("Elegí de qué empresa es."),
   nombre,
   activo: z.boolean(),
   /**
@@ -139,7 +143,12 @@ export async function guardarModelo(
       if (modeloId) {
         await tx
           .update(modelos)
-          .set({ lineaId: d.lineaId, nombre: d.nombre, activo: d.activo })
+          .set({
+            lineaId: d.lineaId,
+            empresaId: d.empresaId,
+            nombre: d.nombre,
+            activo: d.activo,
+          })
           .where(eq(modelos.id, modeloId));
       } else {
         const [ya] = await tx
@@ -157,6 +166,7 @@ export async function guardarModelo(
           .insert(modelos)
           .values({
             lineaId: d.lineaId,
+            empresaId: d.empresaId,
             nombre: d.nombre,
             activo: d.activo,
             orden: max,
@@ -200,6 +210,7 @@ const esquemaGrupo = z.object({
   niveles: z.number().int().min(1, "Un grupo tiene al menos un nivel.").max(10),
   profundidad: z.number().int().min(1).max(10).nullable(),
   unidades: z.number().int().min(0).max(200),
+  empresaId: z.number({ invalid_type_error: "Elegí de qué empresa es el grupo." }).int().positive("Elegí de qué empresa es el grupo."),
   activo: z.boolean(),
 });
 
@@ -281,6 +292,7 @@ export async function guardarGrupo(
       niveles: d.niveles,
       profundidad,
       unidades: d.unidades,
+      empresaId: d.empresaId,
       activo: d.activo,
     };
 
@@ -341,6 +353,40 @@ export async function guardarAlturaNivel(
   });
 }
 
+/**
+ * Si el clark llega a un nivel del grupo.
+ *
+ * Apagarlo con bultos adentro SE PERMITE: lo que está ahí se puede seguir
+ * sacando, solo deja de recibir. Se devuelve cuántos quedan para que la
+ * pantalla lo diga, porque son bultos que alguien va a tener que bajar con otra
+ * máquina.
+ */
+export async function guardarAlcanceNivel(
+  grupoId: number,
+  nivel: number,
+  alcanzable: boolean,
+): Promise<Resultado<{ bultosAdentro: number }>> {
+  return ejecutar(async () => {
+    await autorizar("admin");
+    await db
+      .insert(nivelesDeGrupo)
+      .values({ grupoId, nivel, alcanzable })
+      .onConflictDoUpdate({
+        target: [nivelesDeGrupo.grupoId, nivelesDeGrupo.nivel],
+        set: { alcanzable },
+      });
+
+    const [{ cuantos }] = (await db.execute(sql`
+      select count(*)::int as cuantos
+        from bultos b join posiciones p on p.id = b.posicion_id
+       where b.estado = 'ubicado' and p.grupo_id = ${grupoId} and p.nivel = ${nivel}
+    `)) as unknown as Array<{ cuantos: number }>;
+
+    revalidatePath("/", "layout");
+    return { bultosAdentro: alcanzable ? 0 : cuantos };
+  });
+}
+
 export async function suspenderPosicion(
   id: number,
   activa: boolean,
@@ -361,6 +407,173 @@ export async function suspenderPosicion(
     }
 
     await db.update(posiciones).set({ activa }).where(eq(posiciones.id, id));
+    revalidatePath("/", "layout");
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Lista de exclusión                                                         */
+/* -------------------------------------------------------------------------- */
+
+const esquemaExclusion = z
+  .object({
+    grupoId: z.number({ invalid_type_error: "Elegí el grupo." }).int().positive("Elegí el grupo."),
+    alcance: z.enum(["grupo", "unidad", "nivel", "unidad_nivel", "posicion"]),
+    unidad: z.number().int().positive().nullable(),
+    nivel: z.number().int().positive().nullable(),
+    posicionId: z.number().int().positive().nullable(),
+    motivo: z.enum(MOTIVOS_EXCLUSION as [string, ...string[]]),
+    nota: z
+      .string()
+      .trim()
+      .max(200, "La nota es muy larga.")
+      .optional()
+      .transform((v) => (v ? v : null)),
+  })
+  /**
+   * "Otro" sin nota no dice nada: dentro de un mes nadie sabe por qué la calle
+   * 7 está fuera de uso, y nadie se anima a habilitarla.
+   */
+  .refine((d) => d.motivo !== "otro" || d.nota != null, {
+    message: "Con motivo «Otro», escribí en la nota qué pasa.",
+  });
+
+/**
+ * Agrega un lugar a la lista de exclusión.
+ *
+ * Se guarda SOLO lo que el alcance pide: si se eligió "calle 7" y en la
+ * pantalla había quedado un nivel elegido de antes, ese nivel no viaja. Una
+ * columna de más cambia qué se excluye sin que nadie lo vea.
+ *
+ * Excluir un lugar con bultos adentro se permite, como apagar un nivel: lo que
+ * hay se puede sacar. Se devuelve cuántos quedan para que la pantalla lo diga.
+ */
+export async function crearExclusion(
+  entrada: z.input<typeof esquemaExclusion>,
+): Promise<Resultado<{ bultosAdentro: number }>> {
+  return ejecutar(async () => {
+    const sesion = await autorizar("admin");
+    const d = esquemaExclusion.parse(entrada);
+
+    const [g] = (await db.execute(sql`
+      select id, codigo, niveles, unidades, accesibilidad from grupos where id = ${d.grupoId}
+    `)) as unknown as Array<{
+      id: number;
+      codigo: string;
+      niveles: number;
+      unidades: number;
+      accesibilidad: string;
+    }>;
+    if (!g) fallar("Ese grupo no existe.");
+    const nombreUnidad = g.accesibilidad === "penetrable" ? "la calle" : "el módulo";
+
+    const quiere = {
+      unidad: d.alcance === "unidad" || d.alcance === "unidad_nivel",
+      nivel: d.alcance === "nivel" || d.alcance === "unidad_nivel",
+      posicion: d.alcance === "posicion",
+    };
+    const unidad = quiere.unidad ? d.unidad : null;
+    const nivel = quiere.nivel ? d.nivel : null;
+    const posicionId = quiere.posicion ? d.posicionId : null;
+
+    if (quiere.unidad && (unidad == null || unidad > g.unidades)) {
+      fallar(`Elegí ${nombreUnidad}: el grupo ${g.codigo} tiene ${g.unidades}.`);
+    }
+    if (quiere.nivel && (nivel == null || nivel > g.niveles)) {
+      fallar(`Elegí el nivel: el grupo ${g.codigo} tiene ${g.niveles}.`);
+    }
+    if (quiere.posicion) {
+      if (posicionId == null) fallar("Elegí la posición.");
+      const [p] = (await db.execute(sql`
+        select id from posiciones where id = ${posicionId} and grupo_id = ${g.id}
+      `)) as unknown as Array<{ id: number }>;
+      if (!p) fallar(`Esa posición no es del grupo ${g.codigo}.`);
+    }
+
+    const [repetida] = (await db.execute(sql`
+      select id from exclusiones
+       where levantada_en is null and grupo_id = ${g.id}
+         and unidad is not distinct from ${unidad}
+         and nivel is not distinct from ${nivel}
+         and posicion_id is not distinct from ${posicionId}
+       limit 1
+    `)) as unknown as Array<{ id: number }>;
+    if (repetida) fallar("Ese lugar ya está en la lista de exclusión.");
+
+    await db.insert(exclusiones).values({
+      grupoId: g.id,
+      unidad,
+      nivel,
+      posicionId,
+      motivo: d.motivo as (typeof MOTIVOS_EXCLUSION)[number],
+      nota: d.nota,
+      creadaPor: sesion.uid,
+    });
+
+    const [{ cuantos }] = (await db.execute(sql`
+      select count(*)::int as cuantos
+        from bultos b join posiciones p on p.id = b.posicion_id
+       where b.estado = 'ubicado' and p.grupo_id = ${g.id}
+         and (${posicionId}::int is null or p.id = ${posicionId})
+         and (${unidad}::int is null or p.unidad = ${unidad})
+         and (${nivel}::int is null or p.nivel = ${nivel})
+    `)) as unknown as Array<{ cuantos: number }>;
+
+    revalidatePath("/", "layout");
+    return { bultosAdentro: cuantos };
+  });
+}
+
+/** Vuelve a habilitar el lugar. No borra la fila: le pone fecha y autor. */
+export async function levantarExclusion(id: number): Promise<Resultado<void>> {
+  return ejecutar(async () => {
+    const sesion = await autorizar("admin");
+    const filas = await db
+      .update(exclusiones)
+      .set({ levantadaEn: new Date(), levantadaPor: sesion.uid })
+      .where(and(eq(exclusiones.id, id), isNull(exclusiones.levantadaEn)))
+      .returning({ id: exclusiones.id });
+    if (filas.length === 0) fallar("Esa exclusión ya estaba levantada.");
+    revalidatePath("/", "layout");
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Empresas                                                                   */
+/* -------------------------------------------------------------------------- */
+
+const esquemaEmpresa = z.object({
+  id: z.number().int().positive().optional(),
+  nombre,
+  activa: z.boolean(),
+});
+
+export async function guardarEmpresa(
+  entrada: z.input<typeof esquemaEmpresa>,
+): Promise<Resultado<void>> {
+  return ejecutar(async () => {
+    await autorizar("admin");
+    const d = esquemaEmpresa.parse(entrada);
+
+    const [ya] = (await db.execute(sql`
+      select id from empresas where lower(nombre) = lower(${d.nombre})
+         and id <> ${d.id ?? 0} limit 1
+    `)) as unknown as Array<{ id: number }>;
+    if (ya) fallar("Ya hay una empresa con ese nombre.");
+
+    if (d.id) {
+      await db
+        .update(empresas)
+        .set({ nombre: d.nombre, activa: d.activa })
+        .where(eq(empresas.id, d.id));
+    } else {
+      const [{ max }] = (await db.execute(
+        sql`select coalesce(max(orden), -1) + 1 as max from empresas`,
+      )) as unknown as Array<{ max: number }>;
+      await db
+        .insert(empresas)
+        .values({ nombre: d.nombre, activa: d.activa, orden: max });
+    }
     revalidatePath("/", "layout");
   });
 }

@@ -8,8 +8,13 @@ import {
   crearBulto,
   exigirAltura,
   exigirLibre,
+  exigirUsable,
   type Tx,
 } from "../lib/acciones/motor";
+import * as schema from "../lib/db/schema";
+import { codigoDePosicion, posicionesDe, type Geometria } from "../lib/posiciones";
+import { cubre, type ReglaExclusion } from "../lib/uso";
+import { joinExclusion } from "../lib/uso-sql";
 
 /**
  * El motor contra una base de verdad.
@@ -394,5 +399,217 @@ describe("un bulto alto ocupa dos posiciones", { skip: !hay && "sin base local" 
      where b.estado <> 'ubicado'
     `)) as unknown as unknown[];
     assert.equal(filas.length, 0);
+  });
+});
+
+/**
+ * Dónde NO se puede poner un bulto: niveles a los que el clark no llega y la
+ * lista de exclusión.
+ *
+ * Usa grupos propios, creados acá, para no depender de lo que dejaron los
+ * tests de arriba en P y S.
+ */
+describe("lugares que no se usan", { skip: !hay && "sin base local" }, () => {
+  /** Crea un grupo con sus niveles y posiciones; devuelve id y buscador. */
+  async function grupo(codigo: string, geo: Geometria, alturas: number[]) {
+    const [g] = await base.db
+      .insert(schema.grupos)
+      .values({
+        codigo,
+        accesibilidad: geo.tipo,
+        ancho: geo.ancho,
+        niveles: geo.niveles,
+        profundidad: geo.profundidad,
+        unidades: geo.unidades,
+      })
+      .returning();
+    await base.db.insert(schema.nivelesDeGrupo).values(
+      alturas.map((a, i) => ({ grupoId: g.id, nivel: i + 1, alturaMaxCm: a })),
+    );
+    const ids = new Map<string, { id: number; unidad: number; nivel: number }>();
+    for (const c of posicionesDe(geo)) {
+      const cod = codigoDePosicion(c);
+      const [p] = await base.db
+        .insert(schema.posiciones)
+        .values({
+          grupoId: g.id,
+          codigo: cod,
+          unidad: c.unidad,
+          columna: c.columna,
+          nivel: c.nivel,
+          profundidad: c.profundidad,
+        })
+        .returning();
+      ids.set(`${codigo}-${cod}`, { id: p.id, unidad: c.unidad, nivel: c.nivel });
+    }
+    const pos = (c: string) => {
+      const p = ids.get(c);
+      if (!p) throw new Error(`no existe ${c}`);
+      return p.id;
+    };
+    return { id: g.id, pos, todas: ids };
+  }
+
+  async function excluir(r: Omit<ReglaExclusion, "grupoId"> & { grupoId: number }) {
+    const [e] = await base.db
+      .insert(schema.exclusiones)
+      .values({ ...r, motivo: "reparacion", nota: "test" })
+      .returning();
+    return e.id;
+  }
+
+  async function levantar(id: number) {
+    await base.db.execute(sql`update exclusiones set levantada_en = now() where id = ${id}`);
+  }
+
+  async function usable(posicionId: number) {
+    return base.db.transaction(async (tx) => {
+      const p = await bloquearPosicion(tx as Tx, posicionId);
+      exigirUsable(p);
+      return true;
+    });
+  }
+
+  let X: Awaited<ReturnType<typeof grupo>>;
+  let Q: Awaited<ReturnType<typeof grupo>>;
+
+  before(async () => {
+    if (!hay) return;
+    // Selectivo de 2 módulos de 1 columna, 3 niveles.
+    X = await grupo(
+      "X",
+      { tipo: "selectivo", ancho: 1, niveles: 3, profundidad: null, unidades: 2 },
+      [200, 200, 200],
+    );
+    // Penetrable de 1 calle, 3 niveles, profundidad 1. El 2 admite 190 y el
+    // optimizado de Laja mide 205: sobresale hacia el 3.
+    Q = await grupo(
+      "Q",
+      { tipo: "penetrable", ancho: null, niveles: 3, profundidad: 1, unidades: 1 },
+      [210, 190, 230],
+    );
+  });
+
+  test("un nivel al que el clark no llega se rechaza como destino", async () => {
+    await base.db.execute(sql`
+      update niveles set alcanzable = false where grupo_id = ${X.id} and nivel = 3
+    `);
+    await assert.rejects(() => usable(X.pos("X-01-3")), /clark no llega/);
+    assert.ok(await usable(X.pos("X-01-2")), "el nivel de abajo sigue andando");
+    await base.db.execute(sql`
+      update niveles set alcanzable = true where grupo_id = ${X.id} and nivel = 3
+    `);
+    assert.ok(await usable(X.pos("X-01-3")), "y vuelve al prenderlo");
+  });
+
+  test("un módulo excluido se rechaza entero, y el de al lado no", async () => {
+    const e = await excluir({ grupoId: X.id, unidad: 2, nivel: null, posicionId: null });
+    await assert.rejects(() => usable(X.pos("X-02-1")), /fuera de uso: reparación, test/);
+    await assert.rejects(() => usable(X.pos("X-02-3")), /fuera de uso/);
+    assert.ok(await usable(X.pos("X-01-1")));
+    await levantar(e);
+    assert.ok(await usable(X.pos("X-02-1")), "levantada, vuelve a servir");
+  });
+
+  test("la regla en SQL dice lo mismo que cubre(), posición por posición", async () => {
+    const reglas: ReglaExclusion[] = [
+      { grupoId: X.id, unidad: null, nivel: 2, posicionId: null },
+      { grupoId: X.id, unidad: null, nivel: null, posicionId: X.pos("X-02-3") },
+      { grupoId: Q.id, unidad: 1, nivel: 1, posicionId: null },
+    ];
+    const ids: number[] = [];
+    for (const r of reglas) ids.push(await excluir(r));
+    // Y una levantada, que no tiene que contar para ninguna de las dos.
+    const vieja = await excluir({ grupoId: X.id, unidad: 1, nivel: null, posicionId: null });
+    await levantar(vieja);
+
+    const filas = (await base.db.execute(sql`
+      select p.id, p.grupo_id, p.unidad, p.nivel, ex.id as exclusion
+        from posiciones p
+        ${joinExclusion("p", "ex")}
+       where p.grupo_id in (${X.id}, ${Q.id})
+    `)) as unknown as Array<{
+      id: number;
+      grupo_id: number;
+      unidad: number;
+      nivel: number;
+      exclusion: number | null;
+    }>;
+
+    assert.ok(filas.length >= 9);
+    for (const f of filas) {
+      const p = { id: f.id, grupoId: f.grupo_id, unidad: f.unidad, nivel: f.nivel };
+      assert.equal(
+        f.exclusion != null,
+        reglas.some((r) => cubre(r, p)),
+        `la posición ${f.id} (unidad ${f.unidad}, nivel ${f.nivel}) no coincide`,
+      );
+    }
+    for (const id of ids) await levantar(id);
+  });
+
+  test("un bulto alto no puede sobresalir hacia un hueco excluido", async () => {
+    const e = await excluir({ grupoId: Q.id, unidad: null, nivel: null, posicionId: Q.pos("Q-01-3-1") });
+    await assert.rejects(
+      () =>
+        base.db.transaction(async (tx) => {
+          await meter(tx as Tx, Q.pos("Q-01-2-1"), "optimizado", [
+            { modeloId: datos.laja.id, cantidad: 60 },
+          ]);
+        }),
+      /fuera de uso/,
+    );
+    await levantar(e);
+  });
+
+  test("pero sí hacia uno al que el clark no llega: el problema ahí es la horquilla, no el aire", async () => {
+    await base.db.execute(sql`
+      update niveles set alcanzable = false where grupo_id = ${Q.id} and nivel = 3
+    `);
+    await base.db.transaction(async (tx) => {
+      await meter(tx as Tx, Q.pos("Q-01-2-1"), "optimizado", [
+        { modeloId: datos.laja.id, cantidad: 60 },
+      ]);
+    });
+    const [arriba] = (await base.db.execute(sql`
+      select bloqueada_por_bulto_id as id from posiciones where id = ${Q.pos("Q-01-3-1")}
+    `)) as unknown as Array<{ id: number | null }>;
+    assert.ok(arriba.id, "la de arriba quedó tomada por el de abajo");
+    await exigirQueCuadre("después de meter en Q");
+  });
+
+  test("lo que quedó en un lugar excluido no se atrapa: el origen no se valida", async () => {
+    // El optimizado del test anterior está en Q-01-2-1. Se excluye la calle
+    // entera y se lo saca: tiene que poder salir.
+    const e = await excluir({ grupoId: Q.id, unidad: 1, nivel: null, posicionId: null });
+    const [b] = (await base.db.execute(sql`
+      select id from bultos where posicion_id = ${Q.pos("Q-01-2-1")} and estado = 'ubicado'
+    `)) as unknown as Array<{ id: number }>;
+    await base.db.transaction(async (tx) => {
+      // El origen se bloquea igual que en `sacar` y NO se le pide exigirUsable.
+      await bloquearPosicion(tx as Tx, Q.pos("Q-01-2-1"));
+      await aplicarMovimiento(tx as Tx, {
+        tipo: "sacar",
+        bulto: {
+          id: b.id,
+          codigo: "q",
+          packaging: "optimizado",
+          cantidad: 60,
+          estado: "ubicado",
+          posicionId: Q.pos("Q-01-2-1"),
+          posicionCodigo: "Q-01-2-1",
+          contenido: [{ modeloId: datos.laja.id, cantidad: 60, modeloNombre: "Laja" }],
+          lineaCodigo: "piedras",
+        },
+        contenidoDespues: [],
+        packagingDespues: "optimizado",
+        estadoDespues: "salido",
+        posicionDestino: null,
+        motivo: { id: datos.motivo.id, nombre: datos.motivo.nombre },
+        usuario: { id: datos.usuario.id, nombre: datos.usuario.nombre },
+      });
+    });
+    await levantar(e);
+    await exigirQueCuadre("después de sacar de una calle excluida");
   });
 });

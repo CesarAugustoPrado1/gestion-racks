@@ -7,7 +7,8 @@ import { confianza } from "@/lib/confiabilidad";
 import { ChipConfianza } from "@/components/confiabilidad";
 import { nombreDeNivel, nombreDeProfundidad } from "@/lib/posiciones";
 import { ETIQUETA_PACKAGING, numero } from "@/lib/formato";
-import { Titulo } from "@/components/ui";
+import { Aviso, Titulo } from "@/components/ui";
+import { avisoAjeno } from "@/lib/uso";
 import { puedeVer } from "@/lib/permisos";
 
 export const dynamic = "force-dynamic";
@@ -47,10 +48,29 @@ export default async function FichaDePosicion({
       </Link>
 
       <Titulo
-        detalle={`${grupo.penetrable ? "Calle" : "Módulo"} ${celda.unidad} · ${donde}`}
+        detalle={`${grupo.penetrable ? "Calle" : "Módulo"} ${celda.unidad} · ${donde}${
+          grupo.empresa ? ` · grupo de ${grupo.empresa}` : ""
+        }`}
       >
         {grupo.codigo}-{celda.codigo}
       </Titulo>
+
+      {celda.fueraDeUso && (
+        <div className="mb-3">
+          <Aviso tono="info">
+            Esta posición está {celda.fueraDeUso.startsWith("fuera") ? "" : "fuera de uso: "}
+            {celda.fueraDeUso}. No se ofrece para meter ni mover
+            {celda.bulto ? ", pero lo que tiene se puede sacar" : ""}.
+          </Aviso>
+        </div>
+      )}
+      {celda.bulto?.ajeno && (
+        <div className="mb-3">
+          <Aviso tono="advertencia">
+            {avisoAjeno(celda.bulto, { codigo: grupo.codigo, empresa: grupo.empresa })}
+          </Aviso>
+        </div>
+      )}
 
       <div className="tarjeta mb-4 p-5">
         {!celda.activa ? (
@@ -86,6 +106,14 @@ export default async function FichaDePosicion({
         {puedeVer(sesion.rol, "/control") && (
           <Link href={`/control/${celda.posicionId}`} className="boton-secundario">
             Chequear
+          </Link>
+        )}
+        {sesion.rol === "admin" && celda.activa && !celda.exclusion && (
+          <Link
+            href={`/admin/exclusiones?grupo=${grupo.id}&posicion=${celda.posicionId}`}
+            className="boton-secundario"
+          >
+            Dejar fuera de uso
           </Link>
         )}
         {celda.bulto && puedeVer(sesion.rol, "/mover") && (

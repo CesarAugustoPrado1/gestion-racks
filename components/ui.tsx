@@ -4,11 +4,17 @@ export function Aviso({
   tono = "error",
   children,
 }: {
-  tono?: "error" | "info" | "exito";
+  tono?: "error" | "info" | "exito" | "advertencia";
   children: ReactNode;
 }) {
   const estilos = {
     error: "bg-red-50 text-red-800 ring-red-200",
+    /**
+     * Para lo que se permite pero no debería pasar: un palet de una empresa en
+     * el rack de la otra. No es un error -no frena nada- y no es info neutra:
+     * es algo que alguien tiene que mirar.
+     */
+    advertencia: "bg-amber-50 text-amber-900 ring-amber-200",
     info: "bg-blue-50 text-blue-800 ring-blue-200",
     exito: "bg-emerald-50 text-emerald-800 ring-emerald-200",
   }[tono];

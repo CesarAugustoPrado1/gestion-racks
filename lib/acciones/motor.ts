@@ -13,6 +13,8 @@ import {
 } from "../db/schema";
 import { total, validarComposicion, type LineaContenido } from "../bultos";
 import { loQueTapa, nombreDeNivel, nombreDeProfundidad } from "../posiciones";
+import { porQueNoSeUsa, type MotivoExclusion } from "../uso";
+import { joinExclusion } from "../uso-sql";
 import { fallar } from "./comun";
 
 /**
@@ -118,6 +120,10 @@ export type PosicionVivo = {
    * está, la posición está ocupada aunque no tenga `ocupante`.
    */
   invasor: string | null;
+  /** Si el clark llega a este nivel en este grupo. */
+  alcanzable: boolean;
+  /** La exclusión vigente que la cubre, si hay. Ver `exclusiones`. */
+  exclusion: { motivo: MotivoExclusion; nota: string | null } | null;
   /** La de arriba en la misma calle y profundidad, si el rack tiene nivel. */
   arriba: {
     id: number;
@@ -160,6 +166,9 @@ export async function bloquearPosicion(
            g.id as grupo_id, g.accesibilidad, g.niveles,
            g.profundidad as profundidad_max,
            n.altura_max_cm as altura_nivel,
+           coalesce(n.alcanzable, true) as alcanzable,
+           ex.motivo as exclusion_motivo, ex.nota as exclusion_nota,
+           exarr.id as arriba_excluida,
            o.id as ocupante_id, o.codigo as ocupante_codigo,
            inv.codigo as invasor_codigo,
            arr.id as arriba_id,
@@ -181,6 +190,8 @@ export async function bloquearPosicion(
       left join niveles narr on narr.grupo_id = g.id and narr.nivel = arr.nivel
       left join bultos arrocu on arrocu.posicion_id = arr.id and arrocu.estado = 'ubicado'
       left join bultos arrinv on arrinv.id = arr.bloqueada_por_bulto_id
+      ${joinExclusion("p", "ex")}
+      ${joinExclusion("arr", "exarr")}
      where p.id = ${id}
      for update of p
   `)) as unknown as Array<{
@@ -205,6 +216,10 @@ export async function bloquearPosicion(
     arriba_ocupante: string | null;
     arriba_invasor: string | null;
     arriba_activa: boolean | null;
+    alcanzable: boolean;
+    exclusion_motivo: MotivoExclusion | null;
+    exclusion_nota: string | null;
+    arriba_excluida: number | null;
   }>;
 
   if (filas.length === 0) fallar("Esa posición no existe.");
@@ -229,10 +244,19 @@ export async function bloquearPosicion(
         : null,
     /** El bulto de abajo que se comió este hueco por alto. */
     invasor: p.invasor_codigo,
+    alcanzable: p.alcanzable,
+    exclusion: p.exclusion_motivo
+      ? { motivo: p.exclusion_motivo, nota: p.exclusion_nota }
+      : null,
     /**
      * La de arriba, si existe. `libre` incluye estar activa: una posición dada
      * de baja no presta su espacio, porque justamente puede estar de baja por
      * una viga o un caño que ocupa ese aire.
+     *
+     * Lo mismo una EXCLUIDA: no sabemos por qué está fuera de uso, y si es por
+     * un larguero doblado, meterle medio palet desde abajo es justo lo que no
+     * hay que hacer. Una a la que el clark NO LLEGA sí presta su aire: el
+     * problema ahí es la altura de la horquilla, no el hueco.
      */
     arriba:
       p.arriba_id != null
@@ -243,7 +267,8 @@ export async function bloquearPosicion(
             libre:
               p.arriba_activa === true &&
               p.arriba_ocupante == null &&
-              p.arriba_invasor == null,
+              p.arriba_invasor == null &&
+              p.arriba_excluida == null,
             ocupante: p.arriba_ocupante ?? p.arriba_invasor,
           }
         : null,
@@ -333,6 +358,27 @@ export function exigirLibre(pos: PosicionVivo) {
 }
 
 /**
+ * Que el lugar se use: que el clark llegue y que no esté en la lista de
+ * exclusión.
+ *
+ * Solo para el DESTINO de meter y mover. No para el origen -lo que quedó en un
+ * lugar excluido se tiene que poder sacar, o el sistema atrapa un palet que en
+ * la planta se baja igual- y no para control, que registra lo que encuentra: si
+ * hay un palet en una calle en reparación, el ajuste tiene que poder decirlo.
+ */
+export function exigirUsable(pos: PosicionVivo) {
+  const motivo = porQueNoSeUsa(pos);
+  if (!motivo) return;
+  if (pos.exclusion) {
+    fallar(`${pos.codigo} está ${motivo}. Elegí otra posición.`);
+  }
+  fallar(
+    `${pos.codigo} está en el nivel ${nombreDeNivel(pos.nivel, pos.niveles)}, ` +
+      `y en este grupo el clark no llega a ese nivel. Elegí otra posición.`,
+  );
+}
+
+/**
  * Que el bulto entre en el hueco.
  *
  * Solo se valida lo normalizado: un palet o un optimizado tienen una altura
@@ -414,7 +460,7 @@ export async function exigirAltura(
         `así que sobresale hacia ${pos.arriba.codigo}` +
         (pos.arriba.ocupante
           ? `, que tiene el bulto ${pos.arriba.ocupante}. Van a chocar: primero hay que bajar ese.`
-          : `, que está dada de baja. Elegí otra posición.`),
+          : `, que está dada de baja o fuera de uso. Elegí otra posición.`),
     );
   }
 
