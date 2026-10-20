@@ -182,3 +182,46 @@ export function BotonAccion({
     </button>
   );
 }
+
+/**
+ * De qué empresa es: botones y no un select, porque son dos y se eligen de un
+ * toque. Sin elegir, el formulario no guarda: "sin empresa" es un dato que falta,
+ * no una opción.
+ */
+export function SelectorEmpresa({
+  empresas,
+  valor,
+  cambiar,
+  ayuda,
+}: {
+  empresas: Array<{ id: number; nombre: string; activa: boolean }>;
+  valor: number | null;
+  cambiar: (id: number) => void;
+  ayuda?: string;
+}) {
+  // Una empresa dada de baja solo aparece si es la que ya tenía: no se ofrece
+  // para lo nuevo, pero tampoco se pierde al editar.
+  const visibles = empresas.filter((e) => e.activa || e.id === valor);
+  return (
+    <div>
+      <span className="etiqueta">Empresa</span>
+      <div className="grid grid-cols-2 gap-2">
+        {visibles.map((e) => (
+          <button
+            key={e.id}
+            type="button"
+            onClick={() => cambiar(e.id)}
+            className={`min-h-12 rounded-xl text-sm font-semibold ${
+              valor === e.id
+                ? "bg-slate-900 text-white"
+                : "bg-white text-slate-700 ring-1 ring-slate-300"
+            }`}
+          >
+            {e.nombre}
+          </button>
+        ))}
+      </div>
+      {ayuda && <p className="mt-1 text-xs text-slate-500">{ayuda}</p>}
+    </div>
+  );
+}

@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { guardarModelo, suspenderModelo } from "@/lib/acciones/admin";
-import { BotonAccion, Campo, Formulario, Interruptor } from "@/components/admin";
+import {
+  BotonAccion,
+  Campo,
+  Formulario,
+  Interruptor,
+  SelectorEmpresa,
+} from "@/components/admin";
 import { numero } from "@/lib/formato";
 
 type Modelo = {
@@ -11,6 +17,8 @@ type Modelo = {
   activo: boolean;
   lineaId: number;
   lineaNombre: string;
+  empresaId: number | null;
+  empresaNombre: string | null;
   unidadPlural: string;
   palet: number | null;
   optimizado: number | null;
@@ -21,6 +29,7 @@ type Modelo = {
 type Edicion = {
   id?: number;
   lineaId: number;
+  empresaId: number | null;
   nombre: string;
   activo: boolean;
   palet: string;
@@ -32,9 +41,11 @@ type Edicion = {
 export function Modelos({
   modelos,
   lineas,
+  empresas,
 }: {
   modelos: Modelo[];
   lineas: Array<{ id: number; nombre: string }>;
+  empresas: Array<{ id: number; nombre: string; activa: boolean }>;
 }) {
   const [editando, setEditando] = useState<Edicion | null>(null);
 
@@ -48,11 +59,14 @@ export function Modelos({
       {editando && (
         <Formulario
           titulo={editando.id ? "Editar modelo" : "Modelo nuevo"}
-          puedeGuardar={editando.nombre.trim().length > 0}
+          puedeGuardar={
+            editando.nombre.trim().length > 0 && editando.empresaId != null
+          }
           alGuardar={() =>
             guardarModelo({
               id: editando.id,
               lineaId: editando.lineaId,
+              empresaId: editando.empresaId ?? 0,
               nombre: editando.nombre,
               activo: editando.activo,
               normas: {
@@ -86,6 +100,13 @@ export function Modelos({
               ))}
             </select>
           </Campo>
+
+          <SelectorEmpresa
+            empresas={empresas}
+            valor={editando.empresaId}
+            cambiar={(id) => setEditando({ ...editando, empresaId: id })}
+            ayuda="De quién es el producto. Cada palet de este modelo hereda la empresa."
+          />
 
           <Campo etiqueta="Nombre">
             <input
@@ -189,6 +210,7 @@ export function Modelos({
           onClick={() =>
             setEditando({
               lineaId: lineas[0].id,
+              empresaId: empresas.length === 1 ? empresas[0].id : null,
               nombre: "",
               activo: true,
               palet: "",
@@ -212,6 +234,15 @@ export function Modelos({
                   <div className="min-w-0 flex-1">
                     <p className="text-base font-bold text-slate-900">
                       {m.nombre}
+                      {m.empresaNombre ? (
+                        <span className="ml-2 chip bg-slate-100 text-slate-600">
+                          {m.empresaNombre}
+                        </span>
+                      ) : (
+                        <span className="ml-2 chip bg-amber-100 text-amber-900">
+                          sin empresa
+                        </span>
+                      )}
                       {!m.activo && (
                         <span className="ml-2 chip bg-slate-100 text-slate-500">
                           suspendido
@@ -255,6 +286,7 @@ export function Modelos({
                         setEditando({
                           id: m.id,
                           lineaId: m.lineaId,
+                          empresaId: m.empresaId,
                           nombre: m.nombre,
                           activo: m.activo,
                           palet: m.palet != null ? String(m.palet) : "",

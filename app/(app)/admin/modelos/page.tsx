@@ -2,6 +2,7 @@ import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { requerirRol } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { empresas as leerEmpresas } from "@/lib/consultas";
 import { Titulo } from "@/components/ui";
 import { Modelos } from "./lista";
 
@@ -11,9 +12,10 @@ export const dynamic = "force-dynamic";
 export default async function PantallaModelos() {
   await requerirRol("admin");
 
-  const [modelos, lineas] = await Promise.all([
+  const [modelos, lineas, empresas] = await Promise.all([
     db.execute(sql`
       select m.id, m.nombre, m.activo, m.linea_id, l.nombre as linea_nombre,
+             m.empresa_id, e.nombre as empresa_nombre,
              l.unidad_plural,
              max(case when n.packaging = 'palet' then n.cantidad end)::int as palet,
              max(case when n.packaging = 'optimizado' then n.cantidad end)::int as optimizado,
@@ -21,8 +23,9 @@ export default async function PantallaModelos() {
              max(case when n.packaging = 'optimizado' then n.altura_cm end)::int as alto_optimizado
         from modelos m
         join lineas l on l.id = m.linea_id
+        left join empresas e on e.id = m.empresa_id
         left join normas n on n.modelo_id = m.id
-       group by m.id, l.id
+       group by m.id, l.id, e.id
        order by l.orden, m.orden
     `) as unknown as Promise<
       Array<{
@@ -31,6 +34,8 @@ export default async function PantallaModelos() {
         activo: boolean;
         linea_id: number;
         linea_nombre: string;
+        empresa_id: number | null;
+        empresa_nombre: string | null;
         unidad_plural: string;
         palet: number | null;
         optimizado: number | null;
@@ -41,6 +46,7 @@ export default async function PantallaModelos() {
     db.execute(sql`
       select id, nombre from lineas where activa order by orden
     `) as unknown as Promise<Array<{ id: number; nombre: string }>>,
+    leerEmpresas(),
   ]);
 
   return (
@@ -67,6 +73,8 @@ export default async function PantallaModelos() {
             activo: m.activo,
             lineaId: m.linea_id,
             lineaNombre: m.linea_nombre,
+            empresaId: m.empresa_id,
+            empresaNombre: m.empresa_nombre,
             unidadPlural: m.unidad_plural,
             palet: m.palet,
             optimizado: m.optimizado,
@@ -74,6 +82,7 @@ export default async function PantallaModelos() {
             altoOptimizado: m.alto_optimizado,
           }))}
           lineas={lineas}
+          empresas={empresas}
         />
       )}
     </>

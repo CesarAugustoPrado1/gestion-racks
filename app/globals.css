@@ -126,4 +126,16 @@
   .cifra {
     @apply font-bold tabular-nums;
   }
+
+  /* Fuera de uso en el tablero: el clark no llega, o está en la lista de
+     exclusión. Rayado y no un color, porque el color ya lo usan las líneas y
+     la confiabilidad, y una raya se distingue igual con cualquier visión. */
+  .fuera-de-uso {
+    background-color: var(--color-slate-100);
+    background-image: repeating-linear-gradient(
+      135deg,
+      transparent 0 4px,
+      var(--color-slate-300) 4px 5px
+    );
+  }
 }

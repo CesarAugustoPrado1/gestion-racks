@@ -11,7 +11,8 @@ import { semividaDias } from "@/lib/configuracion";
 import { confianza } from "@/lib/confiabilidad";
 import { ChipConfianza } from "@/components/confiabilidad";
 import { ETIQUETA_PACKAGING, numero } from "@/lib/formato";
-import { Titulo } from "@/components/ui";
+import { Aviso, Titulo } from "@/components/ui";
+import { avisoAjeno } from "@/lib/uso";
 import { AccionesBulto } from "./acciones";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +51,12 @@ export default async function PantallaBulto({
         {bulto.ubicacion ?? "Sin ubicar"}
       </Titulo>
 
+      {bulto.ajeno && bulto.grupo && (
+        <div className="mb-3">
+          <Aviso tono="advertencia">{avisoAjeno(bulto, bulto.grupo)}</Aviso>
+        </div>
+      )}
+
       <div className="tarjeta mb-4 p-5">
         <ul className="divide-y divide-slate-100">
           {contenido.map((c) => (
@@ -79,6 +86,8 @@ export default async function PantallaBulto({
           cantidad: bulto.cantidad,
           ubicacion: bulto.ubicacion,
           unidadPlural: bulto.unidadPlural,
+          empresas: bulto.empresas,
+          empresasIds: bulto.empresasIds,
         }}
         contenido={contenido}
         motivos={motivos}

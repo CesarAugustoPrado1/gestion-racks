@@ -7,6 +7,7 @@ import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
 import { ETIQUETA_PACKAGING, numero } from "@/lib/formato";
 import { describirPosicion } from "@/lib/posiciones";
+import { avisoAjeno, esAjeno } from "@/lib/uso";
 import type { PosicionLibre } from "@/lib/consultas";
 import type { Packaging } from "@/lib/db/schema";
 
@@ -17,6 +18,8 @@ type Bulto = {
   cantidad: number;
   ubicacion: string | null;
   unidadPlural: string;
+  empresas: string | null;
+  empresasIds: number[];
 };
 
 export function AccionesBulto({
@@ -247,6 +250,8 @@ function Mover({
   const [alLimbo, setAlLimbo] = useState(false);
 
   const listo = alLimbo || posicionId != null;
+  const destino = !alLimbo ? posiciones.find((p) => p.id === posicionId) : undefined;
+  const ajeno = destino != null && esAjeno(destino.empresaId, bulto.empresasIds);
 
   return (
     <div className="tarjeta space-y-4 p-5">
@@ -268,9 +273,17 @@ function Mover({
         {posiciones.map((p) => (
           <option key={p.id} value={p.id}>
             {describirPosicion(p)}
+                {p.empresa ? ` · ${p.empresa}` : ""}
           </option>
         ))}
       </select>
+
+      {ajeno && destino && (
+        <Aviso tono="advertencia">
+          {avisoAjeno(bulto, { codigo: destino.rack, empresa: destino.empresa }, "Este palet")}{" "}
+          Se puede mover igual, pero va a quedar marcado en el tablero.
+        </Aviso>
+      )}
 
       {bulto.ubicacion && (
         <label className="flex items-start gap-2.5 text-sm text-slate-700">

@@ -2,6 +2,8 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "./db";
 import type { Packaging } from "./db/schema";
+import { alcanzable, empresasDelBulto, joinExclusion } from "./uso-sql";
+import { esAjeno, porQueNoSeUsa, type MotivoExclusion } from "./uso";
 
 /**
  * TODAS las lecturas de pantalla viven acá, como en Control-Secaderos.
@@ -11,6 +13,9 @@ import type { Packaging } from "./db/schema";
  * olvida el filtro, el stock incluye producto que ya no existe.
  */
 const EN_STOCK = sql`b.estado in ('ubicado', 'sin_ubicar')`;
+
+/** De qué empresas es lo que lleva el bulto `b`. Ver lib/uso-sql.ts. */
+const EMPRESAS_B = empresasDelBulto("b");
 
 /**
  * Los timestamps de `db.execute` con SQL crudo vuelven como TEXTO, no como
@@ -23,6 +28,15 @@ const EN_STOCK = sql`b.estado in ('ubicado', 'sin_ubicar')`;
  */
 const comoFecha = (v: Date | string | null): Date | null =>
   v == null ? null : v instanceof Date ? v : new Date(v);
+
+export type EmpresaOpcion = { id: number; nombre: string; activa: boolean };
+
+/** Todas las empresas, activas o no: los selectores deciden cuáles ofrecer. */
+export async function empresas(): Promise<EmpresaOpcion[]> {
+  return (await db.execute(sql`
+    select id, nombre, activa from empresas order by orden, nombre
+  `)) as unknown as EmpresaOpcion[];
+}
 
 export type TotalPorPackaging = Partial<
   Record<Packaging, { unidades: number; bultos: number }>
@@ -150,11 +164,15 @@ export type BultoDeModelo = {
   chequeadoEn: Date | null;
   chequeosOk: number;
   chequeosTotal: number;
+  /** El grupo donde está es de otra empresa. */
+  ajeno: boolean;
+  grupoEmpresa: string | null;
 };
 
 export type DetalleModelo = {
   id: number;
   nombre: string;
+  empresa: string | null;
   lineaNombre: string;
   unidadSingular: string;
   unidadPlural: string;
@@ -168,8 +186,9 @@ export async function detalleDeModelo(
   const [cabecera, normas, bultos] = await Promise.all([
     db.execute(sql`
       select m.id, m.nombre, l.nombre as linea_nombre,
-             l.unidad_singular, l.unidad_plural
+             l.unidad_singular, l.unidad_plural, e.nombre as empresa
       from modelos m join lineas l on l.id = m.linea_id
+      left join empresas e on e.id = m.empresa_id
       where m.id = ${modeloId}
       limit 1
     `) as unknown as Promise<
@@ -179,6 +198,7 @@ export async function detalleDeModelo(
         linea_nombre: string;
         unidad_singular: string;
         unidad_plural: string;
+        empresa: string | null;
       }>
     >,
     db.execute(sql`
@@ -193,6 +213,8 @@ export async function detalleDeModelo(
              case when p.id is null then null
                   else g.codigo || '-' || p.codigo end as ubicacion,
              g.accesibilidad, p.profundidad, g.profundidad as profundidad_max,
+             g.empresa_id as grupo_empresa_id, ge.nombre as grupo_empresa,
+             ${EMPRESAS_B.ids} as empresas_ids,
              (select string_agg(m2.nombre, ', ' order by m2.nombre)
                 from bulto_contenido x
                 join modelos m2 on m2.id = x.modelo_id
@@ -202,6 +224,7 @@ export async function detalleDeModelo(
       join bultos b on b.id = c.bulto_id
       left join posiciones p on p.id = b.posicion_id
       left join grupos g on g.id = p.grupo_id
+      left join empresas ge on ge.id = g.empresa_id
       where c.modelo_id = ${modeloId} and ${EN_STOCK}
       order by g.orden nulls last, p.orden nulls last, b.codigo
     `) as unknown as Promise<
@@ -220,6 +243,9 @@ export async function detalleDeModelo(
         profundidad: number | null;
         profundidad_max: number | null;
         otros_modelos: string | null;
+        grupo_empresa_id: number | null;
+        grupo_empresa: string | null;
+        empresas_ids: number[] | null;
       }>
     >,
   ]);
@@ -230,6 +256,7 @@ export async function detalleDeModelo(
   return {
     id: m.id,
     nombre: m.nombre,
+    empresa: m.empresa,
     lineaNombre: m.linea_nombre,
     unidadSingular: m.unidad_singular,
     unidadPlural: m.unidad_plural,
@@ -249,6 +276,8 @@ export async function detalleDeModelo(
       chequeadoEn: comoFecha(b.chequeado_en),
       chequeosOk: b.chequeos_ok,
       chequeosTotal: b.chequeos_total,
+      ajeno: esAjeno(b.grupo_empresa_id, b.empresas_ids ?? []),
+      grupoEmpresa: b.grupo_empresa,
     })),
   };
 }
@@ -261,6 +290,9 @@ export type PosicionLibre = {
   id: number;
   codigo: string;
   rack: string;
+  /** De qué empresa es el grupo, para avisar si el bulto es de la otra. */
+  empresaId: number | null;
+  empresa: string | null;
   penetrable: boolean;
   nivel: number;
   niveles: number;
@@ -273,27 +305,35 @@ export type PosicionLibre = {
  *
  * Solo se ofrecen las que tienen lugar: una lista que incluye posiciones llenas
  * obliga al operario a acordarse de cuáles no sirven, y ese es trabajo que la
- * pantalla puede hacer sola.
+ * pantalla puede hacer sola. Por lo mismo quedan afuera las que no se usan: las
+ * de un nivel al que el clark no llega y las de la lista de exclusión.
  */
 export async function posicionesLibres(): Promise<PosicionLibre[]> {
   const filas = (await db.execute(sql`
     select p.id,
            g.codigo || '-' || p.codigo as codigo,
            g.codigo as rack,
+           g.empresa_id, e.nombre as empresa,
            g.accesibilidad, g.niveles, g.profundidad as profundidad_max,
            p.nivel, p.profundidad
       from posiciones p
       join grupos g on g.id = p.grupo_id
+      left join empresas e on e.id = g.empresa_id
       left join bultos b on b.posicion_id = p.id and b.estado = 'ubicado'
+      ${joinExclusion("p", "ex")}
      where p.activa and g.activo and b.id is null
        -- Y tampoco es libre la que un bulto alto de abajo se comió por
        -- sobresalir: no hay nada parado ahí, pero el hueco está tomado.
        and p.bloqueada_por_bulto_id is null
+       and ${alcanzable("p")}
+       and ex.id is null
      order by g.orden, p.orden
   `)) as unknown as Array<{
     id: number;
     codigo: string;
     rack: string;
+    empresa_id: number | null;
+    empresa: string | null;
     accesibilidad: string;
     niveles: number;
     profundidad_max: number | null;
@@ -305,6 +345,8 @@ export async function posicionesLibres(): Promise<PosicionLibre[]> {
     id: f.id,
     codigo: f.codigo,
     rack: f.rack,
+    empresaId: f.empresa_id,
+    empresa: f.empresa,
     penetrable: f.accesibilidad === "penetrable",
     nivel: f.nivel,
     niveles: f.niveles,
@@ -318,6 +360,8 @@ export type ModeloParaCargar = {
   nombre: string;
   lineaId: number;
   lineaNombre: string;
+  empresaId: number | null;
+  empresa: string | null;
   unidadPlural: string;
   normas: Partial<Record<Packaging, number>>;
 };
@@ -327,8 +371,9 @@ export async function modelosParaCargar(): Promise<ModeloParaCargar[]> {
   const [modelos, normas] = await Promise.all([
     db.execute(sql`
       select m.id, m.nombre, l.id as linea_id, l.nombre as linea_nombre,
-             l.unidad_plural
+             l.unidad_plural, m.empresa_id, e.nombre as empresa
         from modelos m join lineas l on l.id = m.linea_id
+        left join empresas e on e.id = m.empresa_id
        where m.activo and l.activa
        order by l.orden, m.orden
     `) as unknown as Promise<
@@ -338,6 +383,8 @@ export async function modelosParaCargar(): Promise<ModeloParaCargar[]> {
         linea_id: number;
         linea_nombre: string;
         unidad_plural: string;
+        empresa_id: number | null;
+        empresa: string | null;
       }>
     >,
     db.execute(sql`
@@ -359,6 +406,8 @@ export async function modelosParaCargar(): Promise<ModeloParaCargar[]> {
     nombre: m.nombre,
     lineaId: m.linea_id,
     lineaNombre: m.linea_nombre,
+    empresaId: m.empresa_id,
+    empresa: m.empresa,
     unidadPlural: m.unidad_plural,
     normas: porModelo.get(m.id) ?? {},
   }));
@@ -375,6 +424,13 @@ export type BultoEnLista = {
   chequeadoEn: Date | null;
   chequeosOk: number;
   chequeosTotal: number;
+  /** De quién es lo que lleva: "Rustikas", o "Rustikas y Pirka" si es mezclado. */
+  empresas: string | null;
+  empresasIds: number[];
+  /** El grupo donde está, con su empresa. `null` si está sin ubicar. */
+  grupo: { codigo: string; empresaId: number | null; empresa: string | null } | null;
+  /** Si está en un rack de otra empresa. Ver `esAjeno`. */
+  ajeno: boolean;
 };
 
 const SELECT_BULTO = sql`
@@ -388,10 +444,15 @@ const SELECT_BULTO = sql`
          (select l.unidad_plural
             from bulto_contenido c join modelos m on m.id = c.modelo_id
             join lineas l on l.id = m.linea_id
-           where c.bulto_id = b.id limit 1) as unidad_plural
+           where c.bulto_id = b.id limit 1) as unidad_plural,
+         ${EMPRESAS_B.ids} as empresas_ids,
+         ${EMPRESAS_B.nombres} as empresas,
+         g.codigo as grupo_codigo, g.empresa_id as grupo_empresa_id,
+         ge.nombre as grupo_empresa
     from bultos b
     left join posiciones p on p.id = b.posicion_id
     left join grupos g on g.id = p.grupo_id
+    left join empresas ge on ge.id = g.empresa_id
 `;
 
 type FilaBulto = {
@@ -405,6 +466,11 @@ type FilaBulto = {
   chequeado_en: Date | null;
   chequeos_ok: number;
   chequeos_total: number;
+  empresas_ids: number[] | null;
+  empresas: string | null;
+  grupo_codigo: string | null;
+  grupo_empresa_id: number | null;
+  grupo_empresa: string | null;
 };
 
 const aBulto = (f: FilaBulto): BultoEnLista => ({
@@ -418,6 +484,12 @@ const aBulto = (f: FilaBulto): BultoEnLista => ({
   chequeadoEn: comoFecha(f.chequeado_en),
   chequeosOk: f.chequeos_ok,
   chequeosTotal: f.chequeos_total,
+  empresas: f.empresas,
+  empresasIds: f.empresas_ids ?? [],
+  grupo: f.grupo_codigo
+    ? { codigo: f.grupo_codigo, empresaId: f.grupo_empresa_id, empresa: f.grupo_empresa }
+    : null,
+  ajeno: f.grupo_codigo != null && esAjeno(f.grupo_empresa_id, f.empresas_ids ?? []),
 });
 
 /**
@@ -572,6 +644,8 @@ export type PosicionParaChequear = {
   contenido: string | null;
   /** Código del bulto de abajo que se comió este hueco por alto, si lo hay. */
   invasor: string | null;
+  /** Por qué no se usa, si no se usa. Ver lib/uso.ts. */
+  fueraDeUso: string | null;
   chequeadoEn: Date | null;
   chequeosOk: number;
   chequeosTotal: number;
@@ -580,12 +654,23 @@ export type PosicionParaChequear = {
 /**
  * Todas las posiciones activas con lo que el sistema dice que tienen.
  *
+ * MENOS las vacías que no se usan -fuera de alcance o en la lista de
+ * exclusión-: confirmar que un hueco al que nadie llega sigue vacío es una
+ * vuelta que no informa nada, y sin este filtro la recorrida se llena de ellas.
+ * Las que tienen algo adentro sí quedan: ese producto es stock y se verifica.
+ *
+ * `incluirSinUso` las trae igual, para la ficha de chequeo de UNA posición: si
+ * control encuentra un palet en una calle en reparación, tiene que poder abrirla
+ * y registrarlo.
+ *
  * El orden lo decide la pantalla y no el SQL, porque la urgencia depende de la
  * semivida configurada: `(1 - confianza) × cantidad`. Primero lo que hace más
  * que no se mira y más producto tiene, que es lo que convierte el índice en el
  * plan del día en vez de un número de adorno.
  */
-export async function posicionesParaChequear(): Promise<PosicionParaChequear[]> {
+export async function posicionesParaChequear(
+  { incluirSinUso = false }: { incluirSinUso?: boolean } = {},
+): Promise<PosicionParaChequear[]> {
   const filas = (await db.execute(sql`
     select p.id,
            g.codigo || '-' || p.codigo as codigo,
@@ -610,12 +695,20 @@ export async function posicionesParaChequear(): Promise<PosicionParaChequear[]> 
               join lineas l on l.id = m.linea_id
              where b3.posicion_id = p.id and b3.estado = 'ubicado' limit 1
            ) as unidad_plural,
-           (select bi.codigo from bultos bi where bi.id = p.bloqueada_por_bulto_id) as invasor
+           (select bi.codigo from bultos bi where bi.id = p.bloqueada_por_bulto_id) as invasor,
+           ${alcanzable("p")} as alcanzable,
+           ex.motivo as exclusion_motivo, ex.nota as exclusion_nota
       from posiciones p
       join grupos g on g.id = p.grupo_id
       left join bultos b on b.posicion_id = p.id and b.estado = 'ubicado'
+      ${joinExclusion("p", "ex")}
      where p.activa and g.activo
-     group by p.id, g.id, g.codigo, g.accesibilidad, g.niveles, g.profundidad
+     group by p.id, g.id, g.codigo, g.accesibilidad, g.niveles, g.profundidad,
+              ex.motivo, ex.nota
+    having ${incluirSinUso ? sql`true` : sql`false`}
+        or count(b.id) > 0
+        or p.bloqueada_por_bulto_id is not null
+        or (${alcanzable("p")} and ex.motivo is null)
   `)) as unknown as Array<{
     id: number;
     codigo: string;
@@ -633,6 +726,9 @@ export async function posicionesParaChequear(): Promise<PosicionParaChequear[]> 
     contenido: string | null;
     unidad_plural: string | null;
     invasor: string | null;
+    alcanzable: boolean;
+    exclusion_motivo: MotivoExclusion | null;
+    exclusion_nota: string | null;
   }>;
 
   return filas.map((f) => ({
@@ -650,6 +746,12 @@ export async function posicionesParaChequear(): Promise<PosicionParaChequear[]> 
     contenido: f.contenido,
     /** Si la tapa un bulto alto de abajo, su código. Ver §5.6 de DISENO.md. */
     invasor: f.invasor,
+    fueraDeUso: porQueNoSeUsa({
+      alcanzable: f.alcanzable,
+      exclusion: f.exclusion_motivo
+        ? { motivo: f.exclusion_motivo, nota: f.exclusion_nota }
+        : null,
+    }),
     chequeadoEn: comoFecha(f.chequeado_en),
     chequeosOk: f.chequeos_ok,
     chequeosTotal: f.chequeos_total,
@@ -670,7 +772,7 @@ export async function posicionConBultos(id: number): Promise<{
   posicion: PosicionParaChequear;
   bultos: BultoEnPosicion[];
 } | null> {
-  const todas = await posicionesParaChequear();
+  const todas = await posicionesParaChequear({ incluirSinUso: true });
   const posicion = todas.find((p) => p.id === id);
   if (!posicion) return null;
 
@@ -742,11 +844,20 @@ export type CeldaDelMapa = {
   nivel: number;
   profundidad: number | null;
   activa: boolean;
+  /** Si el clark llega a este nivel. */
+  alcanzable: boolean;
+  /** La exclusión vigente que la cubre, si hay. */
+  exclusion: { motivo: MotivoExclusion; nota: string | null } | null;
+  /** Por qué no se usa, ya en palabras. `null` = se usa. */
+  fueraDeUso: string | null;
   bulto: {
     id: number;
     codigo: string;
     packaging: Packaging;
     cantidad: number;
+    /** De quién es lo que lleva, y si es de otra empresa que la del grupo. */
+    empresas: string | null;
+    ajeno: boolean;
     lineaNombre: string;
     lineaOrden: number;
     unidadPlural: string;
@@ -767,6 +878,8 @@ export type GrupoDelMapa = {
   id: number;
   codigo: string;
   nombre: string | null;
+  empresaId: number | null;
+  empresa: string | null;
   penetrable: boolean;
   ancho: number | null;
   niveles: number;
@@ -787,9 +900,13 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
   const filas = (await db.execute(sql`
     select g.id as grupo_id, g.codigo as grupo_codigo, g.nombre as grupo_nombre,
            g.accesibilidad, g.ancho, g.niveles, g.profundidad as profundidad_max,
-           g.unidades,
+           g.unidades, g.empresa_id, ge.nombre as grupo_empresa,
            p.id as posicion_id, p.codigo, p.unidad, p.columna, p.nivel,
            p.profundidad, p.activa,
+           ${alcanzable("p")} as alcanzable,
+           ex.motivo as exclusion_motivo, ex.nota as exclusion_nota,
+           ${EMPRESAS_B.ids} as empresas_ids,
+           ${EMPRESAS_B.nombres} as empresas,
            b.id as bulto_id, b.codigo as bulto_codigo, b.packaging, b.cantidad,
            b.chequeado_en, b.chequeos_ok, b.chequeos_total,
            l.nombre as linea_nombre, l.orden as linea_orden, l.unidad_plural,
@@ -807,6 +924,8 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
          order by m.orden limit 1
       ) primero on true
       left join lineas l on l.id = primero.linea_id
+      left join empresas ge on ge.id = g.empresa_id
+      ${joinExclusion("p", "ex")}
      where g.activo
      order by g.orden, p.nivel desc, p.unidad, p.profundidad nulls last, p.columna
   `)) as unknown as Array<{
@@ -818,6 +937,13 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
     niveles: number;
     profundidad_max: number | null;
     unidades: number;
+    empresa_id: number | null;
+    grupo_empresa: string | null;
+    alcanzable: boolean;
+    exclusion_motivo: MotivoExclusion | null;
+    exclusion_nota: string | null;
+    empresas_ids: number[] | null;
+    empresas: string | null;
     posicion_id: number;
     codigo: string;
     unidad: number;
@@ -846,6 +972,8 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
         id: f.grupo_id,
         codigo: f.grupo_codigo,
         nombre: f.grupo_nombre,
+        empresaId: f.empresa_id,
+        empresa: f.grupo_empresa,
         penetrable: f.accesibilidad === "penetrable",
         ancho: f.ancho,
         niveles: f.niveles,
@@ -854,6 +982,9 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
         celdas: [],
       });
     }
+    const exclusion = f.exclusion_motivo
+      ? { motivo: f.exclusion_motivo, nota: f.exclusion_nota }
+      : null;
     grupos.get(f.grupo_id)!.celdas.push({
       posicionId: f.posicion_id,
       codigo: f.codigo,
@@ -862,6 +993,9 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
       nivel: f.nivel,
       profundidad: f.profundidad,
       activa: f.activa,
+      alcanzable: f.alcanzable,
+      exclusion,
+      fueraDeUso: porQueNoSeUsa({ alcanzable: f.alcanzable, exclusion }),
       bulto:
         f.bulto_id != null
           ? {
@@ -869,6 +1003,8 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
               codigo: f.bulto_codigo!,
               packaging: f.packaging!,
               cantidad: f.cantidad!,
+              empresas: f.empresas,
+              ajeno: esAjeno(f.empresa_id, f.empresas_ids ?? []),
               lineaNombre: f.linea_nombre ?? "Sin línea",
               lineaOrden: f.linea_orden ?? 99,
               unidadPlural: f.unidad_plural ?? "unidades",

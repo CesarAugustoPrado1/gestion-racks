@@ -80,7 +80,9 @@ export default async function PantallaModelo({
         ← Stock
       </Link>
 
-      <Titulo detalle={`${modelo.lineaNombre} · se cuenta en ${modelo.unidadPlural}`}>
+      <Titulo
+        detalle={`${modelo.empresa ? `${modelo.empresa} · ` : ""}${modelo.lineaNombre} · se cuenta en ${modelo.unidadPlural}`}
+      >
         {modelo.nombre}
       </Titulo>
 
@@ -254,6 +256,14 @@ function FilaBulto({
               title={`La norma es ${norma} por bulto`}
             >
               fuera de norma
+            </span>
+          )}
+          {bulto.ajeno && (
+            <span
+              className="chip bg-amber-100 text-amber-900"
+              title="Está guardado en un grupo de racks de otra empresa"
+            >
+              en rack de {bulto.grupoEmpresa}
             </span>
           )}
         </div>

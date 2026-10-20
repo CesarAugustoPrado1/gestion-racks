@@ -6,7 +6,7 @@ import { confianza, indice } from "@/lib/confiabilidad";
 import { Indice } from "@/components/confiabilidad";
 import { MapaDeGrupo, type Vista } from "@/components/mapa";
 import { abreviaturas } from "@/lib/formato";
-import { Titulo } from "@/components/ui";
+import { Aviso, Titulo } from "@/components/ui";
 
 export const metadata = { title: "Racks · Racks" };
 export const dynamic = "force-dynamic";
@@ -29,7 +29,19 @@ export default async function PantallaRacks({
 
   const celdas = grupos.flatMap((g) => g.celdas);
   const ocupadas = celdas.filter((c) => c.bulto);
-  const activas = celdas.filter((c) => c.activa);
+  /**
+   * La ocupación es sobre los lugares que SE PUEDEN usar. Un nivel al que el
+   * clark no llega no es lugar libre: contarlo haría que el galpón parezca con
+   * espacio cuando el autoelevador no tiene dónde dejar el palet. Lo ocupado sí
+   * cuenta siempre, esté donde esté.
+   */
+  const activas = celdas.filter((c) => c.activa && (c.bulto || !c.fueraDeUso));
+  const fueraDeUso = celdas.filter((c) => c.activa && !c.bulto && c.fueraDeUso).length;
+  const ajenas = grupos.flatMap((g) =>
+    g.celdas
+      .filter((c) => c.bulto?.ajeno)
+      .map((c) => ({ grupo: g, celda: c })),
+  );
   const resumen = indice(
     ocupadas.map((c) => confianza(c.bulto!, semivida)),
   );
@@ -71,10 +83,46 @@ export default async function PantallaRacks({
           {Math.round((ocupadas.length / Math.max(activas.length, 1)) * 100)}% de
           ocupación
         </p>
+        {fueraDeUso > 0 && (
+          <p className="mt-1 text-xs text-slate-500">
+            Sin contar {fueraDeUso} posicion{fueraDeUso === 1 ? "" : "es"} fuera de
+            uso: el clark no llega, o están en la lista de exclusión.
+          </p>
+        )}
         <div className="mt-2 border-t border-slate-100 pt-2">
           <Indice {...resumen} />
         </div>
       </div>
+
+      {/**
+       * El recordatorio: palets de una empresa en racks de la otra. Va arriba
+       * y con cada uno nombrado, porque es una lista corta de cosas para ir a
+       * acomodar, no un porcentaje.
+       */}
+      {ajenas.length > 0 && (
+        <div className="mb-4">
+          <Aviso tono="advertencia">
+            {ajenas.length === 1
+              ? "Hay 1 bulto en un rack de otra empresa:"
+              : `Hay ${ajenas.length} bultos en racks de otra empresa:`}
+            <span className="mt-1 block space-y-0.5">
+              {ajenas.slice(0, 12).map(({ grupo, celda }) => (
+                <Link
+                  key={celda.posicionId}
+                  href={`/racks/${celda.posicionId}`}
+                  className="block font-normal underline"
+                >
+                  {grupo.codigo}-{celda.codigo} · {celda.bulto!.contenido} · de{" "}
+                  {celda.bulto!.empresas} en un rack de {grupo.empresa}
+                </Link>
+              ))}
+              {ajenas.length > 12 && (
+                <span className="block font-normal">y {ajenas.length - 12} más.</span>
+              )}
+            </span>
+          </Aviso>
+        </div>
+      )}
 
       {/* Las dos vistas viven en la URL: se puede mandar un link a la vista de
           confiabilidad sin explicar cómo llegar. */}
@@ -185,6 +233,18 @@ function Leyenda({
       <span className="flex items-center gap-1.5">
         <span className="h-6 w-6 rounded bg-white ring-1 ring-slate-200" />
         libre
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="fuera-de-uso flex h-6 w-6 items-center justify-center rounded text-[11px] font-bold text-slate-400 ring-1 ring-slate-300">
+          ✕
+        </span>
+        fuera de uso (↑ el clark no llega)
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[9px] font-bold text-white">
+          !
+        </span>
+        de otra empresa
       </span>
       {vista === "confiabilidad" && (
         /**

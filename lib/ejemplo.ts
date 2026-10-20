@@ -7,6 +7,8 @@ import {
   bultoContenido,
   bultos,
   chequeos,
+  empresas,
+  exclusiones,
   grupos,
   nivelesDeGrupo,
   lineas,
@@ -66,6 +68,8 @@ type DefModelo = {
 const CATALOGO: Array<{
   codigo: string;
   nombre: string;
+  /** De qué empresa son sus modelos. Inventado, como todo lo demás. */
+  empresa: "Rustikas" | "Pirka";
   unidadSingular: string;
   unidadPlural: string;
   activa: boolean;
@@ -74,6 +78,7 @@ const CATALOGO: Array<{
   {
     codigo: "placas",
     nombre: "Placas",
+    empresa: "Pirka",
     unidadSingular: "placa",
     unidadPlural: "placas",
     activa: true,
@@ -86,6 +91,7 @@ const CATALOGO: Array<{
   {
     codigo: "piedras",
     nombre: "Piedras",
+    empresa: "Rustikas",
     unidadSingular: "paquete",
     unidadPlural: "paquetes",
     activa: true,
@@ -103,6 +109,7 @@ const CATALOGO: Array<{
      */
     codigo: "pisos",
     nombre: "Pisos flotantes",
+    empresa: "Pirka",
     unidadSingular: "caja",
     unidadPlural: "cajas",
     activa: false,
@@ -119,35 +126,44 @@ const CATALOGO: Array<{
 const GRUPOS: Array<{
   codigo: string;
   nombre: string;
+  empresa: "Rustikas" | "Pirka";
   geometria: Geometria;
   /** Altura libre de cada nivel, del piso para arriba. */
   alturas: Array<number | null>;
+  /** Los niveles a los que el clark NO llega, del piso para arriba. */
+  sinAlcance?: number[];
 }> = [
   {
     codigo: "A",
     nombre: "Penetrable chico",
+    empresa: "Rustikas",
     geometria: { tipo: "penetrable", ancho: null, niveles: 3, profundidad: 2, unidades: 6 },
     alturas: [210, 190, 230],
   },
   {
     codigo: "B",
     nombre: "Penetrable grande",
+    empresa: "Rustikas",
     geometria: { tipo: "penetrable", ancho: null, niveles: 3, profundidad: 3, unidades: 4 },
     alturas: [210, 190, 230],
   },
   {
     codigo: "C",
     nombre: "Selectivo",
+    empresa: "Pirka",
     geometria: { tipo: "selectivo", ancho: 2, niveles: 3, profundidad: null, unidades: 5 },
     alturas: [200, 200, 240],
   },
   {
     codigo: "D",
     nombre: "Selectivo alto",
+    empresa: "Pirka",
     geometria: { tipo: "selectivo", ancho: 2, niveles: 4, profundidad: null, unidades: 4 },
     // El nivel de arriba sin medir: el sistema no valida y eso también hay que
     // poder verlo en el ejemplo.
     alturas: [190, 185, 185, null],
+    // Y el clark no llega: es el caso de un rack más alto que la horquilla.
+    sinAlcance: [4],
   },
 ];
 
@@ -183,12 +199,38 @@ export async function cargarDatosDeEjemplo(
     chequeos: 0,
   };
 
+  /* Empresas ---------------------------------------------------------------- */
+
+  /**
+   * Las empresas son configuración, como los motivos: el borrado no las toca y
+   * la migración ya las crea. Si alguien las renombró, se crean las que falten
+   * con el nombre del ejemplo.
+   */
+  const idDeEmpresa = new Map<string, number>();
+  for (const [i, nombre] of ["Rustikas", "Pirka"].entries()) {
+    const [ya] = await tx
+      .select({ id: empresas.id })
+      .from(empresas)
+      .where(eq(empresas.nombre, nombre))
+      .limit(1);
+    const id =
+      ya?.id ??
+      (
+        await tx
+          .insert(empresas)
+          .values({ nombre, orden: i })
+          .returning({ id: empresas.id })
+      )[0].id;
+    idDeEmpresa.set(nombre, id);
+  }
+
   /* Líneas, modelos y normas ------------------------------------------------ */
 
   const modelosCreados: Array<{
     id: number;
     nombre: string;
     lineaCodigo: string;
+    empresa: string;
     normas: Partial<Record<Packaging, number>>;
     alturas: Partial<Record<Packaging, number | null>>;
   }> = [];
@@ -210,7 +252,12 @@ export async function cargarDatosDeEjemplo(
     for (const [j, m] of l.modelos.entries()) {
       const [modelo] = await tx
         .insert(modelos)
-        .values({ lineaId: linea.id, nombre: m.nombre, orden: j })
+        .values({
+          lineaId: linea.id,
+          nombre: m.nombre,
+          empresaId: idDeEmpresa.get(l.empresa)!,
+          orden: j,
+        })
         .returning({ id: modelos.id });
       resumen.modelos++;
 
@@ -241,6 +288,7 @@ export async function cargarDatosDeEjemplo(
         id: modelo.id,
         nombre: m.nombre,
         lineaCodigo: l.codigo,
+        empresa: l.empresa,
         normas: suyas,
         alturas,
       });
@@ -255,9 +303,19 @@ export async function cargarDatosDeEjemplo(
     nivel: number;
     profundidad: number | null;
     alturaMaxCm: number | null;
+    /** De qué empresa es el grupo. */
+    empresa: string;
+    /** `false` si el clark no llega o está en la lista de exclusión. */
+    usable: boolean;
     /** Los bultos que quedaron acá, con desde cuándo. Ver el bloque de chequeos. */
     bultos: Array<{ id: number; desde: Date }>;
   }> = [];
+
+  /**
+   * Una calle en reparación, para que la lista de exclusión tenga algo y el
+   * tablero muestre cómo se ve.
+   */
+  const EN_REPARACION = { grupo: "B", unidad: 4, nota: "larguero doblado" };
 
   for (const [i, g] of GRUPOS.entries()) {
     const [grupo] = await tx
@@ -270,6 +328,7 @@ export async function cargarDatosDeEjemplo(
         niveles: g.geometria.niveles,
         profundidad: g.geometria.profundidad,
         unidades: g.geometria.unidades,
+        empresaId: idDeEmpresa.get(g.empresa)!,
         orden: i,
       })
       .returning({ id: grupos.id });
@@ -280,6 +339,18 @@ export async function cargarDatosDeEjemplo(
         grupoId: grupo.id,
         nivel: n,
         alturaMaxCm: g.alturas[n - 1] ?? null,
+        alcanzable: !(g.sinAlcance ?? []).includes(n),
+      });
+    }
+
+    if (g.codigo === EN_REPARACION.grupo) {
+      await tx.insert(exclusiones).values({
+        grupoId: grupo.id,
+        unidad: EN_REPARACION.unidad,
+        motivo: "reparacion",
+        nota: EN_REPARACION.nota,
+        creadaPor: usuario.id,
+        creadaEn: haceDias(6),
       });
     }
 
@@ -304,6 +375,10 @@ export async function cargarDatosDeEjemplo(
         nivel: c.nivel,
         profundidad: c.profundidad,
         alturaMaxCm: g.alturas[c.nivel - 1] ?? null,
+        empresa: g.empresa,
+        usable:
+          !(g.sinAlcance ?? []).includes(c.nivel) &&
+          !(g.codigo === EN_REPARACION.grupo && c.unidad === EN_REPARACION.unidad),
         bultos: [],
       });
     }
@@ -321,6 +396,9 @@ export async function cargarDatosDeEjemplo(
    */
   for (const pos of posicionesCreadas) {
     if (rnd() > 0.55) continue;
+    // Lo que no se usa queda vacío: es lo que pasa en la planta, y así el
+    // tablero muestra el rayado en vez de palets imposibles.
+    if (!pos.usable) continue;
 
     /**
      * Uno de cada quince es MEZCLADO: dos modelos de la misma línea en el
@@ -329,7 +407,14 @@ export async function cargarDatosDeEjemplo(
      * un mezclado no tiene contra qué compararse y va siempre como suelto.
      */
     const mezclado = rnd() < 0.05;
-    const primero = conModelo[Math.floor(rnd() * conModelo.length)];
+    /**
+     * Casi siempre, un modelo de la empresa del rack. Uno de cada quince, de la
+     * otra: es lo que pasa cuando no hay lugar, y es lo que el tablero tiene
+     * que marcar.
+     */
+    const deLaEmpresa = conModelo.filter((m) => m.empresa === pos.empresa);
+    const candidatos = rnd() < 0.07 || deLaEmpresa.length === 0 ? conModelo : deLaEmpresa;
+    const primero = candidatos[Math.floor(rnd() * candidatos.length)];
 
     const dado = rnd();
     const packaging: Packaging = mezclado

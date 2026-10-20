@@ -158,6 +158,14 @@ function FilaBulto({ bulto }: { bulto: BultoEnLista }) {
             <span className="chip bg-slate-100 text-slate-600">
               {ETIQUETA_PACKAGING[bulto.packaging]}
             </span>
+            {bulto.ajeno && (
+              <span
+                className="chip bg-amber-100 text-amber-900"
+                title={`Es de ${bulto.empresas} y el grupo ${bulto.grupo?.codigo} es de ${bulto.grupo?.empresa}`}
+              >
+                en rack de {bulto.grupo?.empresa}
+              </span>
+            )}
           </div>
           <p className="mt-1 truncate text-sm text-slate-700">{bulto.contenido}</p>
           <p className="codigo text-xs text-slate-400">{bulto.codigo}</p>

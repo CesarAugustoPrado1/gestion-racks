@@ -25,6 +25,10 @@ async function conteos() {
       (select count(*) from grupos where activo)::int     as grupos,
       (select count(*) from posiciones where activa)::int as posiciones,
       (select count(*) from motivos where activo)::int    as motivos,
+      (select count(*) from empresas where activa)::int   as empresas,
+      (select count(*) from exclusiones where levantada_en is null)::int as exclusiones,
+      (select count(*) from grupos where activo and empresa_id is null)::int
+        + (select count(*) from modelos where activo and empresa_id is null)::int as sin_empresa,
       (select count(*) from usuarios where activo)::int   as usuarios
   `)) as unknown as Array<Record<string, number>>;
   return filas[0];
@@ -40,6 +44,16 @@ export default async function PantallaAdmin() {
   ]);
 
   const secciones = [
+    {
+      href: "/admin/empresas",
+      titulo: "Empresas",
+      detalle: `${n.empresas} activa${n.empresas === 1 ? "" : "s"}`,
+      ayuda: "Rustikas, Pirka: de quién es cada grupo de racks y cada modelo.",
+      // Lo que importa no es que haya empresas -vienen cargadas- sino que cada
+      // grupo y cada modelo tenga la suya. Sin eso no hay a quién avisar.
+      falta: n.empresas === 0 || n.sin_empresa > 0,
+      textoFalta: n.sin_empresa > 0 ? `${n.sin_empresa} sin empresa` : undefined,
+    },
     {
       href: "/admin/lineas",
       titulo: "Líneas",
@@ -58,8 +72,18 @@ export default async function PantallaAdmin() {
       href: "/admin/racks",
       titulo: "Grupos de racks",
       detalle: `${n.grupos} grupo${n.grupos === 1 ? "" : "s"} · ${n.posiciones} posicion${n.posiciones === 1 ? "" : "es"}`,
-      ayuda: "Selectivo o penetrable, con su geometría y la altura de cada nivel.",
+      ayuda: "Selectivo o penetrable, con su geometría, la altura de cada nivel y hasta dónde llega el clark.",
       falta: n.grupos === 0,
+    },
+    {
+      href: "/admin/exclusiones",
+      titulo: "Lista de exclusión",
+      detalle:
+        n.exclusiones === 0
+          ? "nada fuera de uso"
+          : `${n.exclusiones} lugar${n.exclusiones === 1 ? "" : "es"} fuera de uso`,
+      ayuda: "Calles, niveles o posiciones que no se usan: reparación, reservadas, lo que sea.",
+      falta: false,
     },
     {
       href: "/admin/motivos",
@@ -106,7 +130,7 @@ export default async function PantallaAdmin() {
                   {s.titulo}
                   {s.falta && (
                     <span className="ml-2 chip bg-amber-100 text-amber-900">
-                      falta cargar
+                      {"textoFalta" in s && s.textoFalta ? s.textoFalta : "falta cargar"}
                     </span>
                   )}
                 </p>

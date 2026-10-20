@@ -20,6 +20,27 @@ export function pintarCelda(
   semivida: number,
   abrev: Record<string, string>,
 ): { fondo: string; texto: string; letra: string; titulo: string } {
+  const pintada = pintarBase(celda, vista, semivida, abrev);
+  /**
+   * Lo que no se usa y lo que es de otra empresa se suman al título de
+   * cualquier celda ocupada: es el texto que se lee al apoyar el dedo, y el que
+   * lee un lector de pantalla.
+   */
+  const extras = [
+    celda.bulto && celda.fueraDeUso ? celda.fueraDeUso : null,
+    celda.bulto?.ajeno ? `es de ${celda.bulto.empresas}, en un rack de otra empresa` : null,
+  ].filter(Boolean);
+  return extras.length > 0 && celda.bulto
+    ? { ...pintada, titulo: `${pintada.titulo} · ${extras.join(" · ")}` }
+    : pintada;
+}
+
+function pintarBase(
+  celda: CeldaDelMapa,
+  vista: Vista,
+  semivida: number,
+  abrev: Record<string, string>,
+): { fondo: string; texto: string; letra: string; titulo: string } {
   const p = `${celda.codigo}`;
 
   if (!celda.activa) {
@@ -42,6 +63,20 @@ export function pintarCelda(
       texto: "text-slate-500",
       letra: "↓",
       titulo: `${p} · la ocupa ${celda.invasor}, que sobresale desde abajo`,
+    };
+  }
+
+  /**
+   * Vacía y fuera de uso: el clark no llega o está en la lista de exclusión.
+   * Rayada, para que no se confunda ni con libre ni con suspendida: existe, no
+   * tiene nada, y no se puede usar.
+   */
+  if (!celda.bulto && celda.fueraDeUso) {
+    return {
+      fondo: "fuera-de-uso ring-1 ring-slate-300",
+      texto: "text-slate-400",
+      letra: celda.exclusion ? "✕" : "↑",
+      titulo: `${p} · ${celda.fueraDeUso}`,
     };
   }
 
@@ -115,9 +150,21 @@ function Celda({
       href={`/racks/${celda.posicionId}`}
       title={titulo}
       aria-label={titulo}
-      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded text-[11px] font-bold tabular-nums transition hover:ring-2 hover:ring-slate-900 ${fondo} ${texto}`}
+      className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded text-[11px] font-bold tabular-nums transition hover:ring-2 hover:ring-slate-900 ${fondo} ${texto}`}
     >
       {letra}
+      {/* De otra empresa: un "!" en la esquina, y no un color de fondo, porque
+          el fondo ya dice la línea o la confiabilidad y no puede decir dos
+          cosas a la vez. */}
+      {celda.bulto?.ajeno && (
+        <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[9px] leading-none text-white">
+          !
+        </span>
+      )}
+      {/* Ocupada en un lugar fuera de uso: el contenido manda, la raya avisa. */}
+      {celda.bulto && celda.fueraDeUso && (
+        <span className="absolute inset-x-0 bottom-0 h-1 rounded-b fuera-de-uso" />
+      )}
     </Link>
   );
 }
@@ -150,6 +197,11 @@ export function MapaDeGrupo({
       <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 pt-4">
         <h2 className="text-base font-bold text-slate-900">
           Grupo {grupo.codigo}
+          {grupo.empresa && (
+            <span className="ml-2 chip bg-slate-100 align-middle text-slate-600">
+              {grupo.empresa}
+            </span>
+          )}
         </h2>
         <p className="text-xs text-slate-500">
           {grupo.nombre ? `${grupo.nombre} · ` : ""}
@@ -171,6 +223,11 @@ export function MapaDeGrupo({
               style={{ marginBottom: 2 }}
             >
               {nombreDeNivel(n, grupo.niveles)}
+              {grupo.celdas.some((c) => c.nivel === n && !c.alcanzable) && (
+                <span className="ml-1 text-slate-400" title="El clark no llega a este nivel">
+                  ↑✕
+                </span>
+              )}
             </div>
           ))}
         </div>

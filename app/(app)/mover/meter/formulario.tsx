@@ -8,6 +8,7 @@ import { Aviso } from "@/components/ui";
 import { validarComposicion } from "@/lib/bultos";
 import { ETIQUETA_PACKAGING, PACKAGINGS, numero } from "@/lib/formato";
 import { describirPosicion } from "@/lib/posiciones";
+import { avisoAjeno, esAjeno } from "@/lib/uso";
 import type { ModeloParaCargar, PosicionLibre } from "@/lib/consultas";
 import type { Packaging } from "@/lib/db/schema";
 
@@ -78,6 +79,23 @@ export function FormularioMeter({
   });
 
   const listo = contenido.length > 0 && !problema && (posicionId != null || sinUbicar);
+
+  /**
+   * De otra empresa: se avisa ANTES de guardar y no se frena. El operario puede
+   * tener un motivo -no hay lugar en los de su empresa- y lo que importa es que
+   * lo haga sabiendo, no que la app le impida algo que en la planta va a pasar
+   * igual.
+   */
+  const destino = !sinUbicar ? posiciones.find((p) => p.id === posicionId) : undefined;
+  const empresasDelBulto = [
+    ...new Set(lineas.map((l) => porId.get(l.modeloId)?.empresa).filter(Boolean)),
+  ].join(" y ");
+  const ajeno =
+    destino != null &&
+    esAjeno(
+      destino.empresaId,
+      lineas.map((l) => porId.get(l.modeloId)?.empresaId ?? null),
+    );
 
   async function guardar() {
     limpiar();
@@ -229,6 +247,7 @@ export function FormularioMeter({
             {posiciones.map((p) => (
               <option key={p.id} value={p.id}>
                 {describirPosicion(p)}
+                {p.empresa ? ` · ${p.empresa}` : ""}
               </option>
             ))}
           </select>
@@ -264,6 +283,17 @@ export function FormularioMeter({
           placeholder="Algo que haga falta aclarar"
         />
       </div>
+
+      {ajeno && destino && (
+        <Aviso tono="advertencia">
+          {avisoAjeno(
+            { empresas: empresasDelBulto || null },
+            { codigo: destino.rack, empresa: destino.empresa },
+            "Este palet",
+          )}{" "}
+          Se puede guardar igual, pero va a quedar marcado en el tablero.
+        </Aviso>
+      )}
 
       {/**
        * La confirmación con el número grande solo aparece cuando hay algo raro:

@@ -10,6 +10,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /* -------------------------------------------------------------------------- */
 /* Roles                                                                      */
@@ -78,6 +79,38 @@ export const config = pgTable("config", {
 });
 
 export type Usuario = typeof usuarios.$inferSelect;
+
+/* -------------------------------------------------------------------------- */
+/* Empresas                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Las empresas que comparten el galpón: hoy Rustikas y Pirka.
+ *
+ * Tabla y no enum, al revés que el packaging: el nombre de una empresa no tiene
+ * ninguna semántica en el código. Lo único que el código hace con ella es
+ * compararla -¿el bulto es de la misma empresa que el rack?- y eso funciona
+ * igual con dos que con tres.
+ *
+ * DE QUIÉN ES CADA COSA:
+ * - Un GRUPO de racks es de una empresa (`grupos.empresaId`).
+ * - Un MODELO es de una empresa (`modelos.empresaId`), y el bulto la hereda de
+ *   lo que lleva adentro. No hay empresa en el bulto: si estuviera en los dos
+ *   lados, un día dirían cosas distintas.
+ *
+ * Un bulto de una empresa en un rack de la otra SE PERMITE -pasa, y prohibirlo
+ * solo haría que el palet quede ahí sin que el sistema lo sepa- pero se marca
+ * en todas las pantallas que lo muestran, y el tablero lista cuántos hay.
+ *
+ * Las dos columnas son nullables: lo cargado antes de esto no tiene empresa, y
+ * "sin asignar" no es motivo para avisar nada. Los formularios sí la piden.
+ */
+export const empresas = pgTable("empresas", {
+  id: serial("id").primaryKey(),
+  nombre: text("nombre").notNull().unique(),
+  activa: boolean("activa").notNull().default(true),
+  orden: integer("orden").notNull().default(0),
+});
 
 /* -------------------------------------------------------------------------- */
 /* Dominio: líneas, modelos y packaging                                       */
@@ -209,6 +242,8 @@ export const modelos = pgTable(
       .notNull()
       .references(() => lineas.id),
     nombre: text("nombre").notNull(),
+    /** De quién es el producto. El bulto la hereda de acá. Ver `empresas`. */
+    empresaId: integer("empresa_id").references(() => empresas.id),
     activo: boolean("activo").notNull().default(true),
     orden: integer("orden").notNull().default(0),
   },
@@ -285,6 +320,8 @@ export const grupos = pgTable("grupos", {
   niveles: integer("niveles").notNull().default(3),
   profundidad: integer("profundidad"),
   unidades: integer("unidades").notNull().default(0),
+  /** De qué empresa es el grupo. Ver `empresas`. */
+  empresaId: integer("empresa_id").references(() => empresas.id),
   activo: boolean("activo").notNull().default(true),
   orden: integer("orden").notNull().default(0),
 });
@@ -313,9 +350,35 @@ export const nivelesDeGrupo = pgTable(
       .references(() => grupos.id, { onDelete: "cascade" }),
     nivel: integer("nivel").notNull(),
     alturaMaxCm: integer("altura_max_cm"),
+    /**
+     * Si el clark llega a este nivel. Depende del grupo: en uno el de arriba
+     * está a 6 metros y en otro a 4.
+     *
+     * Un nivel al que no llega NO SE OFRECE ni se acepta como destino al meter
+     * o mover. Lo que ya está ahí se puede sacar igual: si el sistema lo
+     * atrapara, el bulto bajaría por otro medio y el registro quedaría mal.
+     * Tampoco entra en la recorrida si está vacío -no hay nada que verificar en
+     * un hueco que no se usa- ni cuenta como lugar disponible.
+     *
+     * Por nivel y no por posición, como la altura: es una propiedad de la
+     * altura, y la altura es la misma en todo el nivel.
+     */
+    alcanzable: boolean("alcanzable").notNull().default(true),
   },
   (t) => [uniqueIndex("niveles_grupo_nivel").on(t.grupoId, t.nivel)],
 );
+
+/**
+ * Por qué no se usa un lugar. Lista corta: no se suma, pero se lee de un
+ * vistazo en el tablero, y "reparación" pide que alguien la levante cuando
+ * termine, mientras que "decisión propia" puede quedar para siempre.
+ */
+export const motivoExclusionEnum = pgEnum("motivo_exclusion", [
+  "decision",
+  "reparacion",
+  "otro",
+]);
+export type MotivoExclusion = (typeof motivoExclusionEnum.enumValues)[number];
 
 /**
  * Una posición: el lugar de UN bulto, con dirección propia.
@@ -392,6 +455,55 @@ export const posiciones = pgTable(
     index("posiciones_grupo_unidad").on(t.grupoId, t.unidad, t.nivel),
     index("posiciones_bloqueada_por").on(t.bloqueadaPorBultoId),
   ],
+);
+
+/**
+ * La lista de exclusión: lugares que existen pero no se usan.
+ *
+ * UNA FILA CUBRE UN RANGO, no una posición, porque lo que se excluye en la
+ * planta rara vez es un slot suelto: es la calle 7 entera porque se dobló un
+ * larguero, o el nivel de arriba del grupo C porque se reservó. Cargar eso
+ * posición por posición son treinta filas que un día quedan a medio levantar.
+ *
+ * Las columnas nulas son comodines, y el alcance sale de cuáles están puestas:
+ *
+ *   grupo                      todo el grupo
+ *   grupo + unidad             una calle o un módulo entero
+ *   grupo + nivel              un nivel en todo el grupo
+ *   grupo + unidad + nivel     un nivel de una calle o módulo
+ *   grupo + posicion           una posición puntual
+ *
+ * Una posición está excluida si alguna exclusión VIGENTE la cubre. La regla
+ * vive en lib/uso.ts (para la pantalla y los tests) y en SQL en el mismo
+ * archivo, y las dos dicen lo mismo.
+ *
+ * NADA SE BORRA: levantar una exclusión le pone fecha y autor. Así se sabe
+ * cuánto tiempo estuvo fuera de uso la calle 7, y quién la habilitó.
+ *
+ * Qué hace una exclusión, igual que un nivel al que el clark no llega: no se
+ * ofrece ni se acepta como destino, se puede sacar lo que quedó adentro, y no
+ * cuenta como lugar disponible ni entra vacía en la recorrida.
+ */
+export const exclusiones = pgTable(
+  "exclusiones",
+  {
+    id: serial("id").primaryKey(),
+    grupoId: integer("grupo_id")
+      .notNull()
+      .references(() => grupos.id),
+    unidad: integer("unidad"),
+    nivel: integer("nivel"),
+    posicionId: integer("posicion_id").references(() => posiciones.id),
+    motivo: motivoExclusionEnum("motivo").notNull(),
+    nota: text("nota"),
+    creadaEn: timestamp("creada_en", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    creadaPor: integer("creada_por").references(() => usuarios.id),
+    levantadaEn: timestamp("levantada_en", { withTimezone: true }),
+    levantadaPor: integer("levantada_por").references(() => usuarios.id),
+  },
+  (t) => [index("exclusiones_vigentes").on(t.grupoId).where(sql`levantada_en is null`)],
 );
 
 /* -------------------------------------------------------------------------- */
@@ -680,6 +792,8 @@ export const movimientoLineas = pgTable(
 export type Linea = typeof lineas.$inferSelect;
 export type Modelo = typeof modelos.$inferSelect;
 export type Grupo = typeof grupos.$inferSelect;
+export type Empresa = typeof empresas.$inferSelect;
+export type Exclusion = typeof exclusiones.$inferSelect;
 export type Posicion = typeof posiciones.$inferSelect;
 export type Bulto = typeof bultos.$inferSelect;
 export type Movimiento = typeof movimientos.$inferSelect;

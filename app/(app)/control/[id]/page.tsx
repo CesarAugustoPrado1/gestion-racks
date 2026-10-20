@@ -40,6 +40,13 @@ export default async function PantallaChequeo({
         {datos.posicion.codigo}
       </Titulo>
 
+      {datos.posicion.fueraDeUso && (
+        <p className="mb-3 text-sm text-slate-500">
+          Esta posición está {datos.posicion.fueraDeUso.startsWith("fuera") ? "" : "fuera de uso: "}
+          {datos.posicion.fueraDeUso}. Si encontrás algo adentro, registralo igual.
+        </p>
+      )}
+
       <div className="mb-4">
         <ChipConfianza
           confianza={confianza(datos.posicion, semivida)}

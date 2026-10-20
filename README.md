@@ -69,6 +69,15 @@ umbrales, y sobre el promedio de una línea entera hacían que 50% se viera verd
 48% amarillo, un escalón que no existe en los datos. Y la **cobertura va al lado
 del promedio**, porque un 90% sobre un tercio del galpón no es un 90% del galpón.
 
+**Empresas, alcance del clark y lista de exclusión** (migración
+`0006_empresas-y-exclusiones`): cada grupo de racks y cada modelo es de Rustikas
+o de Pirka, y un palet en un rack de la otra empresa se marca en el tablero y se
+avisa antes de guardarlo. Por cada nivel de cada grupo se dice si el clark
+llega, y en **Administración → Lista de exclusión** se dejan fuera de uso
+grupos, calles, niveles o posiciones puntuales. Lo que no se usa no se ofrece
+como destino, pero lo que quedó adentro se puede sacar. Ver DISENO.md §3.9 y
+§3.10.
+
 Pendiente antes de seguir con la fase 1:
 
 - [ ] Aplicar `drizzle/0000_inicial.sql` y crear el usuario admin. Con terminal,
@@ -111,12 +120,14 @@ serializando del otro lado (no se arregla con `max`; ahí la salida es
       del bulto (§3.7), bultos mezclados (§3.8), semivida (§5.4.1) y roles (§6.3).
 - [ ] Cargar los datos reales de planta: los grupos con su geometría, la altura
       de cada nivel, y la tabla modelo × packaging → cantidad y altura. Es lo
-      único que falta para dejar de trabajar sobre datos inventados.
+      único que falta para dejar de trabajar sobre datos inventados. Con eso,
+      la empresa de cada grupo y de cada modelo, y hasta qué nivel llega el
+      clark en cada grupo.
 
 ## Tests
 
 ```
-npm test          # todo: 81 tests, ~1 segundo
+npm test          # todo: 103 tests, ~2 segundos
 npm run test:db   # solo los del motor, contra la base
 ```
 
@@ -126,10 +137,10 @@ cualquier módulo del servidor.
 
 Hay **dos clases de test y prueban cosas distintas**:
 
-- **Puros** (62): la geometría del rack y la regla del penetrable, el índice de
+- **Puros** (78): la geometría del rack y la regla del penetrable, el índice de
   confiabilidad, la composición de bultos, las unidades por solapa. Corren en
   cualquier lado, sin base.
-- **Del motor** (19): contra una base de PostgreSQL de verdad, creada y borrada
+- **Del motor** (25): contra una base de PostgreSQL de verdad, creada y borrada
   en cada corrida. Prueban lo único que un test puro no puede: que después de
   una secuencia de movimientos reales, **sumar el historial siga dando el stock
   vivo**. La migración 0003 dejó movimientos que sumaban en vez de restar — el
