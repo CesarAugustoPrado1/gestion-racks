@@ -786,6 +786,27 @@ achicar los huecos en píxeles de pantalla; ahora se achican en los ejes del
 rack (profundidad y nivel), y un test lo verifica en todos los huecos para los
 dos lados de acceso (`tests/perspectiva.test.ts`).
 
+### 6.2.3 Plano de la planta
+
+`/planta` muestra la fábrica vista desde arriba, para todos; `/admin/planta` es
+el editor, solo admin, pensado para una PC con mouse.
+
+El plano está en **metros** y tiene: el espacio de trabajo (ancho × largo), el
+**límite** de la fábrica y las zonas **techadas** (polígonos), los **racks**
+(rectángulos que se giran de a 90° y se asocian a un grupo), las **calles de
+tránsito** (recorridos con un ancho), los **accesos** y el **frente** (segmentos
+con nombre). Cada rack asociado se pinta según su ocupación -con la misma
+cuenta del tablero- y es un link a su grupo en Racks.
+
+Se guarda **entero, como una versión nueva** (`planos`, migración 0009): un
+dibujo se edita como un todo, y guardar elemento por elemento haría que dos
+personas a la vez dejaran un plano que no dibujó ninguna. Si mientras alguien
+edita otro guarda, el segundo guardado se rechaza en vez de pisar al primero.
+Nada se borra: las versiones anteriores quedan en la tabla.
+
+Las reglas -que todo quede adentro del espacio, que un grupo no se dibuje dos
+veces- viven en `lib/plano.ts` y las usan el editor y el servidor.
+
 ### 6.3 Roles
 
 **Resuelto: quedan los cinco como están.**

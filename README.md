@@ -97,6 +97,11 @@ pared al pasillo; los selectivos de frente—, con los mismos colores del mapa.
 "Plano" vuelve a la grilla. En cada penetrable se elige de qué lado entra el
 clark. Ver DISENO.md §6.2.2.
 
+**Plano de la planta** (migración `0009_plano`): `/planta` es la fábrica vista
+desde arriba —límite, techado, racks pintados según ocupación, calles del
+clark, accesos y frente— y `/admin/planta` es el editor. Cada guardado es una
+versión nueva. Ver DISENO.md §6.2.3.
+
 Pendiente antes de seguir con la fase 1:
 
 - [ ] Aplicar `drizzle/0000_inicial.sql` y crear el usuario admin. Con terminal,
@@ -146,7 +151,7 @@ serializando del otro lado (no se arregla con `max`; ahí la salida es
 ## Tests
 
 ```
-npm test          # todo: 135 tests, ~2 segundos
+npm test          # todo: 149 tests, ~2 segundos
 npm run test:db   # solo los del motor, contra la base
 ```
 
@@ -156,10 +161,10 @@ cualquier módulo del servidor.
 
 Hay **dos clases de test y prueban cosas distintas**:
 
-- **Puros** (103): la geometría del rack y la regla del penetrable, el índice de
+- **Puros** (115): la geometría del rack y la regla del penetrable, el índice de
   confiabilidad, la composición de bultos, las unidades por solapa. Corren en
   cualquier lado, sin base.
-- **Del motor** (32): contra una base de PostgreSQL de verdad, creada y borrada
+- **Del motor** (34): contra una base de PostgreSQL de verdad, creada y borrada
   en cada corrida. Prueban lo único que un test puro no puede: que después de
   una secuencia de movimientos reales, **sumar el historial siga dando el stock
   vivo**. La migración 0003 dejó movimientos que sumaban en vez de restar — el

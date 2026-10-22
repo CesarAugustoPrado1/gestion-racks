@@ -206,7 +206,7 @@ export function MapaDeGrupo({
   );
 
   return (
-    <section className="tarjeta overflow-hidden">
+    <section id={`grupo-${grupo.codigo}`} className="tarjeta scroll-mt-20 overflow-hidden">
       <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 pt-4">
         <h2 className="text-base font-bold text-slate-900">
           Grupo {grupo.codigo}

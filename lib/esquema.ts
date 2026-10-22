@@ -54,6 +54,7 @@ const DIARIO: Array<{ tag: string; when: number }> = [
   { tag: "0006_empresas-y-exclusiones", when: 1790300000000 },
   { tag: "0007_objetos", when: 1790400000000 },
   { tag: "0008_acceso", when: 1790500000000 },
+  { tag: "0009_plano", when: 1790600000000 },
 ];
 
 /**
@@ -111,6 +112,8 @@ const HUELLAS: Huella[] = [
   { migracion: "0007_objetos", que: "esa descripción congelada en el historial", objeto: "movimientos.descripcion" },
 
   { migracion: "0008_acceso", que: "de qué lado entra el clark a un penetrable", objeto: "grupos.acceso" },
+
+  { migracion: "0009_plano", que: "el plano de la planta, con sus versiones", objeto: "planos" },
   { migracion: "0004_grupos", que: "el rack viejo de la posición, que pasó a llamarse grupo_id", objeto: "posiciones.rack_id", debeEstar: false },
   { migracion: "0004_grupos", que: "la capacidad por posición, que ya no se usa: una posición lleva un bulto", objeto: "posiciones.capacidad_bultos", debeEstar: false },
   { migracion: "0004_grupos", que: "la profundidad en el bulto, que es de la posición y no del bulto", objeto: "bultos.profundidad", debeEstar: false },
