@@ -91,6 +91,12 @@ año: movimientos por día, lo que más sale, por qué, cuánto tarda en salir, 
 antigüedad del stock, la precisión de control y quién hace qué. Ver DISENO.md
 §6.2.1.
 
+**Racks en perspectiva** (migración `0008_acceso`): en Racks, "Perspectiva"
+dibuja cada grupo como se lo ve en el galpón —los penetrables con cada calle en
+diagonal, de la pared al pasillo; los selectivos de frente—, con los mismos
+colores del mapa. En cada penetrable se elige de qué lado entra el clark. Ver
+DISENO.md §6.2.2.
+
 Pendiente antes de seguir con la fase 1:
 
 - [ ] Aplicar `drizzle/0000_inicial.sql` y crear el usuario admin. Con terminal,
@@ -140,7 +146,7 @@ serializando del otro lado (no se arregla con `max`; ahí la salida es
 ## Tests
 
 ```
-npm test          # todo: 127 tests, ~2 segundos
+npm test          # todo: 134 tests, ~2 segundos
 npm run test:db   # solo los del motor, contra la base
 ```
 
@@ -150,7 +156,7 @@ cualquier módulo del servidor.
 
 Hay **dos clases de test y prueban cosas distintas**:
 
-- **Puros** (96): la geometría del rack y la regla del penetrable, el índice de
+- **Puros** (103): la geometría del rack y la regla del penetrable, el índice de
   confiabilidad, la composición de bultos, las unidades por solapa. Corren en
   cualquier lado, sin base.
 - **Del motor** (31): contra una base de PostgreSQL de verdad, creada y borrada

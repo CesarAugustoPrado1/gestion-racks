@@ -157,6 +157,12 @@ export const accesibilidadEnum = pgEnum("accesibilidad", [
 ]);
 
 /**
+ * De qué lado del pasillo entra el clark a las calles de un penetrable. Solo
+ * lo usa el dibujo en perspectiva, para que quede como se ve en el galpón.
+ */
+export const ladoAccesoEnum = pgEnum("lado_acceso", ["izquierda", "derecha"]);
+
+/**
  * Tres estados, y solo los dos primeros son stock.
  *
  * `sin_ubicar` es el limbo: el bulto ESTA en el sistema y se cuenta, pero
@@ -329,6 +335,8 @@ export const grupos = pgTable("grupos", {
   unidades: integer("unidades").notNull().default(0),
   /** De qué empresa es el grupo. Ver `empresas`. */
   empresaId: integer("empresa_id").references(() => empresas.id),
+  /** De qué lado entra el clark. Solo penetrables; ver `ladoAccesoEnum`. */
+  acceso: ladoAccesoEnum("acceso").notNull().default("derecha"),
   activo: boolean("activo").notNull().default(true),
   orden: integer("orden").notNull().default(0),
 });

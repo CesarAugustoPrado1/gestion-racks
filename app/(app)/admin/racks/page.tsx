@@ -16,7 +16,7 @@ export default async function PantallaGrupos() {
     db.execute(sql`
       select g.id, g.codigo, g.nombre, g.accesibilidad, g.ancho, g.niveles,
              g.profundidad, g.unidades, g.activo,
-             g.empresa_id, e.nombre as empresa_nombre,
+             g.empresa_id, e.nombre as empresa_nombre, g.acceso,
              count(p.id)::int as posiciones,
              count(b.id)::int as ocupadas
         from grupos g
@@ -37,6 +37,7 @@ export default async function PantallaGrupos() {
         activo: boolean;
         empresa_id: number | null;
         empresa_nombre: string | null;
+        acceso: "izquierda" | "derecha";
         posiciones: number;
         ocupadas: number;
       }>

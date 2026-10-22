@@ -31,6 +31,7 @@ type Grupo = {
   activo: boolean;
   empresaId: number | null;
   empresaNombre: string | null;
+  acceso: "izquierda" | "derecha";
   posiciones: number;
   ocupadas: number;
 };
@@ -56,6 +57,7 @@ type Edicion = {
   profundidad: string;
   unidades: string;
   empresaId: number | null;
+  acceso: "izquierda" | "derecha";
   activo: boolean;
 };
 
@@ -68,6 +70,7 @@ const NUEVO: Edicion = {
   profundidad: "2",
   unidades: "",
   empresaId: null,
+  acceso: "derecha",
   activo: true,
 };
 
@@ -155,6 +158,7 @@ export function Grupos({
                     profundidad: String(g.profundidad ?? 2),
                     unidades: String(g.unidades),
                     empresaId: g.empresaId,
+                    acceso: g.acceso,
                     activo: g.activo,
                   })
                 }
@@ -217,6 +221,7 @@ function FormularioGrupo({
           profundidad: geometria.profundidad,
           unidades: geometria.unidades,
           empresaId: edicion.empresaId ?? 0,
+          acceso: edicion.acceso,
           activo: edicion.activo,
         })
       }
@@ -324,6 +329,32 @@ function FormularioGrupo({
           />
         </Campo>
       </div>
+
+      {!selectivo && (
+        <div>
+          <span className="etiqueta">El clark entra a las calles por la</span>
+          <div className="grid grid-cols-2 gap-2">
+            {(["izquierda", "derecha"] as const).map((lado) => (
+              <button
+                key={lado}
+                type="button"
+                onClick={() => cambiar({ ...edicion, acceso: lado })}
+                className={`min-h-12 rounded-xl text-sm font-semibold ${
+                  edicion.acceso === lado
+                    ? "bg-slate-900 text-white"
+                    : "bg-white text-slate-700 ring-1 ring-slate-300"
+                }`}
+              >
+                {lado === "izquierda" ? "← Izquierda" : "Derecha →"}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Mirando el grupo desde el pasillo. Es para que la vista en
+            perspectiva quede como se ve parado en el galpón.
+          </p>
+        </div>
+      )}
 
       {puede && (
         <Aviso tono="info">

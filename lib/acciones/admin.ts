@@ -211,6 +211,8 @@ const esquemaGrupo = z.object({
   profundidad: z.number().int().min(1).max(10).nullable(),
   unidades: z.number().int().min(0).max(200),
   empresaId: z.number({ invalid_type_error: "Elegí de qué empresa es el grupo." }).int().positive("Elegí de qué empresa es el grupo."),
+  /** De qué lado entra el clark. Solo importa en un penetrable. */
+  acceso: z.enum(["izquierda", "derecha"]).default("derecha"),
   activo: z.boolean(),
 });
 
@@ -293,6 +295,7 @@ export async function guardarGrupo(
       profundidad,
       unidades: d.unidades,
       empresaId: d.empresaId,
+      acceso: d.acceso,
       activo: d.activo,
     };
 
