@@ -26,13 +26,15 @@ export default async function PantallaRacks({
   const { ver, dibujo: dibujoCrudo } = await searchParams;
   const vista: Vista = ver === "confiabilidad" ? "confiabilidad" : "contenido";
   /**
-   * Cómo se dibuja, aparte de qué color lleva: plano (la grilla de siempre) o
-   * en perspectiva (como se ve parado en el galpón). Las dos cosas se combinan,
-   * y las dos viven en la URL.
+   * Cómo se dibuja, aparte de qué color lleva: en 3D (como se ve parado en el
+   * galpón) o plano (la grilla). Las dos cosas se combinan y viven en la URL.
+   *
+   * El 3D es el de siempre: solo `?dibujo=plano` pide la grilla. Los links
+   * viejos con `dibujo=perspectiva` siguen andando porque caen en el default.
    */
-  const dibujo = dibujoCrudo === "perspectiva" ? "perspectiva" : "plano";
+  const dibujo = dibujoCrudo === "plano" ? "plano" : "3d";
   const url = (v: Vista, d: string) =>
-    `/racks?ver=${v}${d === "perspectiva" ? "&dibujo=perspectiva" : ""}`;
+    `/racks?ver=${v}${d === "plano" ? "&dibujo=plano" : ""}`;
 
   const [grupos, semivida] = await Promise.all([mapaDeRacks(), semividaDias()]);
 
@@ -153,8 +155,8 @@ export default async function PantallaRacks({
         ))}
         <span className="mx-1 w-px self-stretch bg-slate-200" aria-hidden />
         {[
+          { id: "3d", etiqueta: "3D" },
           { id: "plano", etiqueta: "Plano" },
-          { id: "perspectiva", etiqueta: "Perspectiva" },
         ].map((d) => (
           <Link
             key={d.id}
@@ -174,7 +176,7 @@ export default async function PantallaRacks({
 
       <div className="mt-3 space-y-3">
         {grupos.map((g) =>
-          dibujo === "perspectiva" ? (
+          dibujo === "3d" ? (
             <PerspectivaDeGrupo
               key={g.id}
               grupo={g}
