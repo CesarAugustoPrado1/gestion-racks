@@ -798,6 +798,22 @@ tránsito** (recorridos con un ancho), los **accesos** y el **frente** (segmento
 con nombre). Cada rack asociado se pinta según su ocupación -con la misma
 cuenta del tablero- y es un link a su grupo en Racks.
 
+El editor tiene **dos modos**. **Por medidas** es el principal: casi todo en
+una planta es un rectángulo alineado a los ejes, y se carga con X, Y, ancho y
+alto (o largo y dirección, para un acceso o el frente) desde unos **ejes de
+referencia** que se pueden correr: X hacia la derecha, Y hacia arriba, el (0,0)
+por defecto en la esquina de abajo a la izquierda. Por dentro el plano sigue en
+coordenadas de pantalla; la conversión vive en `aUsuario` / `deUsuario` y en
+ningún otro lado. **Dibujo libre** queda para lo que no es un rectángulo.
+
+**Sumar figuras.** Un límite o un techado que no es rectangular -un lote en L
+o en T- se arma sumando rectángulos: al cargar uno se lo puede "sumar a" uno
+existente, o se eligen varios con Shift + clic y se tocan "Unir en una sola".
+`unirRectilineos` arma una grilla con las X e Y de todos los vértices, marca
+las celdas cubiertas y recorre el borde. Solo une figuras de lados
+horizontales y verticales, que se toquen por un lado (no por una esquina) y
+cuya unión no deje un hueco adentro; si no, lo dice.
+
 Se guarda **entero, como una versión nueva** (`planos`, migración 0009): un
 dibujo se edita como un todo, y guardar elemento por elemento haría que dos
 personas a la vez dejaran un plano que no dibujó ninguna. Si mientras alguien

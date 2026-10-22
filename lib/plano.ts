@@ -60,6 +60,12 @@ export type Plano = {
   /** El espacio de trabajo, en metros. */
   ancho: number;
   largo: number;
+  /**
+   * Los ejes de referencia para cargar por medidas: dónde está el (0,0),
+   * medido desde la esquina de ABAJO A LA IZQUIERDA del espacio de trabajo.
+   * Sin dato, es esa misma esquina. Ver `aUsuario`.
+   */
+  origen?: { x: number; y: number };
   elementos: Elemento[];
 };
 
@@ -116,6 +122,7 @@ const esquemaElemento = z.discriminatedUnion("tipo", [
 export const esquemaPlano = z.object({
   ancho: z.number().min(10, "El espacio de trabajo tiene que medir al menos 10 m.").max(2000),
   largo: z.number().min(10, "El espacio de trabajo tiene que medir al menos 10 m.").max(2000),
+  origen: z.object({ x: metros, y: metros }).optional(),
   elementos: z.array(esquemaElemento).max(2000, "Demasiados elementos en el plano."),
 });
 
@@ -219,3 +226,297 @@ export function nuevoId(): string {
 
 /** Formato de metros para pantalla: "12,5 m". */
 export const m = (v: number) => `${(Math.round(v * 10) / 10).toLocaleString("es-AR")} m`;
+
+/* -------------------------------------------------------------------------- */
+/* Ejes de referencia: las coordenadas que ve el usuario                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Por dentro el plano usa coordenadas de pantalla: (0,0) arriba a la izquierda
+ * e Y hacia ABAJO. Para cargar medidas eso es antinatural, así que el usuario
+ * trabaja con ejes de plano de obra: X hacia la derecha, Y hacia ARRIBA, con el
+ * (0,0) en `origen` (por defecto, la esquina de abajo a la izquierda).
+ *
+ * Toda conversión pasa por estas dos funciones; nada más hace la cuenta.
+ */
+export function origenDe(p: Pick<Plano, "origen">): { x: number; y: number } {
+  return p.origen ?? { x: 0, y: 0 };
+}
+
+export function aUsuario([x, y]: Punto, p: Pick<Plano, "largo" | "origen">): Punto {
+  const o = origenDe(p);
+  return [x - o.x, p.largo - y - o.y];
+}
+
+export function deUsuario([u, v]: Punto, p: Pick<Plano, "largo" | "origen">): Punto {
+  const o = origenDe(p);
+  return [u + o.x, p.largo - (v + o.y)];
+}
+
+/**
+ * Un rectángulo alineado a los ejes, en coordenadas de usuario: `x, y` es la
+ * esquina de ABAJO A LA IZQUIERDA, `ancho` va en X y `alto` en Y. Para un
+ * segmento (acceso, frente) una de las dos medidas es 0.
+ */
+export type RectUsuario = { x: number; y: number; ancho: number; alto: number };
+
+const casi = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+
+/** Las cuatro esquinas, en coordenadas internas, en el orden del contorno. */
+export function esquinasDeRect(r: RectUsuario, p: Pick<Plano, "largo" | "origen">): Punto[] {
+  return [
+    deUsuario([r.x, r.y + r.alto], p),
+    deUsuario([r.x + r.ancho, r.y + r.alto], p),
+    deUsuario([r.x + r.ancho, r.y], p),
+    deUsuario([r.x, r.y], p),
+  ];
+}
+
+function rectDePuntos(ps: Punto[], p: Pick<Plano, "largo" | "origen">): RectUsuario {
+  const us = ps.map((q) => aUsuario(q, p));
+  const xs = us.map((q) => q[0]);
+  const ys = us.map((q) => q[1]);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return { x, y, ancho: Math.max(...xs) - x, alto: Math.max(...ys) - y };
+}
+
+/** Si un polígono es un rectángulo alineado a los ejes. */
+export function esRectangulo(ps: Punto[]): boolean {
+  if (ps.length !== 4) return false;
+  const xs = new Set(ps.map((q) => Math.round(q[0] * 1e6)));
+  const ys = new Set(ps.map((q) => Math.round(q[1] * 1e6)));
+  return xs.size === 2 && ys.size === 2 && esRectilineo(ps);
+}
+
+/** Si todos los lados de un polígono son horizontales o verticales. */
+export function esRectilineo(ps: Punto[]): boolean {
+  return ps.every((a, i) => {
+    const b = ps[(i + 1) % ps.length];
+    return casi(a[0], b[0]) || casi(a[1], b[1]);
+  });
+}
+
+/**
+ * El rectángulo que describe un elemento, si se puede cargar por medidas. Null
+ * si no: un polígono con forma de L, una calle con quiebres. Esos se editan en
+ * el dibujo libre.
+ */
+export function rectDeElemento(e: Elemento, p: Pick<Plano, "largo" | "origen">): RectUsuario | null {
+  switch (e.tipo) {
+    case "rack":
+      return rectDePuntos(esquinasDeRack(e), p);
+    case "limite":
+    case "techado":
+      return esRectangulo(e.puntos) ? rectDePuntos(e.puntos, p) : null;
+    case "calle": {
+      if (e.puntos.length !== 2) return null;
+      const [a, b] = e.puntos;
+      if (casi(a[1], b[1])) {
+        const r = rectDePuntos(e.puntos, p);
+        return { ...r, y: r.y - e.ancho / 2, alto: e.ancho };
+      }
+      if (casi(a[0], b[0])) {
+        const r = rectDePuntos(e.puntos, p);
+        return { ...r, x: r.x - e.ancho / 2, ancho: e.ancho };
+      }
+      return null;
+    }
+    case "acceso":
+    case "frente": {
+      const [a, b] = e.puntos;
+      return casi(a[0], b[0]) || casi(a[1], b[1]) ? rectDePuntos(e.puntos, p) : null;
+    }
+  }
+}
+
+/**
+ * Arma (o rearma, si se pasa `base`) un elemento desde un rectángulo de usuario.
+ *
+ * - Límite y techado: el rectángulo.
+ * - Rack: el rectángulo, sin girar (en medidas, "ancho en X, alto en Y" ya dice
+ *   cómo está parado).
+ * - Calle: la línea del medio a lo largo del lado más largo; el lado corto es
+ *   el ancho de la calle.
+ * - Acceso y frente: un segmento; una de las medidas tiene que ser 0.
+ */
+export function elementoDesdeRect(
+  tipo: TipoElemento,
+  r: RectUsuario,
+  p: Pick<Plano, "largo" | "origen">,
+  base?: Partial<Elemento> & { id?: string },
+): Elemento {
+  const id = base?.id ?? nuevoId();
+  const etiqueta = base?.etiqueta;
+  const [arribaIzq] = esquinasDeRect(r, p);
+  switch (tipo) {
+    case "limite":
+    case "techado":
+      return { id, etiqueta, tipo, puntos: esquinasDeRect(r, p) };
+    case "rack":
+      return {
+        id,
+        etiqueta,
+        tipo: "rack",
+        x: arribaIzq[0],
+        y: arribaIzq[1],
+        ancho: r.ancho,
+        largo: r.alto,
+        rotacion: 0,
+        grupoId: base && "grupoId" in base ? (base.grupoId ?? null) : null,
+      };
+    case "calle": {
+      const horizontal = r.ancho >= r.alto;
+      const puntos: Punto[] = horizontal
+        ? [deUsuario([r.x, r.y + r.alto / 2], p), deUsuario([r.x + r.ancho, r.y + r.alto / 2], p)]
+        : [deUsuario([r.x + r.ancho / 2, r.y], p), deUsuario([r.x + r.ancho / 2, r.y + r.alto], p)];
+      return { id, etiqueta, tipo: "calle", puntos, ancho: horizontal ? r.alto : r.ancho };
+    }
+    case "acceso":
+    case "frente":
+      return {
+        id,
+        etiqueta,
+        tipo,
+        puntos: [deUsuario([r.x, r.y], p), r.alto === 0 ? deUsuario([r.x + r.ancho, r.y], p) : deUsuario([r.x, r.y + r.alto], p)],
+      };
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Unir figuras                                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Une polígonos de lados rectos (horizontales y verticales) en uno solo: suma
+ * las áreas y devuelve el perímetro nuevo.
+ *
+ * Es para armar el lote o un techado que no es un rectángulo con dos o tres
+ * rectángulos. Cómo lo hace, porque es fácil equivocarse:
+ *
+ * 1. Toma todas las X y todas las Y de los vértices y arma una grilla con ellas.
+ *    Como los lados son rectos, cada celda de esa grilla está entera adentro o
+ *    entera afuera de cada figura.
+ * 2. Marca las celdas cubiertas por alguna figura (mirando su centro).
+ * 3. Exige que las cubiertas formen UNA sola pieza (que las figuras se toquen
+ *    por un lado, no solo por una esquina) y que no encierren un hueco: un lote
+ *    con un agujero en el medio no es lo que se quiere dibujar así.
+ * 4. Recorre el borde de las celdas cubiertas y saca los vértices que quedan en
+ *    el medio de un lado recto.
+ *
+ * Devuelve el contorno en el mismo sentido que los rectángulos del plano, o un
+ * error en palabras.
+ */
+export function unirRectilineos(figuras: Punto[][]): { puntos: Punto[] } | { error: string } {
+  if (figuras.length === 0) return { error: "No hay figuras para unir." };
+  if (figuras.some((f) => f.length < 3 || !esRectilineo(f))) {
+    return {
+      error:
+        "Solo se pueden unir figuras con lados horizontales y verticales. Las de lados inclinados se dibujan a mano.",
+    };
+  }
+
+  const redondear = (v: number) => Math.round(v * 1e6) / 1e6;
+  const xs = [...new Set(figuras.flat().map((q) => redondear(q[0])))].sort((a, b) => a - b);
+  const ys = [...new Set(figuras.flat().map((q) => redondear(q[1])))].sort((a, b) => a - b);
+  const nx = xs.length - 1;
+  const ny = ys.length - 1;
+
+  const adentro = (px: number, py: number, f: Punto[]) => {
+    let dentro = false;
+    for (let i = 0, j = f.length - 1; i < f.length; j = i++) {
+      const [xi, yi] = f[i];
+      const [xj, yj] = f[j];
+      if (yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) dentro = !dentro;
+    }
+    return dentro;
+  };
+
+  const cubierta: boolean[][] = Array.from({ length: nx }, (_, i) =>
+    Array.from({ length: ny }, (_, j) => {
+      const cx = (xs[i] + xs[i + 1]) / 2;
+      const cy = (ys[j] + ys[j + 1]) / 2;
+      return figuras.some((f) => adentro(cx, cy, f));
+    }),
+  );
+  const esta = (i: number, j: number) => i >= 0 && j >= 0 && i < nx && j < ny && cubierta[i][j];
+
+  // 3a. Una sola pieza: recorrido por vecinos de lado (no de esquina).
+  const celdas: Array<[number, number]> = [];
+  for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) if (cubierta[i][j]) celdas.push([i, j]);
+  if (celdas.length === 0) return { error: "Las figuras no tienen superficie." };
+  const vistas = new Set<string>([celdas[0].join(",")]);
+  const pila = [celdas[0]];
+  while (pila.length) {
+    const [i, j] = pila.pop()!;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const k = `${i + di},${j + dj}`;
+      if (esta(i + di, j + dj) && !vistas.has(k)) {
+        vistas.add(k);
+        pila.push([i + di, j + dj]);
+      }
+    }
+  }
+  if (vistas.size !== celdas.length) {
+    return { error: "Las figuras no se tocan por un lado: no forman una sola. Corré alguna para que se superpongan o compartan un lado." };
+  }
+
+  // 3b. Sin huecos: todo lo vacío tiene que poder llegar al borde de la grilla.
+  const afuera = new Set<string>();
+  const cola: Array<[number, number]> = [];
+  for (let i = -1; i <= nx; i++) for (const j of [-1, ny]) cola.push([i, j]);
+  for (let j = -1; j <= ny; j++) for (const i of [-1, nx]) cola.push([i, j]);
+  for (const [i, j] of cola) afuera.add(`${i},${j}`);
+  while (cola.length) {
+    const [i, j] = cola.pop()!;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const a = i + di;
+      const b = j + dj;
+      if (a < -1 || b < -1 || a > nx || b > ny) continue;
+      const k = `${a},${b}`;
+      if (!afuera.has(k) && !esta(a, b)) {
+        afuera.add(k);
+        cola.push([a, b]);
+      }
+    }
+  }
+  for (let i = 0; i < nx; i++)
+    for (let j = 0; j < ny; j++)
+      if (!cubierta[i][j] && !afuera.has(`${i},${j}`)) {
+        return { error: "La unión deja un hueco adentro. Dibujala en partes o a mano." };
+      }
+
+  // 4. El borde: cada lado de celda cubierta que da contra una vacía, con
+  // sentido horario en pantalla (arriba → derecha → abajo → izquierda).
+  const siguiente = new Map<string, Punto>();
+  const clave = (q: Punto) => `${q[0]},${q[1]}`;
+  for (const [i, j] of celdas) {
+    const [x0, x1, y0, y1] = [xs[i], xs[i + 1], ys[j], ys[j + 1]];
+    if (!esta(i, j - 1)) siguiente.set(clave([x0, y0]), [x1, y0]);
+    if (!esta(i + 1, j)) siguiente.set(clave([x1, y0]), [x1, y1]);
+    if (!esta(i, j + 1)) siguiente.set(clave([x1, y1]), [x0, y1]);
+    if (!esta(i - 1, j)) siguiente.set(clave([x0, y1]), [x0, y0]);
+  }
+
+  // Empezar por el vértice de arriba a la izquierda, como los rectángulos.
+  let inicio: Punto = [Infinity, Infinity];
+  for (const k of siguiente.keys()) {
+    const [x, y] = k.split(",").map(Number) as Punto;
+    if (y < inicio[1] || (y === inicio[1] && x < inicio[0])) inicio = [x, y];
+  }
+  const contorno: Punto[] = [inicio];
+  let actual = siguiente.get(clave(inicio))!;
+  let guardia = 0;
+  while (clave(actual) !== clave(inicio) && guardia++ < 100000) {
+    contorno.push(actual);
+    actual = siguiente.get(clave(actual))!;
+  }
+
+  // Sacar los vértices que están en el medio de un lado recto.
+  const limpio = contorno.filter((q, i) => {
+    const a = contorno[(i - 1 + contorno.length) % contorno.length];
+    const b = contorno[(i + 1) % contorno.length];
+    return !((casi(a[0], q[0]) && casi(q[0], b[0])) || (casi(a[1], q[1]) && casi(q[1], b[1])));
+  });
+  return { puntos: limpio };
+}
