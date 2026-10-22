@@ -13,6 +13,8 @@ const ICONOS: Record<string, string> = {
   lista: "☰",
   medidor: "📊",
   config: "⚙",
+  tablero: "🧭",
+  estadisticas: "📈",
 };
 
 /** Mas de esto y los textos se encimaban en la pantalla del celular. */

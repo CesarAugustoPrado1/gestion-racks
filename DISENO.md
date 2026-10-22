@@ -732,6 +732,33 @@ la lista de los bultos que lo componen, con su posición.
 - **Admin**: ABM de empresas, líneas, modelos, normas, racks, posiciones y
   usuarios, el alcance del clark por nivel y la lista de exclusión.
 
+### 6.2.1 Tablero y estadísticas
+
+**Tablero** (`/tablero`, lo ven todos los roles y es donde entran admin y
+auditor): la foto de ahora, sacada del estado vivo. Ocupación sobre las
+posiciones **útiles** (lo fuera de uso no es lugar), libres, bultos en stock,
+sin ubicar, ajenos, confiabilidad, lo pendiente con link a donde se resuelve,
+el lugar por grupo como barra de estados, la ocupación por nivel (si arriba
+sobra lugar y el piso está lleno, el problema no es de espacio), por empresa
+con cuántos bultos propios están "afuera", el stock por línea y los modelos con
+más bultos.
+
+**Estadísticas** (`/estadisticas`, todos menos el autoelevador): lo que pasó en
+7, 30, 90 días o un año, con el período en la URL. Movimientos por día (las
+cuatro series con la misma escala, en gráficos separados), lo que entró y salió
+por línea, lo que más sale, por qué sale, cuánto tarda en salir (mediana y
+promedio de días en el rack), la antigüedad del stock de hoy y los diez bultos
+más viejos, la precisión de control, la actividad por hora y por persona.
+
+Dos reglas que atraviesan las dos pantallas:
+
+- **Las unidades no se suman entre líneas.** Placas, paquetes y cajas van
+  siempre abiertos por línea. Entre líneas se comparan bultos y movimientos.
+- **Los anulados no cuentan** y las fechas se agrupan en hora de Argentina.
+
+Los gráficos son barras hechas con divs, sin librerías, una serie por gráfico
+y en el azul de `--color-medida`. Nunca dos escalas en el mismo gráfico.
+
 ### 6.3 Roles
 
 **Resuelto: quedan los cinco como están.**
