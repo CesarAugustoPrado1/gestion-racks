@@ -367,6 +367,7 @@ function FormularioGrupo({
         valor={edicion.activo}
         cambiar={(v) => cambiar({ ...edicion, activo: v })}
         etiqueta="Activo"
+        ayuda="Un grupo inactivo no aparece en el mapa, ni en el tablero, ni en la recorrida, y no se le puede meter nada. Para pasarlo a inactivo tiene que estar vacío."
       />
     </Formulario>
   );

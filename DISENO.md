@@ -317,6 +317,14 @@ Qué hace cualquiera de las dos:
 Nada se borra: levantar una exclusión le pone fecha y autor. La pantalla muestra
 las últimas habilitadas, para contestar "¿la calle 7 no estaba en reparación?".
 
+**Un grupo entero se apaga con "Activo"** (Administración → Grupos de racks →
+Editar), que es como se pone la planta en funcionamiento por partes. Un grupo
+inactivo no aparece en el mapa, ni en el tablero, ni en la recorrida, y no se
+le puede meter nada. **Para apagarlo tiene que estar vacío** (`exigirGrupoVacio`):
+si no, los palets que quedaran adentro seguirían siendo stock pero nadie los
+vería ni los chequearía. Si hay que dejar cosas adentro, la herramienta es la
+lista de exclusión.
+
 Esto es distinto de **suspender una posición** (`posiciones.activa`), que es
 para lo que no existe —el grupo se achicó, hay una columna donde la geometría
 dice que hay un hueco—. La exclusión es para lo que existe y por ahora no se usa.

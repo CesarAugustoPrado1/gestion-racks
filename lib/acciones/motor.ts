@@ -501,6 +501,41 @@ export async function exigirAltura(
   return { invadeArriba: true, arriba: pos.arriba };
 }
 
+/**
+ * Que un grupo esté vacío antes de pasarlo a inactivo.
+ *
+ * Un grupo inactivo desaparece del mapa, del tablero y de la recorrida. Si se
+ * apagara con palets adentro, esos palets seguirían siendo stock pero nadie los
+ * vería ni los chequearía: quedarían perdidos en pantalla. Por eso primero se
+ * vacía. Para "este lugar existe pero por ahora no se usa", con cosas adentro,
+ * está la lista de exclusión.
+ *
+ * Cuenta los bultos UBICADOS en el grupo, producto u objeto. Los `sin_ubicar`
+ * no están en ningún grupo y no cuentan.
+ */
+export async function exigirGrupoVacio(
+  ejecutor: Pick<Tx, "execute">,
+  grupoId: number,
+): Promise<void> {
+  const filas = (await ejecutor.execute(sql`
+    select g.codigo as grupo, g.codigo || '-' || p.codigo as posicion
+      from bultos b
+      join posiciones p on p.id = b.posicion_id
+      join grupos g on g.id = p.grupo_id
+     where b.estado = 'ubicado' and p.grupo_id = ${grupoId}
+     order by p.orden
+  `)) as unknown as Array<{ grupo: string; posicion: string }>;
+
+  if (filas.length === 0) return;
+  const muestra = filas.slice(0, 5).map((f) => f.posicion).join(", ");
+  const resto = filas.length > 5 ? ` y ${filas.length - 5} más` : "";
+  fallar(
+    `No se puede pasar el grupo ${filas[0].grupo} a inactivo: todavía tiene ` +
+      `${filas.length} bulto${filas.length === 1 ? "" : "s"} adentro (${muestra}${resto}). ` +
+      `Primero hay que vaciarlo.`,
+  );
+}
+
 export async function exigirMotivo(
   tx: Tx,
   motivoId: number,
