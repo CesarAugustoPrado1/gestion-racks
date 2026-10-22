@@ -23,6 +23,7 @@ import { ROLES } from "../permisos";
 import { codigoDePosicion, posicionesDe, type Geometria } from "../posiciones";
 import { MOTIVOS_EXCLUSION } from "../uso";
 import { ejecutar, fallar, type Resultado } from "./comun";
+import { exigirGrupoVacio } from "./motor";
 
 /**
  * ABM de los datos que definen cómo mide el sistema.
@@ -301,6 +302,8 @@ export async function guardarGrupo(
 
     let id = d.id;
     if (id) {
+      // Apagar un grupo exige que esté vacío. Ver `exigirGrupoVacio`.
+      if (!d.activo) await exigirGrupoVacio(db, id);
       await db.update(grupos).set(valores).where(eq(grupos.id, id));
     } else {
       const [ya] = await db

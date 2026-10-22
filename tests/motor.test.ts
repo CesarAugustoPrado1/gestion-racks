@@ -10,6 +10,7 @@ import {
   exigirAltura,
   exigirLibre,
   exigirUsable,
+  exigirGrupoVacio,
   type Tx,
 } from "../lib/acciones/motor";
 import * as schema from "../lib/db/schema";
@@ -772,5 +773,46 @@ describe("objetos: ocupan lugar y no son stock", { skip: !hay && "sin base local
        order by id limit 1
     `)) as unknown as Array<{ linea_codigo: string }>;
     assert.equal(m.linea_codigo, "piedras");
+  });
+});
+
+/** Un grupo con bultos adentro no se puede pasar a inactivo: primero se vacía. */
+describe("pasar un grupo a inactivo", { skip: !hay && "sin base local" }, () => {
+  test("con un bulto adentro, no se puede; vacío, sí", async () => {
+    const [g] = await base.db
+      .insert(schema.grupos)
+      .values({ codigo: "V", accesibilidad: "selectivo", ancho: 1, niveles: 1, unidades: 1 })
+      .returning();
+    const [p] = await base.db
+      .insert(schema.posiciones)
+      .values({ grupoId: g.id, codigo: "01-1", unidad: 1, columna: 1, nivel: 1 })
+      .returning();
+
+    await exigirGrupoVacio(base.db as unknown as Tx, g.id);
+
+    let bultoId = 0;
+    await base.db.transaction(async (tx) => {
+      const b = await meter(tx as Tx, p.id, "suelto", [{ modeloId: datos.laja.id, cantidad: 5 }]);
+      bultoId = b.id;
+    });
+    await assert.rejects(
+      () => exigirGrupoVacio(base.db as unknown as Tx, g.id),
+      /grupo V a inactivo: todavía tiene 1 bulto adentro \(V-01-1\)/,
+    );
+
+    await base.db.transaction(async (tx) => {
+      const b = await bloquearBulto(tx as Tx, bultoId);
+      await aplicarMovimiento(tx as Tx, {
+        tipo: "sacar",
+        bulto: b,
+        contenidoDespues: [],
+        packagingDespues: "suelto",
+        estadoDespues: "salido",
+        posicionDestino: null,
+        motivo: { id: datos.motivo.id, nombre: datos.motivo.nombre },
+        usuario: { id: datos.usuario.id, nombre: datos.usuario.nombre },
+      });
+    });
+    await exigirGrupoVacio(base.db as unknown as Tx, g.id);
   });
 });
