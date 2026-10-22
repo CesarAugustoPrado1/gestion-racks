@@ -91,11 +91,11 @@ año: movimientos por día, lo que más sale, por qué, cuánto tarda en salir, 
 antigüedad del stock, la precisión de control y quién hace qué. Ver DISENO.md
 §6.2.1.
 
-**Racks en perspectiva** (migración `0008_acceso`): en Racks, "Perspectiva"
-dibuja cada grupo como se lo ve en el galpón —los penetrables con cada calle en
-diagonal, de la pared al pasillo; los selectivos de frente—, con los mismos
-colores del mapa. En cada penetrable se elige de qué lado entra el clark. Ver
-DISENO.md §6.2.2.
+**Racks en 3D** (migración `0008_acceso`): Racks se ve por defecto en 3D,
+como se lo ve en el galpón —los penetrables con cada calle en diagonal, de la
+pared al pasillo; los selectivos de frente—, con los mismos colores del mapa.
+"Plano" vuelve a la grilla. En cada penetrable se elige de qué lado entra el
+clark. Ver DISENO.md §6.2.2.
 
 Pendiente antes de seguir con la fase 1:
 

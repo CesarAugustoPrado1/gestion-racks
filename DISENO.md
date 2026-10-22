@@ -761,8 +761,9 @@ y en el azul de `--color-medida`. Nunca dos escalas en el mismo gráfico.
 
 ### 6.2.2 Racks en perspectiva
 
-En Racks, además de "Qué hay / Confiabilidad" (el color), se elige "Plano /
-Perspectiva" (el dibujo). Las dos cosas se combinan y viven en la URL.
+En Racks, además de "Qué hay / Confiabilidad" (el color), se elige "3D / Plano"
+(el dibujo). Las dos cosas se combinan y viven en la URL. **El 3D es el que se
+ve por defecto**; `?dibujo=plano` pide la grilla.
 
 - **Penetrable:** cada calle es un plano vertical visto en diagonal. La pared
   queda atrás, el piso baja en diagonal hacia el pasillo, los niveles se apilan
