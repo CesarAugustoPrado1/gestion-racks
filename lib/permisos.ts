@@ -29,6 +29,11 @@ const REGLAS: Array<{ prefijo: string; roles: Rol[] }> = [
   // El índice abierto: de qué se puede fiar el que decide. No lo ve el
   // autoelevador, que no decide sobre el dato sino que lo produce.
   { prefijo: "/confiabilidad", roles: ["admin", "auditor", "control", "comercial"] },
+  // El tablero lo ve todo el mundo: "cómo estamos" no es un secreto de nadie,
+  // y al clarkista le sirve saber cuánto lugar queda.
+  { prefijo: "/tablero", roles: ["admin", "auditor", "autoelevador", "control", "comercial"] },
+  // Estadísticas es para decidir, no para operar: lo mismo que confiabilidad.
+  { prefijo: "/estadisticas", roles: ["admin", "auditor", "control", "comercial"] },
 ];
 
 /**
@@ -62,7 +67,8 @@ export function rutaInicial(rol: Rol): string {
     case "comercial":
       return "/stock";
     default:
-      return "/racks";
+      // Admin y auditor: lo primero es ver cómo estamos.
+      return "/tablero";
   }
 }
 
@@ -89,10 +95,12 @@ export type ItemNav = { href: string; etiqueta: string; icono: string };
  * no tenerlo: el operario aprende a desconfiar de la barra.
  */
 const NAV: ItemNav[] = [
+  { href: "/tablero", etiqueta: "Tablero", icono: "tablero" },
   { href: "/mover", etiqueta: "Mover", icono: "autoelevador" },
   { href: "/control", etiqueta: "Control", icono: "control" },
   { href: "/racks", etiqueta: "Racks", icono: "grid" },
   { href: "/stock", etiqueta: "Stock", icono: "pallet" },
+  { href: "/estadisticas", etiqueta: "Estadísticas", icono: "estadisticas" },
   { href: "/confiabilidad", etiqueta: "Confiabilidad", icono: "medidor" },
   { href: "/movimientos", etiqueta: "Movimientos", icono: "lista" },
   { href: "/admin", etiqueta: "Administración", icono: "config" },

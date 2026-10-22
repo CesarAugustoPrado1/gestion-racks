@@ -84,6 +84,13 @@ con una descripción: ocupa el lugar, se ve en el tablero, y no cuenta en el
 stock. Los movimientos se llaman Ingreso, Egreso, Reubicación y Ajuste. Ver
 DISENO.md §3.11 y §4.
 
+**Tablero y estadísticas**: `/tablero` es la foto de ahora —ocupación, lugar
+por grupo y por nivel, por empresa, stock por línea, lo pendiente— y es donde
+entran admin y auditor. `/estadisticas` es lo que pasó en 7, 30, 90 días o un
+año: movimientos por día, lo que más sale, por qué, cuánto tarda en salir, la
+antigüedad del stock, la precisión de control y quién hace qué. Ver DISENO.md
+§6.2.1.
+
 Pendiente antes de seguir con la fase 1:
 
 - [ ] Aplicar `drizzle/0000_inicial.sql` y crear el usuario admin. Con terminal,
@@ -133,7 +140,7 @@ serializando del otro lado (no se arregla con `max`; ahí la salida es
 ## Tests
 
 ```
-npm test          # todo: 117 tests, ~2 segundos
+npm test          # todo: 127 tests, ~2 segundos
 npm run test:db   # solo los del motor, contra la base
 ```
 
@@ -143,7 +150,7 @@ cualquier módulo del servidor.
 
 Hay **dos clases de test y prueban cosas distintas**:
 
-- **Puros** (86): la geometría del rack y la regla del penetrable, el índice de
+- **Puros** (96): la geometría del rack y la regla del penetrable, el índice de
   confiabilidad, la composición de bultos, las unidades por solapa. Corren en
   cualquier lado, sin base.
 - **Del motor** (31): contra una base de PostgreSQL de verdad, creada y borrada
