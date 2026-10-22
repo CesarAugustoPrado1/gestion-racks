@@ -4,6 +4,7 @@ import { db } from "./db";
 import type { Packaging } from "./db/schema";
 import { alcanzable, empresasDelBulto, joinExclusion } from "./uso-sql";
 import { esAjeno, porQueNoSeUsa, type MotivoExclusion } from "./uso";
+import { ETIQUETA_MOVIMIENTO } from "./formato";
 
 /**
  * TODAS las lecturas de pantalla viven acá, como en Control-Secaderos.
@@ -431,6 +432,8 @@ export type BultoEnLista = {
   grupo: { codigo: string; empresaId: number | null; empresa: string | null } | null;
   /** Si está en un rack de otra empresa. Ver `esAjeno`. */
   ajeno: boolean;
+  /** Un objeto: ocupa lugar pero no es producto. `contenido` es su descripción. */
+  esObjeto: boolean;
 };
 
 const SELECT_BULTO = sql`
@@ -438,9 +441,11 @@ const SELECT_BULTO = sql`
          b.chequeado_en, b.chequeos_ok, b.chequeos_total,
          case when p.id is null then null
               else g.codigo || '-' || p.codigo end as ubicacion,
-         (select string_agg(m.nombre || ' ' || c.cantidad, ' + ' order by m.nombre)
-            from bulto_contenido c join modelos m on m.id = c.modelo_id
-           where c.bulto_id = b.id) as contenido,
+         coalesce(
+           (select string_agg(m.nombre || ' ' || c.cantidad, ' + ' order by m.nombre)
+              from bulto_contenido c join modelos m on m.id = c.modelo_id
+             where c.bulto_id = b.id),
+           b.descripcion) as contenido,
          (select l.unidad_plural
             from bulto_contenido c join modelos m on m.id = c.modelo_id
             join lineas l on l.id = m.linea_id
@@ -490,6 +495,7 @@ const aBulto = (f: FilaBulto): BultoEnLista => ({
     ? { codigo: f.grupo_codigo, empresaId: f.grupo_empresa_id, empresa: f.grupo_empresa }
     : null,
   ajeno: f.grupo_codigo != null && esAjeno(f.grupo_empresa_id, f.empresas_ids ?? []),
+  esObjeto: f.packaging === "objeto",
 });
 
 /**
@@ -680,13 +686,18 @@ export async function posicionesParaChequear(
            p.chequeado_en, p.chequeos_ok, p.chequeos_total,
            count(b.id)::int as bultos,
            coalesce(sum(b.cantidad), 0)::int as unidades,
-           (select string_agg(x.txt, ' · ')
-              from (select m.nombre || ' ' || c.cantidad as txt
-                      from bultos b2
-                      join bulto_contenido c on c.bulto_id = b2.id
-                      join modelos m on m.id = c.modelo_id
-                     where b2.posicion_id = p.id and b2.estado = 'ubicado'
-                     order by m.orden, m.nombre) x
+           coalesce(
+             (select string_agg(x.txt, ' · ')
+                from (select m.nombre || ' ' || c.cantidad as txt
+                        from bultos b2
+                        join bulto_contenido c on c.bulto_id = b2.id
+                        join modelos m on m.id = c.modelo_id
+                       where b2.posicion_id = p.id and b2.estado = 'ubicado'
+                       order by m.orden, m.nombre) x),
+             -- Un objeto no tiene modelos: se muestra lo que dice que hay.
+             (select 'Objeto: ' || b4.descripcion from bultos b4
+               where b4.posicion_id = p.id and b4.estado = 'ubicado'
+                 and b4.packaging = 'objeto' limit 1)
            ) as contenido,
            (select l.unidad_plural
               from bultos b3
@@ -762,6 +773,8 @@ export type BultoEnPosicion = {
   id: number;
   codigo: string;
   packaging: Packaging;
+  /** Qué hay, si es un objeto. */
+  descripcion: string | null;
   cantidad: number;
   profundidad: number | null;
   unidadPlural: string;
@@ -777,14 +790,15 @@ export async function posicionConBultos(id: number): Promise<{
   if (!posicion) return null;
 
   const filas = (await db.execute(sql`
-    select b.id, b.codigo, b.packaging, b.cantidad, pos.profundidad,
+    select b.id, b.codigo, b.packaging, b.cantidad, b.descripcion, pos.profundidad,
            c.modelo_id, m.nombre as modelo_nombre, c.cantidad as cantidad_modelo,
            l.unidad_plural
       from bultos b
       join posiciones pos on pos.id = b.posicion_id
-      join bulto_contenido c on c.bulto_id = b.id
-      join modelos m on m.id = c.modelo_id
-      join lineas l on l.id = m.linea_id
+      -- left: un objeto no tiene contenido y tiene que aparecer igual.
+      left join bulto_contenido c on c.bulto_id = b.id
+      left join modelos m on m.id = c.modelo_id
+      left join lineas l on l.id = m.linea_id
      where b.posicion_id = ${id} and b.estado = 'ubicado'
      order by b.codigo, m.orden, m.nombre
   `)) as unknown as Array<{
@@ -792,11 +806,12 @@ export async function posicionConBultos(id: number): Promise<{
     codigo: string;
     packaging: Packaging;
     cantidad: number;
+    descripcion: string | null;
     profundidad: number | null;
-    modelo_id: number;
-    modelo_nombre: string;
-    cantidad_modelo: number;
-    unidad_plural: string;
+    modelo_id: number | null;
+    modelo_nombre: string | null;
+    cantidad_modelo: number | null;
+    unidad_plural: string | null;
   }>;
 
   const bultos = new Map<number, BultoEnPosicion>();
@@ -806,17 +821,20 @@ export async function posicionConBultos(id: number): Promise<{
         id: f.id,
         codigo: f.codigo,
         packaging: f.packaging,
+        descripcion: f.descripcion,
         cantidad: f.cantidad,
         profundidad: f.profundidad,
-        unidadPlural: f.unidad_plural,
+        unidadPlural: f.unidad_plural ?? "unidades",
         contenido: [],
       });
     }
-    bultos.get(f.id)!.contenido.push({
-      modeloId: f.modelo_id,
-      nombre: f.modelo_nombre,
-      cantidad: f.cantidad_modelo,
-    });
+    if (f.modelo_id != null) {
+      bultos.get(f.id)!.contenido.push({
+        modeloId: f.modelo_id,
+        nombre: f.modelo_nombre!,
+        cantidad: f.cantidad_modelo!,
+      });
+    }
   }
 
   return { posicion, bultos: [...bultos.values()] };
@@ -858,6 +876,8 @@ export type CeldaDelMapa = {
     /** De quién es lo que lleva, y si es de otra empresa que la del grupo. */
     empresas: string | null;
     ajeno: boolean;
+    /** Ocupa lugar pero no es producto. `contenido` es su descripción. */
+    esObjeto: boolean;
     lineaNombre: string;
     lineaOrden: number;
     unidadPlural: string;
@@ -910,9 +930,11 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
            b.id as bulto_id, b.codigo as bulto_codigo, b.packaging, b.cantidad,
            b.chequeado_en, b.chequeos_ok, b.chequeos_total,
            l.nombre as linea_nombre, l.orden as linea_orden, l.unidad_plural,
-           (select string_agg(m2.nombre || ' ' || c2.cantidad, ' + ' order by m2.nombre)
-              from bulto_contenido c2 join modelos m2 on m2.id = c2.modelo_id
-             where c2.bulto_id = b.id) as contenido,
+           coalesce(
+             (select string_agg(m2.nombre || ' ' || c2.cantidad, ' + ' order by m2.nombre)
+                from bulto_contenido c2 join modelos m2 on m2.id = c2.modelo_id
+               where c2.bulto_id = b.id),
+             b.descripcion) as contenido,
            (select bi.codigo from bultos bi where bi.id = p.bloqueada_por_bulto_id) as invasor
       from posiciones p
       join grupos g on g.id = p.grupo_id
@@ -1005,6 +1027,7 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
               cantidad: f.cantidad!,
               empresas: f.empresas,
               ajeno: esAjeno(f.empresa_id, f.empresas_ids ?? []),
+              esObjeto: f.packaging === "objeto",
               lineaNombre: f.linea_nombre ?? "Sin línea",
               lineaOrden: f.linea_orden ?? 99,
               unidadPlural: f.unidad_plural ?? "unidades",
@@ -1138,6 +1161,8 @@ export type MovimientoDelHistorial = {
   motivo: string | null;
   usuario: string;
   nota: string | null;
+  /** Qué hay, si el bulto es un objeto. */
+  descripcion: string | null;
   creadoEn: Date;
   anulado: boolean;
   motivoAnulacion: string | null;
@@ -1158,7 +1183,7 @@ export async function historial(
              m.packaging_antes, m.cantidad_antes, m.cantidad,
              m.posicion_desde_codigo, m.posicion_hasta_codigo,
              m.motivo_nombre, m.usuario_nombre, m.nota, m.creado_en,
-             m.anulado_en, m.motivo_anulacion,
+             m.anulado_en, m.motivo_anulacion, m.descripcion,
              (select json_agg(json_build_object(
                 'modelo', l.modelo_nombre, 'antes', l.cantidad_antes, 'despues', l.cantidad)
                 order by l.modelo_nombre)
@@ -1182,6 +1207,7 @@ export async function historial(
         motivo_nombre: string | null;
         usuario_nombre: string;
         nota: string | null;
+        descripcion: string | null;
         creado_en: Date | string;
         anulado_en: Date | string | null;
         motivo_anulacion: string | null;
@@ -1209,6 +1235,7 @@ export async function historial(
       motivo: f2.motivo_nombre,
       usuario: f2.usuario_nombre,
       nota: f2.nota,
+      descripcion: f2.descripcion,
       creadoEn: comoFecha(f2.creado_en)!,
       anulado: f2.anulado_en != null,
       motivoAnulacion: f2.motivo_anulacion,
@@ -1230,12 +1257,17 @@ export async function historialPlano(f: FiltrosHistorial): Promise<
   const filas = (await db.execute(sql`
     select m.creado_en, m.tipo, m.bulto_codigo, m.linea_codigo,
            m.packaging_antes, m.packaging,
-           l.modelo_nombre, l.cantidad_antes, l.cantidad,
+           -- Un objeto no tiene líneas: sale una fila con su descripción en
+           -- vez del modelo y diferencia cero, para que el CSV lo muestre sin
+           -- que sume en ninguna tabla dinámica.
+           coalesce(l.modelo_nombre, 'Objeto: ' || m.descripcion) as modelo_nombre,
+           coalesce(l.cantidad_antes, 0) as cantidad_antes,
+           coalesce(l.cantidad, 0) as cantidad,
            m.posicion_desde_codigo, m.posicion_hasta_codigo,
            m.motivo_nombre, m.usuario_nombre, m.nota,
            m.anulado_en, m.motivo_anulacion
       from movimientos m
-      join movimiento_lineas l on l.movimiento_id = m.id
+      left join movimiento_lineas l on l.movimiento_id = m.id
      where ${dondeHistorial(f)}
      order by m.creado_en desc, m.id desc, l.modelo_nombre
      limit 20000
@@ -1266,7 +1298,7 @@ export async function historialPlano(f: FiltrosHistorial): Promise<
         hour: "2-digit",
         minute: "2-digit",
       }),
-      Movimiento: f2.tipo,
+      Movimiento: ETIQUETA_MOVIMIENTO[f2.tipo] ?? f2.tipo,
       Bulto: f2.bulto_codigo,
       Linea: f2.linea_codigo,
       Modelo: f2.modelo_nombre,

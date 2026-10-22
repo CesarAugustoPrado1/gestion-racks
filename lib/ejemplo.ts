@@ -535,6 +535,57 @@ export async function cargarDatosDeEjemplo(
     );
   }
 
+  /* Objetos: ocupan lugar y no son producto ------------------------------- */
+
+  /**
+   * Dos posiciones con cosas que no son de la producción, para que el tablero
+   * muestre cómo se ven: ocupadas, sin línea, y fuera del stock.
+   */
+  const OBJETOS = ["6 sillas a reparar", "Aire acondicionado viejo"];
+  const vacias = posicionesCreadas.filter((p) => p.usable && p.bultos.length === 0);
+  for (const [i, descripcion] of OBJETOS.entries()) {
+    const pos = vacias[Math.floor(((i + 1) * vacias.length) / (OBJETOS.length + 1))];
+    if (!pos) break;
+    numero++;
+    const codigo = `P-${String(numero).padStart(5, "0")}`;
+    const subido = haceDias(10 + i * 7);
+
+    const [bulto] = await tx
+      .insert(bultos)
+      .values({
+        codigo,
+        packaging: "objeto",
+        cantidad: 0,
+        descripcion,
+        estado: "ubicado",
+        posicionId: pos.id,
+        creadoEn: subido,
+        creadoPor: usuario.id,
+        vistoEn: subido,
+      })
+      .returning({ id: bultos.id });
+    resumen.bultos++;
+    pos.bultos.push({ id: bulto.id, desde: subido });
+
+    // Sin líneas: un objeto no suma ni resta en el stock.
+    await tx.insert(movimientos).values({
+      bultoId: bulto.id,
+      bultoCodigo: codigo,
+      lineaCodigo: "objeto",
+      tipo: "meter",
+      cantidadAntes: 0,
+      cantidad: 0,
+      packaging: "objeto",
+      descripcion,
+      posicionHastaId: pos.id,
+      posicionHastaCodigo: pos.codigo,
+      usuarioId: usuario.id,
+      usuarioNombre: usuario.nombre,
+      creadoEn: subido,
+    });
+    resumen.movimientos++;
+  }
+
   /* Bultos sin ubicar: el limbo ------------------------------------------- */
 
   /**

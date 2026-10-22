@@ -118,6 +118,19 @@ function pintarBase(
     };
   }
 
+  /**
+   * Un objeto no es de ninguna línea: lleva su propia marca, gris oscuro y con
+   * borde punteado, para que no se confunda ni con producto ni con libre.
+   */
+  if (b.esObjeto) {
+    return {
+      fondo: "bg-slate-200 border border-dashed border-slate-500",
+      texto: "text-slate-700",
+      letra: "Ob",
+      titulo: `${p} · objeto: ${b.contenido} · ${b.codigo}`,
+    };
+  }
+
   const fondos = [
     "bg-linea-1/15 ring-1 ring-linea-1/40",
     "bg-linea-2/15 ring-1 ring-linea-2/40",

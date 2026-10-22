@@ -350,9 +350,47 @@ Empresas es tabla y no enum: el nombre no tiene semántica en el código, solo s
 compara. Viene cargada por la migración y el borrado de datos de prueba no la
 toca, igual que los motivos.
 
+### 3.11 Objetos: lo que ocupa lugar sin ser producto
+
+A veces en una posición hay algo que no es de la producción ni de la venta:
+sillas a reparar, un aire acondicionado viejo. Si el sistema no lo sabe, la
+posición aparece libre y el clarkista va y está llena. Y si se carga como un
+modelo falso, ensucia el stock.
+
+Es un **packaging más**, `objeto`, porque el packaging ya dice qué clase de
+bulto es y cada valor tiene su regla:
+
+- **No lleva contenido** —ni modelo ni cantidad— sino una **descripción** de
+  texto libre, obligatoria (`bultos.descripcion`). Es la "nota del contenido del
+  palet"; la nota del movimiento sigue siendo aparte.
+- **Ocupa la posición** como cualquier bulto: el tablero la muestra llena con su
+  propia marca (`Ob`, borde punteado), cuenta en la ocupación y no se ofrece
+  como libre.
+- **No es stock.** Sus movimientos no tienen líneas, así que no suman ni restan
+  en ninguna cuenta: no aparece en Stock, ni en las solapas, ni en la
+  confiabilidad por línea y modelo, y la invariante "sumar el historial da el
+  stock vivo" no se entera de que existe. El historial y el CSV sí lo muestran,
+  con la descripción congelada en `movimientos.descripcion`.
+- **Sale entero y sin motivo.** No hay venta ni rotura que medir; lo que haga
+  falta decir va en la nota.
+- **Control lo verifica** igual que a un palet: puede confirmarlo, decir que no
+  está, o registrar uno que encontró. Lo que no puede es corregirle la cantidad,
+  porque no tiene.
+- **No tiene empresa ni altura.** No se valida contra la altura del nivel —no
+  hay dos objetos iguales— y no genera el aviso de rack ajeno.
+
+Es distinto de la lista de exclusión (§3.9): la exclusión dice "este lugar no se
+usa"; el objeto dice "este lugar está ocupado por algo que se puede mover".
+
 ---
 
 ## 4. Movimientos
+
+**En pantalla se llaman Ingreso, Egreso, Reubicación y Ajuste.** En la base
+siguen siendo `meter`, `sacar`, `mover` y `ajuste`: el nombre que se lee vive en
+`ETIQUETA_MOVIMIENTO` (lib/formato.ts) y cambiarlo no justifica migrar el
+historial. El ajuste es solo de control y admin: ninguna acción del autoelevador
+lo escribe.
 
 Se aplica la **regla de oro** de secaderos (§3.2), que es la decisión más
 importante del modelo:

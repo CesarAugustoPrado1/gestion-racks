@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { db } from "../db";
 import { autorizar } from "../auth";
-import { total } from "../bultos";
+import { total, validarDescripcion } from "../bultos";
 import type { Packaging } from "../db/schema";
 import {
   aplicarMovimiento,
@@ -23,7 +23,8 @@ import {
 import { ejecutar, fallar, type Resultado } from "./comun";
 
 /**
- * Las tres operaciones del autoelevador: meter, sacar y mover.
+ * Las tres operaciones del autoelevador: ingreso (`meter`), egreso (`sacar`) y
+ * reubicación (`mover`). El ajuste NO está acá: es de control, en control.ts.
  *
  * Todas corren dentro de una transacción y empiezan bloqueando. Todas terminan
  * en `aplicarMovimiento`, que es el único lugar del sistema que escribe un
@@ -47,8 +48,11 @@ const esquemaNota = z
 /* -------------------------------------------------------------------------- */
 
 const esquemaMeter = z.object({
-  contenido: z.array(esquemaLinea).min(1, "Elegí al menos un modelo."),
-  packaging: z.enum(["suelto", "palet", "optimizado"]),
+  /** Vacío solo para un objeto, que no lleva modelos. */
+  contenido: z.array(esquemaLinea),
+  packaging: z.enum(["suelto", "palet", "optimizado", "objeto"]),
+  /** Qué hay. Obligatoria para un objeto, ignorada para producto. */
+  descripcion: z.string().trim().max(200).optional(),
   /**
    * `null` es el limbo, y es una opción legítima: si las posiciones previstas
    * están llenas o reservadas, el palet no puede dejar de existir solo porque
@@ -64,8 +68,14 @@ export async function meter(
   return ejecutar(async () => {
     const sesion = await autorizar("autoelevador", "admin");
     const datos = esquemaMeter.parse(entrada);
+    const objeto = datos.packaging === "objeto";
 
+    if (!objeto && datos.contenido.length === 0) fallar("Elegí al menos un modelo.");
     exigirComposicion(datos.packaging as Packaging, datos.contenido);
+    if (objeto) {
+      const problema = validarDescripcion(datos.descripcion);
+      if (problema) fallar(problema);
+    }
 
     return db.transaction(async (tx) => {
       const destino = datos.posicionId
@@ -113,6 +123,7 @@ export async function meter(
         invadeArriba: encaje.invadeArriba ? encaje.arriba : null,
         usuario: { id: sesion.uid, nombre: sesion.nombre },
         nota: datos.nota,
+        descripcionDespues: objeto ? datos.descripcion!.trim() : null,
       });
 
       revalidatePath("/", "layout");
@@ -127,7 +138,8 @@ export async function meter(
 
 const esquemaSacar = z.object({
   bultoId: z.number().int().positive(),
-  motivoId: z.number().int().positive("Elegí un motivo."),
+  /** Obligatorio para producto. Un objeto sale sin motivo: alcanza la nota. */
+  motivoId: z.number().int().positive("Elegí un motivo.").optional(),
   /** Sin esto, sale todo. Con esto, solo lo que se indica de cada modelo. */
   parcial: z.array(esquemaLinea).optional(),
   nota: esquemaNota,
@@ -151,6 +163,29 @@ export async function sacar(
         await exigirAccesible(tx, pos);
       }
 
+      /**
+       * Un objeto sale entero, sin motivo y sin cantidades: no es stock, así que
+       * no hay venta ni rotura que medir. Lo que pasó va en la nota.
+       */
+      if (bulto.packaging === "objeto") {
+        if (datos.parcial && datos.parcial.length > 0) {
+          fallar("Un objeto sale entero: no tiene cantidades.");
+        }
+        await aplicarMovimiento(tx, {
+          tipo: "sacar",
+          bulto,
+          contenidoDespues: [],
+          packagingDespues: "objeto",
+          estadoDespues: "salido",
+          posicionDestino: null,
+          usuario: { id: sesion.uid, nombre: sesion.nombre },
+          nota: datos.nota,
+        });
+        revalidatePath("/", "layout");
+        return { codigo: bulto.codigo, salieron: 0, quedaron: 0, convertido: false };
+      }
+
+      if (datos.motivoId == null) fallar("Elegí un motivo.");
       const motivo = await exigirMotivo(tx, datos.motivoId, "salida");
 
       const actual = new Map(bulto.contenido.map((c) => [c.modeloId, c.cantidad]));

@@ -16,6 +16,21 @@ export const ETIQUETA_PACKAGING: Record<string, string> = {
   suelto: "Suelto",
   palet: "Palet",
   optimizado: "Optimizado",
+  objeto: "Objeto",
+};
+
+/**
+ * Los nombres de los movimientos, como se dicen en la planta.
+ *
+ * En la base siguen siendo `meter`, `sacar`, `mover` y `ajuste`: cambiar el
+ * nombre que se lee no justifica migrar el historial. Toda pantalla y el CSV
+ * leen de acá, así que el nombre se cambia en un solo lugar.
+ */
+export const ETIQUETA_MOVIMIENTO: Record<string, string> = {
+  meter: "Ingreso",
+  sacar: "Egreso",
+  mover: "Reubicación",
+  ajuste: "Ajuste",
 };
 
 /** El orden de las solapas, que es el que pidió la planta. */

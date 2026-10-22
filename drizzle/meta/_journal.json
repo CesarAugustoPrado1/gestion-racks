@@ -50,6 +50,13 @@
       "when": 1790300000000,
       "tag": "0006_empresas-y-exclusiones",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790400000000,
+      "tag": "0007_objetos",
+      "breakpoints": true
     }
   ]
 }

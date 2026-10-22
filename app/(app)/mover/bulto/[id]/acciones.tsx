@@ -20,6 +20,7 @@ type Bulto = {
   unidadPlural: string;
   empresas: string | null;
   empresasIds: number[];
+  esObjeto: boolean;
 };
 
 export function AccionesBulto({
@@ -44,14 +45,14 @@ export function AccionesBulto({
             className="boton-peligro"
             onClick={() => setModo("sacar")}
           >
-            Sacar del rack
+            Egreso
           </button>
           <button
             type="button"
             className="boton-secundario"
             onClick={() => setModo("mover")}
           >
-            Cambiar de lugar
+            Reubicar
           </button>
         </div>
       )}
@@ -112,9 +113,50 @@ function Sacar({
   );
   const listo = motivoId != null && salen > 0 && !excedido;
 
+  /**
+   * Un objeto sale entero y sin motivo: no es stock, así que no hay venta ni
+   * rotura que medir. Lo que haga falta decir va en la nota del movimiento.
+   */
+  if (bulto.esObjeto) {
+    return (
+      <div className="tarjeta space-y-4 p-5">
+        <h2 className="text-base font-bold text-slate-900">Egreso del objeto</h2>
+        {error && <Aviso>{error}</Aviso>}
+        <input
+          className="campo"
+          value={nota}
+          onChange={(e) => setNota(e.target.value)}
+          placeholder="Nota (opcional): a dónde va, quién lo llevó…"
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" className="boton-secundario" onClick={cancelar}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="boton-peligro"
+            disabled={enviando}
+            onClick={() => {
+              limpiar();
+              void ejecutar(
+                () => sacar({ bultoId: bulto.id, nota: nota.trim() || undefined }),
+                () => {
+                  router.push("/mover");
+                  router.refresh();
+                },
+              );
+            }}
+          >
+            {enviando ? "Guardando…" : "Registrar egreso"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="tarjeta space-y-4 p-5">
-      <h2 className="text-base font-bold text-slate-900">Sacar del rack</h2>
+      <h2 className="text-base font-bold text-slate-900">Egreso del rack</h2>
       {error && <Aviso>{error}</Aviso>}
 
       <div className="grid grid-cols-2 gap-2">
@@ -228,7 +270,7 @@ function Sacar({
             );
           }}
         >
-          {enviando ? "Sacando…" : `Sacar ${numero(salen)}`}
+          {enviando ? "Guardando…" : `Egreso de ${numero(salen)}`}
         </button>
       </div>
     </div>
@@ -251,11 +293,12 @@ function Mover({
 
   const listo = alLimbo || posicionId != null;
   const destino = !alLimbo ? posiciones.find((p) => p.id === posicionId) : undefined;
-  const ajeno = destino != null && esAjeno(destino.empresaId, bulto.empresasIds);
+  const ajeno =
+    !bulto.esObjeto && destino != null && esAjeno(destino.empresaId, bulto.empresasIds);
 
   return (
     <div className="tarjeta space-y-4 p-5">
-      <h2 className="text-base font-bold text-slate-900">Cambiar de lugar</h2>
+      <h2 className="text-base font-bold text-slate-900">Reubicación</h2>
       <p className="text-sm text-slate-500">
         No suma ni resta: el bulto sigue en el rack y sigue disponible.
       </p>
@@ -323,7 +366,7 @@ function Mover({
             );
           }}
         >
-          {enviando ? "Moviendo…" : "Mover"}
+          {enviando ? "Guardando…" : "Reubicar"}
         </button>
       </div>
     </div>

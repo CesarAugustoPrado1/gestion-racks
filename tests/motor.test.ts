@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { baseDeTest, sembrar, urlDeTest } from "./ayuda/base";
 import {
   aplicarMovimiento,
+  bloquearBulto,
   bloquearPosicion,
   crearBulto,
   exigirAltura,
@@ -251,10 +252,12 @@ describe("la invariante del stock", { skip: !hay && "sin base local" }, () => {
     assert.equal(filas.length, 0);
   });
 
-  test("ningún movimiento quedó sin líneas", async () => {
+  test("ningún movimiento de producto quedó sin líneas", async () => {
+    // Los de un objeto no tienen líneas a propósito: no son stock.
     const filas = (await base.db.execute(sql`
       select m.id from movimientos m
-       where not exists (select 1 from movimiento_lineas l where l.movimiento_id = m.id)
+       where m.packaging <> 'objeto'
+         and not exists (select 1 from movimiento_lineas l where l.movimiento_id = m.id)
     `)) as unknown as unknown[];
     assert.equal(filas.length, 0);
   });
@@ -649,5 +652,125 @@ describe("la holgura de 10 cm arriba del bulto", { skip: !hay && "sin base local
       await meter(tx as Tx, id, "palet", [{ modeloId: datos.patagonica.id, cantidad: 40 }]);
     });
     await exigirQueCuadre("después de meter con holgura justa");
+  });
+});
+
+/**
+ * Un objeto -sillas a reparar, un aire viejo- ocupa la posición pero no es
+ * stock. Lo que se cuida acá es justamente eso: que ocupe, y que no sume.
+ */
+describe("objetos: ocupan lugar y no son stock", { skip: !hay && "sin base local" }, () => {
+  let objetoId = 0;
+  let posId = 0;
+
+  before(async () => {
+    if (!hay) return;
+    const [g] = await base.db
+      .insert(schema.grupos)
+      .values({ codigo: "O", accesibilidad: "selectivo", ancho: 2, niveles: 1, unidades: 1 })
+      .returning();
+    const filas = await base.db
+      .insert(schema.posiciones)
+      .values([
+        { grupoId: g.id, codigo: "01-1", unidad: 1, columna: 1, nivel: 1 },
+        { grupoId: g.id, codigo: "02-1", unidad: 1, columna: 2, nivel: 1 },
+      ])
+      .returning();
+    posId = filas[0].id;
+  });
+
+  test("ingresar un objeto no toca el stock ni deja líneas", async () => {
+    const antes = await segunElHistorial();
+    await base.db.transaction(async (tx) => {
+      const t = tx as Tx;
+      const destino = await bloquearPosicion(t, posId);
+      exigirLibre(destino);
+      const nuevo = await crearBulto(t, {
+        packaging: "objeto",
+        estado: "ubicado",
+        usuarioId: datos.usuario.id,
+      });
+      objetoId = nuevo.id;
+      await aplicarMovimiento(t, {
+        tipo: "meter",
+        bulto: {
+          id: nuevo.id,
+          codigo: nuevo.codigo,
+          packaging: "objeto",
+          cantidad: 0,
+          estado: "ubicado",
+          posicionId: null,
+          posicionCodigo: null,
+          contenido: [],
+          lineaCodigo: "",
+        },
+        contenidoDespues: [],
+        packagingDespues: "objeto",
+        estadoDespues: "ubicado",
+        posicionDestino: { id: destino.id, codigo: destino.codigo },
+        usuario: { id: datos.usuario.id, nombre: datos.usuario.nombre },
+        descripcionDespues: "6 sillas a reparar",
+      });
+    });
+
+    assert.deepEqual(await segunElHistorial(), antes, "el historial de stock no cambió");
+    const [m] = (await base.db.execute(sql`
+      select m.descripcion, m.linea_codigo,
+             (select count(*)::int from movimiento_lineas l where l.movimiento_id = m.id) as lineas
+        from movimientos m where m.bulto_id = ${objetoId}
+    `)) as unknown as Array<{ descripcion: string; linea_codigo: string; lineas: number }>;
+    assert.equal(m.descripcion, "6 sillas a reparar");
+    assert.equal(m.linea_codigo, "objeto");
+    assert.equal(m.lineas, 0);
+    await exigirQueCuadre("después de ingresar un objeto");
+  });
+
+  test("la posición queda ocupada: no entra otra cosa", async () => {
+    await assert.rejects(
+      () =>
+        base.db.transaction(async (tx) => {
+          exigirLibre(await bloquearPosicion(tx as Tx, posId));
+        }),
+      /ya tiene el bulto/,
+    );
+  });
+
+  test("egresarlo libera la posición y tampoco toca el stock", async () => {
+    const antes = await segunElHistorial();
+    await base.db.transaction(async (tx) => {
+      const t = tx as Tx;
+      const b = await bloquearBulto(t, objetoId);
+      assert.equal(b.descripcion, "6 sillas a reparar", "el bulto conserva su descripción");
+      await aplicarMovimiento(t, {
+        tipo: "sacar",
+        bulto: b,
+        contenidoDespues: [],
+        packagingDespues: "objeto",
+        estadoDespues: "salido",
+        posicionDestino: null,
+        usuario: { id: datos.usuario.id, nombre: datos.usuario.nombre },
+        nota: "se las llevó el tapicero",
+      });
+    });
+    assert.deepEqual(await segunElHistorial(), antes);
+    await base.db.transaction(async (tx) => {
+      exigirLibre(await bloquearPosicion(tx as Tx, posId));
+    });
+    const [m] = (await base.db.execute(sql`
+      select descripcion, nota from movimientos
+       where bulto_id = ${objetoId} and tipo = 'sacar'
+    `)) as unknown as Array<{ descripcion: string; nota: string }>;
+    assert.equal(m.descripcion, "6 sillas a reparar", "el egreso dice qué salió");
+    assert.equal(m.nota, "se las llevó el tapicero");
+  });
+
+  test("un ingreso de producto queda con su línea en el historial", async () => {
+    // Antes salía vacía: el bulto recién creado todavía no tenía contenido.
+    const [m] = (await base.db.execute(sql`
+      select linea_codigo from movimientos
+       where tipo = 'meter' and packaging <> 'objeto'
+       order by id limit 1
+    `)) as unknown as Array<{ linea_codigo: string }>;
+    assert.equal(m.linea_codigo, "piedras");
   });
 });

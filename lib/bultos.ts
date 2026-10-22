@@ -30,6 +30,12 @@ export function validarComposicion(
   packaging: Packaging,
   contenido: LineaContenido[],
 ): string | null {
+  // Un objeto no es producto: no lleva modelos, se describe con texto.
+  if (packaging === "objeto") {
+    return contenido.length > 0
+      ? "Un objeto no lleva modelos: lo que hay se describe con texto."
+      : null;
+  }
   if (contenido.length === 0) {
     return "El bulto tiene que llevar al menos un modelo.";
   }
@@ -47,6 +53,20 @@ export function validarComposicion(
       "packaging."
     );
   }
+  return null;
+}
+
+/** Si el bulto es un objeto: algo que ocupa lugar pero no es producto. */
+export const esObjeto = (packaging: Packaging | string): boolean => packaging === "objeto";
+
+/**
+ * Qué hay en un objeto. Obligatorio: es lo único que dice qué ocupa la
+ * posición, y "objeto" a secas no le sirve a nadie que vaya a buscarlo.
+ */
+export function validarDescripcion(descripcion: string | null | undefined): string | null {
+  const d = (descripcion ?? "").trim();
+  if (d.length < 3) return "Escribí qué hay: por ejemplo «6 sillas a reparar».";
+  if (d.length > 200) return "La descripción es muy larga.";
   return null;
 }
 
