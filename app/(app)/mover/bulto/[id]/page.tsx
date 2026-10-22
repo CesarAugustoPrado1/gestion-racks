@@ -58,6 +58,14 @@ export default async function PantallaBulto({
       )}
 
       <div className="tarjeta mb-4 p-5">
+        {bulto.esObjeto && (
+          <>
+            <p className="text-lg font-bold text-slate-900">{bulto.contenido}</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Objeto: ocupa la posición pero no es producto ni cuenta en el stock.
+            </p>
+          </>
+        )}
         <ul className="divide-y divide-slate-100">
           {contenido.map((c) => (
             <li key={c.modeloId} className="flex items-baseline justify-between py-2">
@@ -72,7 +80,7 @@ export default async function PantallaBulto({
         </ul>
         <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
           <span className="text-sm text-slate-500">
-            Total: {numero(bulto.cantidad)} {bulto.unidadPlural}
+            {bulto.esObjeto ? "" : `Total: ${numero(bulto.cantidad)} ${bulto.unidadPlural}`}
           </span>
           <ChipConfianza confianza={confianza(bulto, semivida)} fila={bulto} compacto />
         </div>
@@ -88,6 +96,7 @@ export default async function PantallaBulto({
           unidadPlural: bulto.unidadPlural,
           empresas: bulto.empresas,
           empresasIds: bulto.empresasIds,
+          esObjeto: bulto.esObjeto,
         }}
         contenido={contenido}
         motivos={motivos}

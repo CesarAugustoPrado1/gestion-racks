@@ -6,19 +6,13 @@ import { semividaDias } from "@/lib/configuracion";
 import { confianza } from "@/lib/confiabilidad";
 import { ChipConfianza } from "@/components/confiabilidad";
 import { nombreDeNivel, nombreDeProfundidad } from "@/lib/posiciones";
-import { ETIQUETA_PACKAGING, numero } from "@/lib/formato";
+import { ETIQUETA_MOVIMIENTO, ETIQUETA_PACKAGING, numero } from "@/lib/formato";
 import { Aviso, Titulo } from "@/components/ui";
 import { avisoAjeno } from "@/lib/uso";
 import { puedeVer } from "@/lib/permisos";
 
 export const dynamic = "force-dynamic";
 
-const ETIQUETA_TIPO: Record<string, string> = {
-  meter: "Metió",
-  sacar: "Sacó",
-  mover: "Movió",
-  ajuste: "Ajustó",
-};
 
 export default async function FichaDePosicion({
   params,
@@ -84,7 +78,9 @@ export default async function FichaDePosicion({
             </p>
             <p className="mt-1 text-sm text-slate-600">
               {ETIQUETA_PACKAGING[celda.bulto.packaging]} ·{" "}
-              {numero(celda.bulto.cantidad)} {celda.bulto.unidadPlural} ·{" "}
+              {celda.bulto.esObjeto
+                ? "no es producto · "
+                : `${numero(celda.bulto.cantidad)} ${celda.bulto.unidadPlural} · `}
               <span className="codigo">{celda.bulto.codigo}</span>
             </p>
             <div className="mt-3">
@@ -121,7 +117,7 @@ export default async function FichaDePosicion({
             href={`/mover/bulto/${celda.bulto.id}`}
             className="boton-secundario"
           >
-            Mover o sacar
+            Egreso o reubicación
           </Link>
         )}
       </div>
@@ -138,10 +134,10 @@ export default async function FichaDePosicion({
           {movimientos.map((m) => (
             <li key={m.id} className="px-4 py-2.5 text-sm">
               <span className="font-semibold text-slate-700">
-                {ETIQUETA_TIPO[m.tipo] ?? m.tipo}
+                {ETIQUETA_MOVIMIENTO[m.tipo] ?? m.tipo}
               </span>{" "}
               <span className="codigo text-slate-900">{m.bultoCodigo}</span>
-              {m.tipo === "sacar" && (
+              {m.tipo === "sacar" && m.cantidadAntes > 0 && (
                 <> · {numero(m.cantidadAntes - m.cantidad)} salieron</>
               )}
               {m.motivo && ` · ${m.motivo}`}

@@ -49,7 +49,9 @@ export default async function PantallaRacks({
   // Las líneas presentes, en su orden, para el color y la leyenda.
   const lineas = [
     ...new Map(
-      ocupadas.map((c) => [c.bulto!.lineaNombre, c.bulto!.lineaOrden]),
+      ocupadas
+        .filter((c) => !c.bulto!.esObjeto)
+        .map((c) => [c.bulto!.lineaNombre, c.bulto!.lineaOrden]),
     ),
   ].sort((a, b) => a[1] - b[1]);
   const abrev = abreviaturas(lineas.map(([nombre]) => nombre));
@@ -234,6 +236,14 @@ function Leyenda({
         <span className="h-6 w-6 rounded bg-white ring-1 ring-slate-200" />
         libre
       </span>
+      {vista === "contenido" && (
+        <span className="flex items-center gap-1.5">
+          <span className="flex h-6 w-6 items-center justify-center rounded border border-dashed border-slate-500 bg-slate-200 text-[11px] font-bold text-slate-700">
+            Ob
+          </span>
+          objeto (no es producto)
+        </span>
+      )}
       <span className="flex items-center gap-1.5">
         <span className="fuera-de-uso flex h-6 w-6 items-center justify-center rounded text-[11px] font-bold text-slate-400 ring-1 ring-slate-300">
           ✕

@@ -5,19 +5,13 @@ import {
   opcionesDeHistorial,
   type FiltrosHistorial,
 } from "@/lib/consultas";
-import { ETIQUETA_PACKAGING, numero } from "@/lib/formato";
+import { ETIQUETA_MOVIMIENTO, ETIQUETA_PACKAGING, numero } from "@/lib/formato";
 import { Titulo } from "@/components/ui";
 import { Filtros } from "./filtros";
 
 export const metadata = { title: "Movimientos · Racks" };
 export const dynamic = "force-dynamic";
 
-const ETIQUETA_TIPO: Record<string, string> = {
-  meter: "Metió",
-  sacar: "Sacó",
-  mover: "Movió",
-  ajuste: "Ajustó",
-};
 
 /** Un tono por tipo, para poder barrer la lista con el ojo. */
 const COLOR_TIPO: Record<string, string> = {
@@ -114,7 +108,7 @@ export default async function PantallaMovimientos({
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`chip ${COLOR_TIPO[m.tipo] ?? "bg-slate-100"}`}>
-                    {ETIQUETA_TIPO[m.tipo] ?? m.tipo}
+                    {ETIQUETA_MOVIMIENTO[m.tipo] ?? m.tipo}
                   </span>
                   <span className="codigo text-sm text-slate-900">
                     {m.bultoCodigo}
@@ -130,6 +124,9 @@ export default async function PantallaMovimientos({
                 </div>
 
                 <p className="mt-1.5 text-sm text-slate-700">
+                  {m.descripcion && m.lineas.length === 0 && (
+                    <span>{m.descripcion}</span>
+                  )}
                   {m.lineas.map((l, i) => (
                     <span key={l.modelo}>
                       {i > 0 && " · "}

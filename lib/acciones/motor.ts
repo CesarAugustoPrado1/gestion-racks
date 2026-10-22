@@ -51,12 +51,14 @@ export type BultoVivo = {
   posicionCodigo: string | null;
   contenido: Array<{ modeloId: number; modeloNombre: string; cantidad: number }>;
   lineaCodigo: string;
+  /** Qué hay, si es un objeto. Null en los de producto. */
+  descripcion?: string | null;
 };
 
 /** `SELECT ... FOR UPDATE` sobre el bulto, con todo lo que hace falta para decidir. */
 export async function bloquearBulto(tx: Tx, id: number): Promise<BultoVivo> {
   const filas = (await tx.execute(sql`
-    select b.id, b.codigo, b.packaging, b.cantidad, b.estado, b.posicion_id,
+    select b.id, b.codigo, b.packaging, b.cantidad, b.estado, b.posicion_id, b.descripcion,
            case when p.id is null then null
                 else g.codigo || '-' || p.codigo end as posicion_codigo
       from bultos b
@@ -72,6 +74,7 @@ export async function bloquearBulto(tx: Tx, id: number): Promise<BultoVivo> {
     estado: EstadoBulto;
     posicion_id: number | null;
     posicion_codigo: string | null;
+    descripcion: string | null;
   }>;
 
   if (filas.length === 0) fallar("Ese bulto no existe.");
@@ -99,6 +102,7 @@ export async function bloquearBulto(tx: Tx, id: number): Promise<BultoVivo> {
     estado: b.estado,
     posicionId: b.posicion_id,
     posicionCodigo: b.posicion_codigo,
+    descripcion: b.descripcion,
     lineaCodigo: contenido[0]?.linea_codigo ?? "",
     contenido: contenido.map((c) => ({
       modeloId: c.modelo_id,
@@ -409,7 +413,10 @@ export async function exigirAltura(
   pos: PosicionVivo,
   bulto: { packaging: Packaging; contenido: Array<{ modeloId: number }> },
 ): Promise<Encaje> {
-  if (bulto.packaging === "suelto") return { invadeArriba: false };
+  // Ni el suelto ni el objeto tienen una altura conocida: no hay dos iguales.
+  if (bulto.packaging === "suelto" || bulto.packaging === "objeto") {
+    return { invadeArriba: false };
+  }
   if (pos.alturaMaxCm == null) return { invadeArriba: false };
   const modeloId = bulto.contenido[0]?.modeloId;
   if (modeloId == null) return { invadeArriba: false };
@@ -535,6 +542,11 @@ export type Aplicacion = {
   motivo?: { id: number; nombre: string };
   nota?: string | null;
   /**
+   * Qué hay, si es un objeto. Se guarda en el bulto y se congela en el
+   * movimiento. Sin pasarlo, se conserva la que el bulto ya tenía.
+   */
+  descripcionDespues?: string | null;
+  /**
    * Si este movimiento cuenta como verificación de la posición. Nunca para los
    * del autoelevador: el que mueve es también quien puede haberse equivocado, y
    * usar su registro para subir la confiabilidad sería dejar que el dato se
@@ -565,13 +577,31 @@ export async function aplicarMovimiento(tx: Tx, a: Aplicacion): Promise<number> 
   }
 
   const cantidadDespues = total(a.contenidoDespues);
+  const descripcion =
+    a.descripcionDespues !== undefined ? a.descripcionDespues : (a.bulto.descripcion ?? null);
+
+  /**
+   * La línea del movimiento. Un bulto recién creado llega sin línea -todavía no
+   * tiene contenido-, así que se toma de lo que va a llevar. Sin esto, todos
+   * los ingresos quedaban en el historial con la línea vacía.
+   */
+  let lineaCodigo = a.bulto.lineaCodigo;
+  if (a.packagingDespues === "objeto") {
+    lineaCodigo = "objeto";
+  } else if (!lineaCodigo && a.contenidoDespues.length > 0) {
+    const [l] = (await tx.execute(sql`
+      select l.codigo from modelos m join lineas l on l.id = m.linea_id
+       where m.id = ${a.contenidoDespues[0].modeloId}
+    `)) as unknown as Array<{ codigo: string }>;
+    lineaCodigo = l?.codigo ?? "";
+  }
 
   const [mov] = await tx
     .insert(movimientos)
     .values({
       bultoId: a.bulto.id,
       bultoCodigo: a.bulto.codigo,
-      lineaCodigo: a.bulto.lineaCodigo,
+      lineaCodigo,
       tipo: a.tipo,
       cantidadAntes: a.bulto.cantidad,
       cantidad: cantidadDespues,
@@ -585,19 +615,27 @@ export async function aplicarMovimiento(tx: Tx, a: Aplicacion): Promise<number> 
       usuarioNombre: a.usuario.nombre,
       motivoId: a.motivo?.id ?? null,
       motivoNombre: a.motivo?.nombre ?? null,
+      descripcion,
       nota: a.nota ?? null,
     })
     .returning({ id: movimientos.id });
 
-  await tx.insert(movimientoLineas).values(
-    modelosTocados.map((modeloId) => ({
-      movimientoId: mov.id,
-      modeloId,
-      modeloNombre: nombres.get(modeloId) ?? "?",
-      cantidadAntes: antes.get(modeloId) ?? 0,
-      cantidad: despues.get(modeloId) ?? 0,
-    })),
-  );
+  /**
+   * Un objeto no tiene modelos, así que su movimiento no tiene líneas: es la
+   * forma en que queda en el historial -quién, cuándo, dónde- sin sumar ni
+   * restar en ninguna cuenta de stock.
+   */
+  if (modelosTocados.length > 0) {
+    await tx.insert(movimientoLineas).values(
+      modelosTocados.map((modeloId) => ({
+        movimientoId: mov.id,
+        modeloId,
+        modeloNombre: nombres.get(modeloId) ?? "?",
+        cantidadAntes: antes.get(modeloId) ?? 0,
+        cantidad: despues.get(modeloId) ?? 0,
+      })),
+    );
+  }
 
   /**
    * El contenido vivo se REEMPLAZA entero: es una foto del ahora, no un
@@ -632,6 +670,7 @@ export async function aplicarMovimiento(tx: Tx, a: Aplicacion): Promise<number> 
     .set({
       packaging: a.packagingDespues,
       cantidad: cantidadDespues,
+      descripcion,
       estado: a.estadoDespues,
       posicionId: a.posicionDestino?.id ?? null,
       vistoEn: new Date(),

@@ -4,7 +4,7 @@ import { modelosParaCargar, posicionesLibres } from "@/lib/consultas";
 import { Titulo } from "@/components/ui";
 import { FormularioMeter } from "./formulario";
 
-export const metadata = { title: "Meter al rack · Racks" };
+export const metadata = { title: "Ingreso al rack · Racks" };
 export const dynamic = "force-dynamic";
 
 export default async function PantallaMeter() {
@@ -19,7 +19,7 @@ export default async function PantallaMeter() {
       <Link href="/mover" className="mb-2 inline-block text-sm font-medium text-slate-500">
         ← Mover
       </Link>
-      <Titulo detalle="El bulto nace cuando entra al rack.">Meter al rack</Titulo>
+      <Titulo detalle="El bulto nace cuando entra al rack.">Ingreso al rack</Titulo>
 
       {modelos.length === 0 ? (
         <div className="tarjeta p-6 text-sm text-slate-600">

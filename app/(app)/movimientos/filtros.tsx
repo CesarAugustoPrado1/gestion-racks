@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ETIQUETA_MOVIMIENTO } from "@/lib/formato";
 
 type Valores = {
   desde?: string;
@@ -13,12 +14,10 @@ type Valores = {
   anulados?: string;
 };
 
-const TIPOS = [
-  { id: "meter", etiqueta: "Metió" },
-  { id: "sacar", etiqueta: "Sacó" },
-  { id: "mover", etiqueta: "Movió" },
-  { id: "ajuste", etiqueta: "Ajustó" },
-];
+const TIPOS = ["meter", "sacar", "mover", "ajuste"].map((id) => ({
+  id,
+  etiqueta: ETIQUETA_MOVIMIENTO[id],
+}));
 
 const dia = (atras: number) =>
   new Date(Date.now() - atras * 86400000).toISOString().slice(0, 10);

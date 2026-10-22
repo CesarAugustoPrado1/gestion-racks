@@ -6,19 +6,13 @@ import {
   bultosSinUbicar,
   type BultoEnLista,
 } from "@/lib/consultas";
-import { ETIQUETA_PACKAGING, numero } from "@/lib/formato";
+import { ETIQUETA_MOVIMIENTO, ETIQUETA_PACKAGING, numero } from "@/lib/formato";
 import { Titulo } from "@/components/ui";
 import { Buscador } from "./buscador";
 
 export const metadata = { title: "Mover · Racks" };
 export const dynamic = "force-dynamic";
 
-const ETIQUETA_TIPO: Record<string, string> = {
-  meter: "Metió",
-  sacar: "Sacó",
-  mover: "Movió",
-  ajuste: "Ajustó",
-};
 
 export default async function PantallaMover({
   searchParams,
@@ -41,7 +35,7 @@ export default async function PantallaMover({
       </Titulo>
 
       <Link href="/mover/meter" className="boton-primario mb-4 w-full">
-        + Meter al rack
+        + Ingreso al rack
       </Link>
 
       <Buscador inicial={q ?? ""} />
@@ -102,7 +96,7 @@ export default async function PantallaMover({
                   </span>
                   <span className="min-w-0 flex-1">
                     <strong className="font-semibold text-slate-700">
-                      {ETIQUETA_TIPO[m.tipo] ?? m.tipo}
+                      {ETIQUETA_MOVIMIENTO[m.tipo] ?? m.tipo}
                     </strong>{" "}
                     <span className="codigo text-slate-900">{m.bultoCodigo}</span>
                     {m.desde && m.hasta && (
@@ -118,7 +112,7 @@ export default async function PantallaMover({
                         a <span className="codigo">{m.hasta}</span>
                       </>
                     )}
-                    {m.tipo === "sacar" && (
+                    {m.tipo === "sacar" && m.cantidadAntes > 0 && (
                       <>
                         {" "}
                         · {numero(m.cantidadAntes - m.cantidad)} salieron
@@ -170,10 +164,12 @@ function FilaBulto({ bulto }: { bulto: BultoEnLista }) {
           <p className="mt-1 truncate text-sm text-slate-700">{bulto.contenido}</p>
           <p className="codigo text-xs text-slate-400">{bulto.codigo}</p>
         </div>
-        <div className="text-right">
-          <p className="cifra text-lg text-slate-900">{numero(bulto.cantidad)}</p>
-          <p className="text-[11px] text-slate-500">{bulto.unidadPlural}</p>
-        </div>
+        {!bulto.esObjeto && (
+          <div className="text-right">
+            <p className="cifra text-lg text-slate-900">{numero(bulto.cantidad)}</p>
+            <p className="text-[11px] text-slate-500">{bulto.unidadPlural}</p>
+          </div>
+        )}
       </Link>
     </li>
   );

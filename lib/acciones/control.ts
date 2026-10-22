@@ -17,6 +17,7 @@ import {
   type Tx,
 } from "./motor";
 import { ejecutar, fallar, type Resultado } from "./comun";
+import { validarDescripcion } from "../bultos";
 
 /**
  * El trabajo del operario de control: recorrer, confirmar y corregir.
@@ -153,6 +154,9 @@ export async function corregirCantidades(
       if (bulto.posicionId !== pos.id) {
         fallar(`${bulto.codigo} ya no está en ${pos.codigo}. Actualizá la pantalla.`);
       }
+      if (bulto.packaging === "objeto") {
+        fallar("Un objeto no tiene cantidades. Si no está, usá «No está acá».");
+      }
 
       const motivo = await exigirMotivo(tx, datos.motivoId, "ajuste");
       const contenidoDespues = datos.cantidades.filter((c) => c.cantidad > 0);
@@ -272,27 +276,39 @@ export async function marcarAusente(
 
 const esquemaEncontrado = z.object({
   posicionId: z.number().int().positive(),
-  contenido: z
-    .array(
-      z.object({
-        modeloId: z.number().int().positive(),
-        cantidad: z.number().int().min(1, "Las cantidades tienen que ser mayores a cero."),
-      }),
-    )
-    .min(1, "Elegí al menos un modelo."),
-  packaging: z.enum(["suelto", "palet", "optimizado"]),
+  /** Vacío solo para un objeto. */
+  contenido: z.array(
+    z.object({
+      modeloId: z.number().int().positive(),
+      cantidad: z.number().int().min(1, "Las cantidades tienen que ser mayores a cero."),
+    }),
+  ),
+  packaging: z.enum(["suelto", "palet", "optimizado", "objeto"]),
+  /** Qué hay, si es un objeto. */
+  descripcion: z.string().trim().max(200).optional(),
   motivoId: z.number().int().positive("Elegí un motivo."),
   nota: esquemaNota,
 });
 
-/** Hay producto que el sistema no tenía registrado. Se da de alta como ajuste. */
+/**
+ * Hay algo que el sistema no tenía registrado. Se da de alta como ajuste.
+ *
+ * Puede ser producto o un OBJETO: si control encuentra unas sillas en una
+ * posición que el sistema cree vacía, eso también es una diferencia.
+ */
 export async function registrarEncontrado(
   entrada: z.input<typeof esquemaEncontrado>,
 ): Promise<Resultado<{ codigo: string }>> {
   return ejecutar(async () => {
     const sesion = await autorizar("control", "admin");
     const datos = esquemaEncontrado.parse(entrada);
+    const objeto = datos.packaging === "objeto";
+    if (!objeto && datos.contenido.length === 0) fallar("Elegí al menos un modelo.");
     exigirComposicion(datos.packaging as Packaging, datos.contenido);
+    if (objeto) {
+      const problema = validarDescripcion(datos.descripcion);
+      if (problema) fallar(problema);
+    }
 
     return db.transaction(async (tx) => {
       const pos = await bloquearPosicion(tx, datos.posicionId);
@@ -326,6 +342,7 @@ export async function registrarEncontrado(
         usuario: { id: sesion.uid, nombre: sesion.nombre },
         motivo,
         nota: datos.nota,
+        descripcionDespues: objeto ? datos.descripcion!.trim() : null,
         conservarChequeo: true,
       });
 

@@ -78,6 +78,12 @@ grupos, calles, niveles o posiciones puntuales. Lo que no se usa no se ofrece
 como destino, pero lo que quedó adentro se puede sacar. Ver DISENO.md §3.9 y
 §3.10.
 
+**Objetos y nombres de los movimientos** (migración `0007_objetos`): una
+posición puede tener algo que no es producto —sillas a reparar, un aire viejo—
+con una descripción: ocupa el lugar, se ve en el tablero, y no cuenta en el
+stock. Los movimientos se llaman Ingreso, Egreso, Reubicación y Ajuste. Ver
+DISENO.md §3.11 y §4.
+
 Pendiente antes de seguir con la fase 1:
 
 - [ ] Aplicar `drizzle/0000_inicial.sql` y crear el usuario admin. Con terminal,
@@ -127,7 +133,7 @@ serializando del otro lado (no se arregla con `max`; ahí la salida es
 ## Tests
 
 ```
-npm test          # todo: 108 tests, ~2 segundos
+npm test          # todo: 117 tests, ~2 segundos
 npm run test:db   # solo los del motor, contra la base
 ```
 
@@ -137,10 +143,10 @@ cualquier módulo del servidor.
 
 Hay **dos clases de test y prueban cosas distintas**:
 
-- **Puros** (81): la geometría del rack y la regla del penetrable, el índice de
+- **Puros** (86): la geometría del rack y la regla del penetrable, el índice de
   confiabilidad, la composición de bultos, las unidades por solapa. Corren en
   cualquier lado, sin base.
-- **Del motor** (27): contra una base de PostgreSQL de verdad, creada y borrada
+- **Del motor** (31): contra una base de PostgreSQL de verdad, creada y borrada
   en cada corrida. Prueban lo único que un test puro no puede: que después de
   una secuencia de movimientos reales, **sumar el historial siga dando el stock
   vivo**. La migración 0003 dejó movimientos que sumaban en vez de restar — el

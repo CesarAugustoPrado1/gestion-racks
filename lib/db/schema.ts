@@ -133,6 +133,13 @@ export const packagingEnum = pgEnum("packaging", [
   "suelto",
   "palet",
   "optimizado",
+  /**
+   * Algo que NO es producto: sillas a reparar, un aire acondicionado viejo.
+   * Ocupa la posición pero no es stock: no lleva contenido -ni modelo ni
+   * cantidad- sino una `descripcion`, y sus movimientos no tienen líneas, así
+   * que no suman ni restan en ninguna cuenta. Ver DISENO.md §3.11.
+   */
+  "objeto",
 ]);
 export type Packaging = (typeof packagingEnum.enumValues)[number];
 
@@ -563,6 +570,12 @@ export const bultos = pgTable(
      */
     cantidad: integer("cantidad").notNull(),
     /**
+     * Qué hay, en texto libre. Solo para `objeto`, donde es obligatoria: es lo
+     * único que dice qué ocupa la posición. En los bultos de producto va null,
+     * porque lo que llevan ya lo dice `bultoContenido`.
+     */
+    descripcion: text("descripcion"),
+    /**
      * Sin default: cada alta tiene que decir explicitamente si el bulto entra
      * ubicado o al limbo. Un default aca haria que un olvido mande bultos a
      * `sin_ubicar` en silencio, que es justo el estado que no queremos que
@@ -713,6 +726,8 @@ export const movimientos = pgTable(
     usuarioNombre: text("usuario_nombre").notNull(),
     motivoId: integer("motivo_id").references(() => motivos.id),
     motivoNombre: text("motivo_nombre"),
+    /** La descripción del objeto, congelada. Null en los de producto. */
+    descripcion: text("descripcion"),
     nota: text("nota"),
     creadoEn: timestamp("creado_en", { withTimezone: true })
       .notNull()

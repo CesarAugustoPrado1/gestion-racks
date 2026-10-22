@@ -10,7 +10,7 @@ import {
 } from "@/lib/acciones/control";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
-import { validarComposicion } from "@/lib/bultos";
+import { validarComposicion, validarDescripcion } from "@/lib/bultos";
 import { ETIQUETA_PACKAGING, PACKAGINGS, numero } from "@/lib/formato";
 import type { BultoEnPosicion, ModeloParaCargar } from "@/lib/consultas";
 import type { Packaging } from "@/lib/db/schema";
@@ -81,6 +81,9 @@ export function Chequeo({
                   </span>
                   <span className="codigo text-xs text-slate-400">{b.codigo}</span>
                 </div>
+                {b.descripcion && b.packaging === "objeto" && (
+                  <p className="mt-1 text-sm text-slate-700">{b.descripcion}</p>
+                )}
                 <ul className="mt-1">
                   {b.contenido.map((c) => (
                     <li
@@ -139,17 +142,20 @@ export function Chequeo({
                     {b.codigo}
                   </span>
                 </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    className="boton-secundario text-sm"
-                    onClick={() => {
-                      setElegido(b);
-                      setModo("cantidades");
-                    }}
-                  >
-                    Otra cantidad
-                  </button>
+                <div className={`grid gap-2 ${b.packaging === "objeto" ? "grid-cols-1" : "grid-cols-2"}`}>
+                  {/* Un objeto no tiene cantidades: solo puede estar o no estar. */}
+                  {b.packaging !== "objeto" && (
+                    <button
+                      type="button"
+                      className="boton-secundario text-sm"
+                      onClick={() => {
+                        setElegido(b);
+                        setModo("cantidades");
+                      }}
+                    >
+                      Otra cantidad
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="boton-secundario text-sm"
@@ -431,12 +437,21 @@ function Encontrado({
   const [lineas, setLineas] = useState<Array<{ modeloId: number; cantidad: string }>>([]);
   const [motivoId, setMotivoId] = useState<number | null>(null);
   const [nota, setNota] = useState("");
+  // Lo encontrado puede no ser producto: unas sillas, un aire viejo.
+  const [objeto, setObjeto] = useState(false);
+  const [descripcion, setDescripcion] = useState("");
 
   const contenido = lineas
     .map((l) => ({ modeloId: l.modeloId, cantidad: Number(l.cantidad) }))
     .filter((l) => l.cantidad > 0);
-  const problema =
-    contenido.length > 0 ? validarComposicion(packaging, contenido) : null;
+  const problema = objeto
+    ? null
+    : contenido.length > 0
+      ? validarComposicion(packaging, contenido)
+      : null;
+  const completo = objeto
+    ? validarDescripcion(descripcion) == null
+    : contenido.length > 0 && !problema;
 
   return (
     <div className="tarjeta space-y-4 p-5">
@@ -445,87 +460,119 @@ function Encontrado({
       </h2>
       {error && <Aviso>{error}</Aviso>}
 
-      <div>
-        <span className="etiqueta">Packaging</span>
-        <div className="grid grid-cols-3 gap-2">
-          {PACKAGINGS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPackaging(p)}
-              className={`min-h-12 rounded-xl text-sm font-semibold ${
-                packaging === p
-                  ? "bg-slate-900 text-white"
-                  : "bg-white text-slate-700 ring-1 ring-slate-300"
-              }`}
-            >
-              {ETIQUETA_PACKAGING[p]}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <ul className="space-y-2">
-        {lineas.map((l) => {
-          const m = modelos.find((x) => x.id === l.modeloId)!;
-          return (
-            <li key={l.modeloId} className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">
-                {m.nombre}
-              </span>
-              <input
-                className="campo w-24 text-right"
-                inputMode="numeric"
-                value={l.cantidad}
-                onChange={(e) =>
-                  setLineas((ls) =>
-                    ls.map((x) =>
-                      x.modeloId === l.modeloId
-                        ? { ...x, cantidad: e.target.value.replace(/\D/g, "") }
-                        : x,
-                    ),
-                  )
-                }
-                aria-label={`Cantidad de ${m.nombre}`}
-              />
-              <button
-                type="button"
-                className="px-2 text-lg text-slate-400"
-                onClick={() =>
-                  setLineas((ls) => ls.filter((x) => x.modeloId !== l.modeloId))
-                }
-                aria-label={`Quitar ${m.nombre}`}
-              >
-                ✕
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-
-      <div className="flex flex-wrap gap-1.5">
-        {modelos.map((m) => (
+      <div className="grid grid-cols-2 gap-2">
+        {[
+          { valor: false, texto: "Producto" },
+          { valor: true, texto: "Objeto" },
+        ].map((o) => (
           <button
-            key={m.id}
+            key={o.texto}
             type="button"
-            disabled={lineas.some((l) => l.modeloId === m.id)}
-            onClick={() =>
-              setLineas((l) => [
-                ...l,
-                {
-                  modeloId: m.id,
-                  cantidad: m.normas[packaging] != null ? String(m.normas[packaging]) : "",
-                },
-              ])
-            }
-            className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-40"
+            onClick={() => setObjeto(o.valor)}
+            className={`min-h-12 rounded-xl text-sm font-semibold ${
+              objeto === o.valor
+                ? "bg-slate-900 text-white"
+                : "bg-white text-slate-700 ring-1 ring-slate-300"
+            }`}
           >
-            {m.nombre}
+            {o.texto}
           </button>
         ))}
       </div>
 
-      {problema && <Aviso tono="info">{problema}</Aviso>}
+      {objeto ? (
+        <input
+          className="campo"
+          value={descripcion}
+          onChange={(e) => setDescripcion(e.target.value)}
+          placeholder="Qué hay: 6 sillas a reparar"
+          maxLength={200}
+        />
+      ) : (
+        <>
+          <div>
+            <span className="etiqueta">Packaging</span>
+            <div className="grid grid-cols-3 gap-2">
+              {PACKAGINGS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPackaging(p)}
+                  className={`min-h-12 rounded-xl text-sm font-semibold ${
+                    packaging === p
+                      ? "bg-slate-900 text-white"
+                      : "bg-white text-slate-700 ring-1 ring-slate-300"
+                  }`}
+                >
+                  {ETIQUETA_PACKAGING[p]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <ul className="space-y-2">
+            {lineas.map((l) => {
+              const m = modelos.find((x) => x.id === l.modeloId)!;
+              return (
+                <li key={l.modeloId} className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">
+                    {m.nombre}
+                  </span>
+                  <input
+                    className="campo w-24 text-right"
+                    inputMode="numeric"
+                    value={l.cantidad}
+                    onChange={(e) =>
+                      setLineas((ls) =>
+                        ls.map((x) =>
+                          x.modeloId === l.modeloId
+                            ? { ...x, cantidad: e.target.value.replace(/\D/g, "") }
+                            : x,
+                        ),
+                      )
+                    }
+                    aria-label={`Cantidad de ${m.nombre}`}
+                  />
+                  <button
+                    type="button"
+                    className="px-2 text-lg text-slate-400"
+                    onClick={() =>
+                      setLineas((ls) => ls.filter((x) => x.modeloId !== l.modeloId))
+                    }
+                    aria-label={`Quitar ${m.nombre}`}
+                  >
+                    ✕
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="flex flex-wrap gap-1.5">
+            {modelos.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                disabled={lineas.some((l) => l.modeloId === m.id)}
+                onClick={() =>
+                  setLineas((l) => [
+                    ...l,
+                    {
+                      modeloId: m.id,
+                      cantidad: m.normas[packaging] != null ? String(m.normas[packaging]) : "",
+                    },
+                  ])
+                }
+                className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-40"
+              >
+                {m.nombre}
+              </button>
+            ))}
+          </div>
+
+          {problema && <Aviso tono="info">{problema}</Aviso>}
+        </>
+      )}
 
       <SelectorMotivo motivos={motivos} elegido={motivoId} elegir={setMotivoId} />
 
@@ -543,15 +590,16 @@ function Encontrado({
         <button
           type="button"
           className="boton-primario"
-          disabled={enviando || motivoId == null || contenido.length === 0 || !!problema}
+          disabled={enviando || motivoId == null || !completo}
           onClick={() => {
             limpiar();
             void ejecutar(
               () =>
                 registrarEncontrado({
                   posicionId,
-                  contenido,
-                  packaging,
+                  contenido: objeto ? [] : contenido,
+                  packaging: objeto ? "objeto" : packaging,
+                  descripcion: objeto ? descripcion.trim() : undefined,
                   motivoId: motivoId!,
                   nota: nota.trim() || undefined,
                 }),
