@@ -759,6 +759,24 @@ Dos reglas que atraviesan las dos pantallas:
 Los gráficos son barras hechas con divs, sin librerías, una serie por gráfico
 y en el azul de `--color-medida`. Nunca dos escalas en el mismo gráfico.
 
+### 6.2.2 Racks en perspectiva
+
+En Racks, además de "Qué hay / Confiabilidad" (el color), se elige "Plano /
+Perspectiva" (el dibujo). Las dos cosas se combinan y viven en la URL.
+
+- **Penetrable:** cada calle es un plano vertical visto en diagonal. La pared
+  queda atrás, el piso baja en diagonal hacia el pasillo, los niveles se apilan
+  derecho, y las calles van una al lado de la otra en su orden físico. De qué
+  lado entra el clark (`grupos.acceso`, migración 0008) decide hacia dónde se
+  va la profundidad, para que el dibujo quede como se lo ve en el galpón.
+- **Selectivo:** de frente, con una cara de arriba y una de costado finitas.
+
+**Los bordes de arriba y de abajo de cada hueco son paralelos al piso**, y los
+de los costados, a la pared. El primer boceto los inclinaba distinto por
+achicar los huecos en píxeles de pantalla; ahora se achican en los ejes del
+rack (profundidad y nivel), y un test lo verifica en todos los huecos para los
+dos lados de acceso (`tests/perspectiva.test.ts`).
+
 ### 6.3 Roles
 
 **Resuelto: quedan los cinco como están.**

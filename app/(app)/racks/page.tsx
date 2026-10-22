@@ -5,6 +5,7 @@ import { semividaDias } from "@/lib/configuracion";
 import { confianza, indice } from "@/lib/confiabilidad";
 import { Indice } from "@/components/confiabilidad";
 import { MapaDeGrupo, type Vista } from "@/components/mapa";
+import { PerspectivaDeGrupo } from "@/components/perspectiva";
 import { abreviaturas } from "@/lib/formato";
 import { Aviso, Titulo } from "@/components/ui";
 
@@ -19,11 +20,19 @@ const VISTAS: Array<{ id: Vista; etiqueta: string }> = [
 export default async function PantallaRacks({
   searchParams,
 }: {
-  searchParams: Promise<{ ver?: string }>;
+  searchParams: Promise<{ ver?: string; dibujo?: string }>;
 }) {
   await requerirSesion();
-  const { ver } = await searchParams;
+  const { ver, dibujo: dibujoCrudo } = await searchParams;
   const vista: Vista = ver === "confiabilidad" ? "confiabilidad" : "contenido";
+  /**
+   * Cómo se dibuja, aparte de qué color lleva: plano (la grilla de siempre) o
+   * en perspectiva (como se ve parado en el galpón). Las dos cosas se combinan,
+   * y las dos viven en la URL.
+   */
+  const dibujo = dibujoCrudo === "perspectiva" ? "perspectiva" : "plano";
+  const url = (v: Vista, d: string) =>
+    `/racks?ver=${v}${d === "perspectiva" ? "&dibujo=perspectiva" : ""}`;
 
   const [grupos, semivida] = await Promise.all([mapaDeRacks(), semividaDias()]);
 
@@ -128,11 +137,11 @@ export default async function PantallaRacks({
 
       {/* Las dos vistas viven en la URL: se puede mandar un link a la vista de
           confiabilidad sin explicar cómo llegar. */}
-      <nav className="mb-3 flex gap-2">
+      <nav className="mb-3 flex flex-wrap gap-2">
         {VISTAS.map((v) => (
           <Link
             key={v.id}
-            href={`/racks?ver=${v.id}`}
+            href={url(v.id, dibujo)}
             className={`rounded-xl px-4 py-2 text-sm font-semibold ${
               vista === v.id
                 ? "bg-slate-900 text-white"
@@ -142,20 +151,47 @@ export default async function PantallaRacks({
             {v.etiqueta}
           </Link>
         ))}
+        <span className="mx-1 w-px self-stretch bg-slate-200" aria-hidden />
+        {[
+          { id: "plano", etiqueta: "Plano" },
+          { id: "perspectiva", etiqueta: "Perspectiva" },
+        ].map((d) => (
+          <Link
+            key={d.id}
+            href={url(vista, d.id)}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold ${
+              dibujo === d.id
+                ? "bg-slate-900 text-white"
+                : "bg-white text-slate-600 ring-1 ring-slate-200"
+            }`}
+          >
+            {d.etiqueta}
+          </Link>
+        ))}
       </nav>
 
       <Leyenda vista={vista} lineas={lineas} abrev={abrev} semivida={semivida} />
 
       <div className="mt-3 space-y-3">
-        {grupos.map((g) => (
-          <MapaDeGrupo
-            key={g.id}
-            grupo={g}
-            vista={vista}
-            semivida={semivida}
-            abrev={abrev}
-          />
-        ))}
+        {grupos.map((g) =>
+          dibujo === "perspectiva" ? (
+            <PerspectivaDeGrupo
+              key={g.id}
+              grupo={g}
+              vista={vista}
+              semivida={semivida}
+              abrev={abrev}
+            />
+          ) : (
+            <MapaDeGrupo
+              key={g.id}
+              grupo={g}
+              vista={vista}
+              semivida={semivida}
+              abrev={abrev}
+            />
+          ),
+        )}
       </div>
     </>
   );

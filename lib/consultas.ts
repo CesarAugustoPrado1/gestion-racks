@@ -900,6 +900,8 @@ export type GrupoDelMapa = {
   nombre: string | null;
   empresaId: number | null;
   empresa: string | null;
+  /** De qué lado entra el clark. Solo penetrables. */
+  acceso: "izquierda" | "derecha";
   penetrable: boolean;
   ancho: number | null;
   niveles: number;
@@ -920,7 +922,7 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
   const filas = (await db.execute(sql`
     select g.id as grupo_id, g.codigo as grupo_codigo, g.nombre as grupo_nombre,
            g.accesibilidad, g.ancho, g.niveles, g.profundidad as profundidad_max,
-           g.unidades, g.empresa_id, ge.nombre as grupo_empresa,
+           g.unidades, g.empresa_id, ge.nombre as grupo_empresa, g.acceso,
            p.id as posicion_id, p.codigo, p.unidad, p.columna, p.nivel,
            p.profundidad, p.activa,
            ${alcanzable("p")} as alcanzable,
@@ -961,6 +963,7 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
     unidades: number;
     empresa_id: number | null;
     grupo_empresa: string | null;
+    acceso: "izquierda" | "derecha";
     alcanzable: boolean;
     exclusion_motivo: MotivoExclusion | null;
     exclusion_nota: string | null;
@@ -996,6 +999,7 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
         nombre: f.grupo_nombre,
         empresaId: f.empresa_id,
         empresa: f.grupo_empresa,
+        acceso: f.acceso,
         penetrable: f.accesibilidad === "penetrable",
         ancho: f.ancho,
         niveles: f.niveles,
