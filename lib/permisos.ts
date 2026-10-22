@@ -32,6 +32,8 @@ const REGLAS: Array<{ prefijo: string; roles: Rol[] }> = [
   // El tablero lo ve todo el mundo: "cómo estamos" no es un secreto de nadie,
   // y al clarkista le sirve saber cuánto lugar queda.
   { prefijo: "/tablero", roles: ["admin", "auditor", "autoelevador", "control", "comercial"] },
+  // El plano de la planta lo mira cualquiera; editarlo es de admin (/admin/planta).
+  { prefijo: "/planta", roles: ["admin", "auditor", "autoelevador", "control", "comercial"] },
   // Estadísticas es para decidir, no para operar: lo mismo que confiabilidad.
   { prefijo: "/estadisticas", roles: ["admin", "auditor", "control", "comercial"] },
 ];
@@ -99,6 +101,7 @@ const NAV: ItemNav[] = [
   { href: "/mover", etiqueta: "Mover", icono: "autoelevador" },
   { href: "/control", etiqueta: "Control", icono: "control" },
   { href: "/racks", etiqueta: "Racks", icono: "grid" },
+  { href: "/planta", etiqueta: "Plano", icono: "plano" },
   { href: "/stock", etiqueta: "Stock", icono: "pallet" },
   { href: "/estadisticas", etiqueta: "Estadísticas", icono: "estadisticas" },
   { href: "/confiabilidad", etiqueta: "Confiabilidad", icono: "medidor" },

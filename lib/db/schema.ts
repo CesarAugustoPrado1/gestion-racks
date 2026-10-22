@@ -1,6 +1,7 @@
 import {
   type AnyPgColumn,
   boolean,
+  jsonb,
   index,
   integer,
   pgEnum,
@@ -811,6 +812,18 @@ export const movimientoLineas = pgTable(
   },
   (t) => [index("movimiento_lineas_movimiento").on(t.movimientoId)],
 );
+
+/**
+ * El plano de la planta. Cada guardado es una VERSIÓN nueva y entera; la
+ * vigente es la de id más alto. Nada se borra: si alguien rompe el dibujo, la
+ * anterior sigue ahí. El contenido de `doc` lo define y valida lib/plano.ts.
+ */
+export const planos = pgTable("planos", {
+  id: serial("id").primaryKey(),
+  doc: jsonb("doc").notNull(),
+  creadoEn: timestamp("creado_en", { withTimezone: true }).notNull().defaultNow(),
+  creadoPor: integer("creado_por").references(() => usuarios.id),
+});
 
 export type Linea = typeof lineas.$inferSelect;
 export type Modelo = typeof modelos.$inferSelect;

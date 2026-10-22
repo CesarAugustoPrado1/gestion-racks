@@ -17,6 +17,7 @@ import * as schema from "../lib/db/schema";
 import { codigoDePosicion, posicionesDe, type Geometria } from "../lib/posiciones";
 import { cubre, type ReglaExclusion } from "../lib/uso";
 import { joinExclusion } from "../lib/uso-sql";
+import { guardarVersion } from "../lib/plano-db";
 
 /**
  * El motor contra una base de verdad.
@@ -814,5 +815,45 @@ describe("pasar un grupo a inactivo", { skip: !hay && "sin base local" }, () => 
       });
     });
     await exigirGrupoVacio(base.db as unknown as Tx, g.id);
+  });
+});
+
+/**
+ * El plano se guarda por versiones, y una versión vieja no puede pisar a una
+ * nueva: si dos personas editan a la vez, la segunda en guardar se entera.
+ */
+describe("plano: versiones", { skip: !hay && "sin base local" }, () => {
+  const doc = { ancho: 50, largo: 30, elementos: [] };
+
+  test("la primera versión se guarda sobre la nada; una segunda sobre la nada se rechaza", async () => {
+    const v1 = await base.db.transaction((tx) => guardarVersion(tx as Tx, doc, null, datos.usuario.id));
+    assert.ok(v1 > 0);
+    await assert.rejects(
+      () => base.db.transaction((tx) => guardarVersion(tx as Tx, doc, null, datos.usuario.id)),
+      /Alguien guardó otra versión/,
+    );
+    const v2 = await base.db.transaction((tx) => guardarVersion(tx as Tx, doc, v1, datos.usuario.id));
+    assert.ok(v2 > v1);
+    await assert.rejects(
+      () => base.db.transaction((tx) => guardarVersion(tx as Tx, doc, v1, datos.usuario.id)),
+      /Alguien guardó otra versión/,
+      "editar sobre la versión vieja no pisa la nueva",
+    );
+  });
+
+  test("un plano inválido no se guarda", async () => {
+    const [{ id }] = (await base.db.execute(sql`select max(id) as id from planos`)) as unknown as Array<{ id: number }>;
+    await assert.rejects(
+      () =>
+        base.db.transaction((tx) =>
+          guardarVersion(
+            tx as Tx,
+            { ancho: 50, largo: 30, elementos: [{ id: "x", tipo: "frente", puntos: [[0, 0], [80, 0]] }] },
+            id,
+            datos.usuario.id,
+          ),
+        ),
+      /se sale del espacio de trabajo/,
+    );
   });
 });

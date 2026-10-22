@@ -15,6 +15,7 @@ const ICONOS: Record<string, string> = {
   config: "⚙",
   tablero: "🧭",
   estadisticas: "📈",
+  plano: "🏭",
 };
 
 /** Mas de esto y los textos se encimaban en la pantalla del celular. */

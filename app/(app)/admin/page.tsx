@@ -76,6 +76,13 @@ export default async function PantallaAdmin() {
       falta: n.grupos === 0,
     },
     {
+      href: "/admin/planta",
+      titulo: "Plano de la planta",
+      detalle: "editor",
+      ayuda: "El dibujo de la fábrica: límite, techado, racks, calles, accesos y frente.",
+      falta: false,
+    },
+    {
       href: "/admin/exclusiones",
       titulo: "Lista de exclusión",
       detalle:

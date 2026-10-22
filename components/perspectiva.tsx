@@ -165,7 +165,7 @@ export function PerspectivaDeGrupo({
   );
 
   return (
-    <section className="tarjeta overflow-hidden">
+    <section id={`grupo-${grupo.codigo}`} className="tarjeta scroll-mt-20 overflow-hidden">
       {encabezado}
       <div className="overflow-x-auto p-4">
         {grupo.penetrable ? (
