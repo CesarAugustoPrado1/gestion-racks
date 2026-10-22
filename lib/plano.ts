@@ -29,7 +29,93 @@ export const ETIQUETA_TIPO: Record<TipoElemento, string> = {
   frente: "Frente",
 };
 
-export type ElementoBase = { id: string; etiqueta?: string };
+/* -------------------------------------------------------------------------- */
+/* Estilos                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Cómo se ve un elemento. Todos los campos son opcionales: lo que no se dice
+ * sale de la regla del tipo (`Plano.estilos`) y, si tampoco está, del estilo
+ * de fábrica (`ESTILO_DE_FABRICA`). Ver `estiloDe`.
+ *
+ * Colores: "#rrggbb", o "ninguno" para no pintar. El relleno de un rack puede
+ * ser además "ocupacion": el color de la app, más intenso cuanto más lleno.
+ *
+ * En una CALLE el relleno es la franja de la calle y el trazo, la línea del
+ * medio. En un acceso o el frente, que son líneas, solo hay trazo.
+ */
+export type TipoTrazo = "continuo" | "guiones" | "puntos";
+export type Estilo = {
+  relleno?: string;
+  /** 0 a 100. */
+  opacidad?: number;
+  trazo?: string;
+  tipoTrazo?: TipoTrazo;
+  /** 0,5 a 20, en una unidad relativa al tamaño del plano. */
+  grosor?: number;
+};
+export type EstiloResuelto = Required<Estilo>;
+
+export const TIPOS_DE_TRAZO: Record<TipoTrazo, string> = {
+  continuo: "Continuo",
+  guiones: "Guiones",
+  puntos: "Puntos",
+};
+
+/** Los que no tienen superficie: el relleno no aplica. */
+export const sinRelleno = (t: TipoElemento) => t === "acceso" || t === "frente";
+
+/**
+ * Cómo se ve cada tipo si nadie dijo nada. Es lo que se veía antes de que
+ * hubiera estilos, para que un plano viejo no cambie al actualizar.
+ */
+export const ESTILO_DE_FABRICA: Record<TipoElemento, EstiloResuelto> = {
+  limite: { relleno: "ninguno", opacidad: 100, trazo: "#0f172a", tipoTrazo: "continuo", grosor: 6 },
+  techado: { relleno: "#f1f5f9", opacidad: 100, trazo: "#94a3b8", tipoTrazo: "guiones", grosor: 2.5 },
+  rack: { relleno: "ocupacion", opacidad: 100, trazo: "#2a78d6", tipoTrazo: "continuo", grosor: 3 },
+  calle: { relleno: "#cbd5e1", opacidad: 100, trazo: "#ffffff", tipoTrazo: "guiones", grosor: 2.5 },
+  acceso: { relleno: "ninguno", opacidad: 100, trazo: "#059669", tipoTrazo: "continuo", grosor: 9 },
+  frente: { relleno: "ninguno", opacidad: 100, trazo: "#0f172a", tipoTrazo: "guiones", grosor: 12 },
+};
+
+/** La tipografía del plano entero. */
+export type Fuente = "sans" | "serif" | "mono" | "angosta";
+export type Tipografia = {
+  fuente: Fuente;
+  /** Porcentaje: 100 es el tamaño normal. */
+  tamano: number;
+  /** "#rrggbb" para todos los textos, o sin dato: cada texto con su color. */
+  color?: string;
+};
+export const TIPOGRAFIA_DE_FABRICA: Tipografia = { fuente: "sans", tamano: 100 };
+
+export const FUENTES: Record<Fuente, { etiqueta: string; css: string }> = {
+  sans: { etiqueta: "Sin serifa", css: "Inter, ui-sans-serif, system-ui, sans-serif" },
+  serif: { etiqueta: "Con serifa", css: "ui-serif, Georgia, 'Times New Roman', serif" },
+  mono: { etiqueta: "Monoespaciada", css: "ui-monospace, 'SFMono-Regular', Menlo, monospace" },
+  angosta: { etiqueta: "Angosta", css: "'Arial Narrow', 'Roboto Condensed', ui-sans-serif, sans-serif" },
+};
+
+/**
+ * El estilo que vale para un elemento: fábrica, después la regla del tipo,
+ * después lo propio del elemento. Cada campo por separado: un elemento puede
+ * cambiar solo el color del trazo y heredar todo lo demás.
+ */
+export function estiloDe(e: Elemento, p: Pick<Plano, "estilos">): EstiloResuelto {
+  const limpio = (x?: Estilo) =>
+    Object.fromEntries(Object.entries(x ?? {}).filter(([, v]) => v !== undefined)) as Estilo;
+  return { ...ESTILO_DE_FABRICA[e.tipo], ...limpio(p.estilos?.[e.tipo]), ...limpio(e.estilo) };
+}
+
+export function estiloDelTipo(t: TipoElemento, p: Pick<Plano, "estilos">): EstiloResuelto {
+  return estiloDe({ id: "", tipo: t } as Elemento, p);
+}
+
+export function tipografiaDe(p: Pick<Plano, "texto">): Tipografia {
+  return { ...TIPOGRAFIA_DE_FABRICA, ...(p.texto ?? {}) };
+}
+
+export type ElementoBase = { id: string; etiqueta?: string; estilo?: Estilo };
 
 export type Elemento =
   /** Polígono cerrado: el borde del predio. */
@@ -66,6 +152,10 @@ export type Plano = {
    * Sin dato, es esa misma esquina. Ver `aUsuario`.
    */
   origen?: { x: number; y: number };
+  /** Las reglas de estilo por tipo. Ver `estiloDe`. */
+  estilos?: Partial<Record<TipoElemento, Estilo>>;
+  /** La tipografía de todo el plano. */
+  texto?: Tipografia;
   elementos: Elemento[];
 };
 
@@ -93,13 +183,25 @@ const metros = z.number().finite();
 const punto = z.tuple([metros, metros]);
 const etiqueta = z.string().trim().max(60).optional();
 const id = z.string().min(1).max(40);
+const color = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Un color tiene que ser #rrggbb.");
+const esquemaEstilo = z
+  .object({
+    relleno: z.union([color, z.literal("ninguno"), z.literal("ocupacion")]).optional(),
+    opacidad: z.number().min(0).max(100).optional(),
+    trazo: z.union([color, z.literal("ninguno")]).optional(),
+    tipoTrazo: z.enum(["continuo", "guiones", "puntos"]).optional(),
+    grosor: z.number().min(0.5).max(20).optional(),
+  })
+  .strict();
+const estilo = esquemaEstilo.optional();
 
 const esquemaElemento = z.discriminatedUnion("tipo", [
-  z.object({ id, etiqueta, tipo: z.literal("limite"), puntos: z.array(punto).min(3).max(200) }),
-  z.object({ id, etiqueta, tipo: z.literal("techado"), puntos: z.array(punto).min(3).max(200) }),
+  z.object({ id, etiqueta, estilo, tipo: z.literal("limite"), puntos: z.array(punto).min(3).max(200) }),
+  z.object({ id, etiqueta, estilo, tipo: z.literal("techado"), puntos: z.array(punto).min(3).max(200) }),
   z.object({
     id,
     etiqueta,
+    estilo,
     tipo: z.literal("rack"),
     x: metros,
     y: metros,
@@ -111,18 +213,27 @@ const esquemaElemento = z.discriminatedUnion("tipo", [
   z.object({
     id,
     etiqueta,
+    estilo,
     tipo: z.literal("calle"),
     puntos: z.array(punto).min(2).max(200),
     ancho: z.number().min(1).max(30),
   }),
-  z.object({ id, etiqueta, tipo: z.literal("acceso"), puntos: z.array(punto).length(2) }),
-  z.object({ id, etiqueta, tipo: z.literal("frente"), puntos: z.array(punto).length(2) }),
+  z.object({ id, etiqueta, estilo, tipo: z.literal("acceso"), puntos: z.array(punto).length(2) }),
+  z.object({ id, etiqueta, estilo, tipo: z.literal("frente"), puntos: z.array(punto).length(2) }),
 ]);
 
 export const esquemaPlano = z.object({
   ancho: z.number().min(10, "El espacio de trabajo tiene que medir al menos 10 m.").max(2000),
   largo: z.number().min(10, "El espacio de trabajo tiene que medir al menos 10 m.").max(2000),
   origen: z.object({ x: metros, y: metros }).optional(),
+  estilos: z.record(z.enum(TIPOS), esquemaEstilo).optional(),
+  texto: z
+    .object({
+      fuente: z.enum(["sans", "serif", "mono", "angosta"]),
+      tamano: z.number().min(40).max(300),
+      color: color.optional(),
+    })
+    .optional(),
   elementos: z.array(esquemaElemento).max(2000, "Demasiados elementos en el plano."),
 });
 
@@ -348,15 +459,18 @@ export function elementoDesdeRect(
 ): Elemento {
   const id = base?.id ?? nuevoId();
   const etiqueta = base?.etiqueta;
+  // Rearmar por medidas no le saca el estilo propio al elemento.
+  const estilo = base?.estilo;
   const [arribaIzq] = esquinasDeRect(r, p);
   switch (tipo) {
     case "limite":
     case "techado":
-      return { id, etiqueta, tipo, puntos: esquinasDeRect(r, p) };
+      return { id, etiqueta, estilo, tipo, puntos: esquinasDeRect(r, p) };
     case "rack":
       return {
         id,
         etiqueta,
+        estilo,
         tipo: "rack",
         x: arribaIzq[0],
         y: arribaIzq[1],
@@ -370,7 +484,7 @@ export function elementoDesdeRect(
       const puntos: Punto[] = horizontal
         ? [deUsuario([r.x, r.y + r.alto / 2], p), deUsuario([r.x + r.ancho, r.y + r.alto / 2], p)]
         : [deUsuario([r.x + r.ancho / 2, r.y], p), deUsuario([r.x + r.ancho / 2, r.y + r.alto], p)];
-      return { id, etiqueta, tipo: "calle", puntos, ancho: horizontal ? r.alto : r.ancho };
+      return { id, etiqueta, estilo, tipo: "calle", puntos, ancho: horizontal ? r.alto : r.ancho };
     }
     case "acceso":
     case "frente":

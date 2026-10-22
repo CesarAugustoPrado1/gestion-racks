@@ -814,6 +814,17 @@ las celdas cubiertas y recorre el borde. Solo une figuras de lados
 horizontales y verticales, que se toquen por un lado (no por una esquina) y
 cuya unión no deje un hueco adentro; si no, lo dice.
 
+**Estilos.** Cada cosa del plano tiene relleno (color, opacidad o sin
+relleno; en un rack, además, "según ocupación") y trazo (color o sin trazo,
+continuo, guiones o puntos, y grosor). En una calle el relleno es la franja y
+el trazo, la línea del medio; un acceso o el frente solo tienen trazo. Se
+resuelven en tres capas, campo por campo (`estiloDe`): el estilo de fábrica
+-que es como se veía todo antes de que hubiera estilos, así un plano viejo no
+cambia-, la **regla del tipo** ("todos los techados así") y el **estilo propio**
+de un elemento. La **tipografía** (fuente, tamaño y color de los textos) es
+una sola para todo el plano. La leyenda de `/planta` sale de los estilos, así
+que cambia con ellos.
+
 Se guarda **entero, como una versión nueva** (`planos`, migración 0009): un
 dibujo se edita como un todo, y guardar elemento por elemento haría que dos
 personas a la vez dejaran un plano que no dibujó ninguna. Si mientras alguien

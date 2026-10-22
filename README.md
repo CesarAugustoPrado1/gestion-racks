@@ -101,7 +101,8 @@ clark. Ver DISENO.md §6.2.2.
 desde arriba —límite, techado, racks pintados según ocupación, calles del
 clark, accesos y frente— y `/admin/planta` es el editor: por medidas (X, Y, ancho y alto desde unos ejes
 de referencia que se pueden correr), sumando rectángulos para armar figuras que
-no lo son, o con dibujo libre. Cada guardado es una versión nueva. Ver DISENO.md §6.2.3.
+no lo son, o con dibujo libre; con estilos por tipo o por elemento (relleno, trazo) y
+tipografía del plano. Cada guardado es una versión nueva. Ver DISENO.md §6.2.3.
 
 Pendiente antes de seguir con la fase 1:
 
@@ -152,7 +153,7 @@ serializando del otro lado (no se arregla con `max`; ahí la salida es
 ## Tests
 
 ```
-npm test          # todo: 162 tests, ~2 segundos
+npm test          # todo: 169 tests, ~2 segundos
 npm run test:db   # solo los del motor, contra la base
 ```
 
@@ -162,7 +163,7 @@ cualquier módulo del servidor.
 
 Hay **dos clases de test y prueban cosas distintas**:
 
-- **Puros** (128): la geometría del rack y la regla del penetrable, el índice de
+- **Puros** (135): la geometría del rack y la regla del penetrable, el índice de
   confiabilidad, la composición de bultos, las unidades por solapa. Corren en
   cualquier lado, sin base.
 - **Del motor** (34): contra una base de PostgreSQL de verdad, creada y borrada

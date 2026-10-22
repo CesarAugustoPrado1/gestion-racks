@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { requerirSesion } from "@/lib/auth";
 import { gruposParaPlano, planoVigente } from "@/lib/plano-db";
-import { DibujoElemento, Escala, escalaDe, ordenarParaDibujar } from "@/components/plano-dibujo";
+import { DibujoElemento, Escala, margenDe, ordenarParaDibujar } from "@/components/plano-dibujo";
 import { puedeVer } from "@/lib/permisos";
+import { ETIQUETA_TIPO, TIPOS, estiloDelTipo } from "@/lib/plano";
+import { Muestra } from "@/components/plano-estilos";
 import { Titulo } from "@/components/ui";
 
 export const metadata = { title: "Plano · Racks" };
@@ -18,8 +20,7 @@ export default async function PantallaPlano() {
   const { plano } = vigente;
   const info = new Map(grupos.map((g) => [g.id, g.info]));
   const esAdmin = puedeVer(sesion.rol, "/admin");
-  const s = escalaDe(plano);
-  const margen = s * 6;
+  const margen = margenDe(plano);
 
   return (
     <>
@@ -59,22 +60,16 @@ export default async function PantallaPlano() {
             </svg>
           </div>
 
+          {/* La leyenda sale de los estilos del plano: si se cambia cómo se ve
+              un tipo, la leyenda cambia con él. Solo los tipos que hay. */}
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-slate-600">
-            <span className="flex items-center gap-1.5">
-              <span className="h-3 w-5 rounded-sm bg-medida/20 ring-1 ring-medida" /> rack poco ocupado
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-3 w-5 rounded-sm bg-medida/70 ring-1 ring-medida" /> rack lleno
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-5 rounded-sm bg-slate-300" /> calle de tránsito
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-1 w-5 rounded-sm bg-emerald-600" /> acceso
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-3 w-5 rounded-sm border border-dashed border-slate-400 bg-slate-100" /> techado
-            </span>
+            {TIPOS.filter((t) => plano.elementos.some((e) => e.tipo === t)).map((t) => (
+              <span key={t} className="flex items-center gap-1.5">
+                <Muestra tipo={t} estilo={estiloDelTipo(t, plano)} />
+                {ETIQUETA_TIPO[t]}
+                {t === "rack" && estiloDelTipo(t, plano).relleno === "ocupacion" && " (más intenso, más lleno)"}
+              </span>
+            ))}
           </div>
         </>
       )}

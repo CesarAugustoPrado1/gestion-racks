@@ -1,6 +1,9 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
+  ESTILO_DE_FABRICA,
+  estiloDe,
+  tipografiaDe,
   aGrilla,
   aUsuario,
   deUsuario,
@@ -194,5 +197,53 @@ describe("plano: unir figuras", () => {
     const u = puntos(unirRectilineos([rect(0, 0, 10, 4), rect(0, 0, 4, 10)]));
     assert.deepEqual(u[0], [0, 0]);
     assert.deepEqual(u[1], [10, 0]);
+  });
+});
+
+describe("plano: estilos", () => {
+  const techo: Elemento = { id: "t", tipo: "techado", puntos: [[0, 0], [10, 0], [10, 10], [0, 10]] };
+
+  test("sin reglas ni estilo propio, sale el de fábrica", () => {
+    assert.deepEqual(estiloDe(techo, {}), ESTILO_DE_FABRICA.techado);
+  });
+
+  test("la regla del tipo pisa a la de fábrica, campo por campo", () => {
+    const e = estiloDe(techo, { estilos: { techado: { trazo: "#ff0000" } } });
+    assert.equal(e.trazo, "#ff0000");
+    assert.equal(e.relleno, ESTILO_DE_FABRICA.techado.relleno, "lo que la regla no dice, se hereda");
+  });
+
+  test("el estilo propio pisa a la regla, y lo que no dice lo hereda de la regla", () => {
+    const e = estiloDe(
+      { ...techo, estilo: { relleno: "ninguno" } },
+      { estilos: { techado: { trazo: "#ff0000", grosor: 5 } } },
+    );
+    assert.equal(e.relleno, "ninguno");
+    assert.equal(e.trazo, "#ff0000");
+    assert.equal(e.grosor, 5);
+  });
+
+  test("un campo propio sin valor no borra el heredado", () => {
+    const e = estiloDe({ ...techo, estilo: { trazo: undefined } }, { estilos: { techado: { trazo: "#00ff00" } } });
+    assert.equal(e.trazo, "#00ff00");
+  });
+
+  test("la tipografía arranca en la de fábrica", () => {
+    assert.deepEqual(tipografiaDe({}), { fuente: "sans", tamano: 100 });
+    assert.equal(tipografiaDe({ texto: { fuente: "serif", tamano: 150 } }).tamano, 150);
+  });
+
+  test("el esquema acepta estilos y tipografía válidos, y rechaza colores mal escritos", () => {
+    const base = { ancho: 100, largo: 50, elementos: [{ ...techo, estilo: { relleno: "#aabbcc", trazo: "ninguno", tipoTrazo: "puntos", grosor: 4 } }] };
+    assert.ok(esquemaPlano.safeParse({ ...base, estilos: { rack: { relleno: "ocupacion" } }, texto: { fuente: "mono", tamano: 120, color: "#112233" } }).success);
+    assert.equal(esquemaPlano.safeParse({ ...base, estilos: { rack: { trazo: "rojo" } } }).success, false);
+    assert.equal(esquemaPlano.safeParse({ ...base, texto: { fuente: "comic", tamano: 100 } }).success, false);
+  });
+
+  test("rearmar un elemento por medidas no le borra el estilo propio", () => {
+    const p = { largo: 50 };
+    const conEstilo = { ...elementoDesdeRect("techado", { x: 0, y: 0, ancho: 5, alto: 5 }, p), estilo: { trazo: "#123456" } } as Elemento;
+    const rearmado = elementoDesdeRect("techado", { x: 1, y: 1, ancho: 8, alto: 8 }, p, conEstilo);
+    assert.deepEqual(rearmado.estilo, { trazo: "#123456" });
   });
 });
