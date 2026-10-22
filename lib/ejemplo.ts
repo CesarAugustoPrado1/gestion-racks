@@ -2,7 +2,12 @@ import "server-only";
 import { eq } from "drizzle-orm";
 import type { PgTransaction } from "drizzle-orm/pg-core";
 import { esMezclado, total, validarComposicion } from "./bultos";
-import { codigoDePosicion, posicionesDe, type Geometria } from "./posiciones";
+import {
+  codigoDePosicion,
+  entraEnAltura,
+  posicionesDe,
+  type Geometria,
+} from "./posiciones";
 import {
   bultoContenido,
   bultos,
@@ -467,7 +472,7 @@ export async function cargarDatosDeEjemplo(
     if (problema) throw new Error(`Ejemplo inválido: ${problema}`);
 
     const alto = packaging === "suelto" ? null : (primero.alturas[packaging] ?? null);
-    if (alto != null && pos.alturaMaxCm != null && alto > pos.alturaMaxCm) continue;
+    if (alto != null && pos.alturaMaxCm != null && !entraEnAltura(alto, pos.alturaMaxCm)) continue;
 
     const cantidad = total(contenido);
     numero++;

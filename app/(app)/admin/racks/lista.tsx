@@ -11,6 +11,8 @@ import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
 import { useRouter } from "next/navigation";
 import {
+  alturaAdmitida,
+  HOLGURA_CM,
   cuantasPosiciones,
   describirGeometria,
   nombreDeNivel,
@@ -448,12 +450,21 @@ function Niveles({ grupo, niveles }: { grupo: Grupo; niveles: Nivel[] }) {
               </label>
               {valores[n.nivel] && (
                 <span className="text-xs text-slate-400">
-                  {(Number(valores[n.nivel]) / 100).toFixed(2).replace(".", ",")} m
+                  entran hasta{" "}
+                  {(alturaAdmitida(Number(valores[n.nivel])) / 100)
+                    .toFixed(2)
+                    .replace(".", ",")}{" "}
+                  m
                 </span>
               )}
             </li>
           ))}
       </ul>
+      <p className="mt-2 text-xs text-slate-500">
+        La altura es la del hueco, de larguero a larguero. Al bulto se le exigen{" "}
+        {HOLGURA_CM} cm de aire arriba para que el clark lo pueda levantar y
+        entrar sin chocar.
+      </p>
       {sinAlcance > 0 && (
         <p className="mt-2 text-xs text-slate-500">
           {sinAlcance === 1 ? "Un nivel" : `${sinAlcance} niveles`} sin alcance:

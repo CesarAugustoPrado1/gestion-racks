@@ -12,7 +12,14 @@ import {
   type TipoMovimiento,
 } from "../db/schema";
 import { total, validarComposicion, type LineaContenido } from "../bultos";
-import { loQueTapa, nombreDeNivel, nombreDeProfundidad } from "../posiciones";
+import {
+  alturaAdmitida,
+  entraEnAltura,
+  HOLGURA_CM,
+  loQueTapa,
+  nombreDeNivel,
+  nombreDeProfundidad,
+} from "../posiciones";
 import { porQueNoSeUsa, type MotivoExclusion } from "../uso";
 import { joinExclusion } from "../uso-sql";
 import { fallar } from "./comun";
@@ -381,6 +388,10 @@ export function exigirUsable(pos: PosicionVivo) {
 /**
  * Que el bulto entre en el hueco.
  *
+ * "Entrar" incluye la HOLGURA: tienen que sobrar al menos `HOLGURA_CM` entre el
+ * bulto y el límite del nivel, porque el clark lo levanta para entrarlo. Ver
+ * lib/posiciones.ts.
+ *
  * Solo se valida lo normalizado: un palet o un optimizado tienen una altura
  * conocida, un SUELTO no -no hay dos sueltos iguales- y por eso nunca se le
  * revisa. Si falta el dato de cualquiera de los dos lados -la norma sin medir o
@@ -413,7 +424,7 @@ export async function exigirAltura(
   const altura = filas[0]?.altura_cm;
   if (altura == null) return { invadeArriba: false };
 
-  if (altura <= pos.alturaMaxCm) return { invadeArriba: false };
+  if (entraEnAltura(altura, pos.alturaMaxCm)) return { invadeArriba: false };
 
   /**
    * No entra en su nivel. Pero en el galpon entra igual, sobresaliendo hacia el
@@ -426,6 +437,13 @@ export async function exigirAltura(
    */
   const m = (cm: number) => (cm / 100).toFixed(2).replace(".", ",");
   const quien = `un ${bulto.packaging} de ${filas[0].nombre} mide ${m(altura)} m`;
+  /**
+   * Se dice cuánto ADMITE el hueco, no cuánto mide: "en B-07-2-1 entran hasta
+   * 1,23 m" se compara directo con el palet. "Mide 1,33 m" haría pensar que uno
+   * de 1,30 entra, que es justo el error que la holgura evita.
+   */
+  const admite = (cm: number) =>
+    `hasta ${m(alturaAdmitida(cm))} m (el hueco mide ${m(cm)} y el clark necesita ${HOLGURA_CM} cm de aire)`;
 
   /**
    * 0. SOLO EN PENETRABLES.
@@ -439,7 +457,7 @@ export async function exigirAltura(
    */
   if (!pos.penetrable) {
     fallar(
-      `No entra: ${quien} y en ${pos.codigo} entran ${m(pos.alturaMaxCm)} m. ` +
+      `No entra: ${quien} y en ${pos.codigo} entran ${admite(pos.alturaMaxCm)}. ` +
         `Es un rack selectivo, así que no puede sobresalir hacia el nivel de arriba.`,
     );
   }
@@ -447,7 +465,7 @@ export async function exigirAltura(
   // 1. No hay nivel arriba: es el ultimo, y arriba esta el techo.
   if (!pos.arriba) {
     fallar(
-      `No entra: ${quien} y en ${pos.codigo} entran ${m(pos.alturaMaxCm)} m. ` +
+      `No entra: ${quien} y en ${pos.codigo} entran ${admite(pos.alturaMaxCm)}. ` +
         `Es el nivel más alto, así que no hay hueco arriba para que sobresalga.`,
     );
   }
@@ -456,7 +474,7 @@ export async function exigirAltura(
   //    importa, porque es el unico donde permitirlo rompe algo fisico.
   if (!pos.arriba.libre) {
     fallar(
-      `No se puede: ${quien} y en ${pos.codigo} entran ${m(pos.alturaMaxCm)} m, ` +
+      `No se puede: ${quien} y en ${pos.codigo} entran ${admite(pos.alturaMaxCm)}, ` +
         `así que sobresale hacia ${pos.arriba.codigo}` +
         (pos.arriba.ocupante
           ? `, que tiene el bulto ${pos.arriba.ocupante}. Van a chocar: primero hay que bajar ese.`
@@ -466,10 +484,10 @@ export async function exigirAltura(
 
   // 3. Ni con el hueco de arriba alcanza.
   const juntas = pos.alturaMaxCm + (pos.arriba.alturaMaxCm ?? 0);
-  if (pos.arriba.alturaMaxCm != null && altura > juntas) {
+  if (pos.arriba.alturaMaxCm != null && !entraEnAltura(altura, juntas)) {
     fallar(
       `No entra ni ocupando dos: ${quien} y entre ${pos.codigo} y ` +
-        `${pos.arriba.codigo} hay ${m(juntas)} m.`,
+        `${pos.arriba.codigo} entran ${admite(juntas)}.`,
     );
   }
 

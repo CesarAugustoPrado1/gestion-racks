@@ -127,7 +127,7 @@ serializando del otro lado (no se arregla con `max`; ahí la salida es
 ## Tests
 
 ```
-npm test          # todo: 103 tests, ~2 segundos
+npm test          # todo: 108 tests, ~2 segundos
 npm run test:db   # solo los del motor, contra la base
 ```
 
@@ -137,10 +137,10 @@ cualquier módulo del servidor.
 
 Hay **dos clases de test y prueban cosas distintas**:
 
-- **Puros** (78): la geometría del rack y la regla del penetrable, el índice de
+- **Puros** (81): la geometría del rack y la regla del penetrable, el índice de
   confiabilidad, la composición de bultos, las unidades por solapa. Corren en
   cualquier lado, sin base.
-- **Del motor** (25): contra una base de PostgreSQL de verdad, creada y borrada
+- **Del motor** (27): contra una base de PostgreSQL de verdad, creada y borrada
   en cada corrida. Prueban lo único que un test puro no puede: que después de
   una secuencia de movimientos reales, **sumar el historial siga dando el stock
   vivo**. La migración 0003 dejó movimientos que sumaban en vez de restar — el

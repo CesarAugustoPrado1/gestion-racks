@@ -613,3 +613,41 @@ describe("lugares que no se usan", { skip: !hay && "sin base local" }, () => {
     await exigirQueCuadre("después de sacar de una calle excluida");
   });
 });
+
+/**
+ * La holgura en el motor: el mismo palet, en un hueco justo y en uno con aire.
+ * Patagónica en palet mide 140 cm (ver el sembrado).
+ */
+describe("la holgura de 10 cm arriba del bulto", { skip: !hay && "sin base local" }, () => {
+  async function hueco(codigo: string, alturaCm: number) {
+    const [g] = await base.db
+      .insert(schema.grupos)
+      .values({ codigo, accesibilidad: "selectivo", ancho: 1, niveles: 1, unidades: 1 })
+      .returning();
+    await base.db.insert(schema.nivelesDeGrupo).values({ grupoId: g.id, nivel: 1, alturaMaxCm: alturaCm });
+    const [p] = await base.db
+      .insert(schema.posiciones)
+      .values({ grupoId: g.id, codigo: "01-1", unidad: 1, columna: 1, nivel: 1 })
+      .returning();
+    return p.id;
+  }
+
+  test("un palet de 1,40 m no entra en un hueco de 1,45 m: le faltan 5 cm de aire", async () => {
+    const id = await hueco("H1", 145);
+    await assert.rejects(
+      () =>
+        base.db.transaction(async (tx) => {
+          await meter(tx as Tx, id, "palet", [{ modeloId: datos.patagonica.id, cantidad: 40 }]);
+        }),
+      /hasta 1,35 m .*10 cm de aire/,
+    );
+  });
+
+  test("en un hueco de 1,50 m, con 10 cm justos, entra", async () => {
+    const id = await hueco("H2", 150);
+    await base.db.transaction(async (tx) => {
+      await meter(tx as Tx, id, "palet", [{ modeloId: datos.patagonica.id, cantidad: 40 }]);
+    });
+    await exigirQueCuadre("después de meter con holgura justa");
+  });
+});
