@@ -43,17 +43,22 @@ export function Grilla({ plano }: { plano: Plano }) {
   return <g aria-hidden>{lineas}</g>;
 }
 
-/** Una regla de 10 m (o 50 m en plantas grandes), abajo a la izquierda. */
+/**
+ * Una regla de 10 m (o 50 m en plantas grandes), abajo a la DERECHA: abajo a
+ * la izquierda están los ejes de referencia y se pisaban.
+ */
 export function Escala({ plano }: { plano: Plano }) {
   const e = escalaDe(plano);
   const largo = plano.ancho > 300 ? 50 : 10;
   const y = plano.largo + e * 3;
+  const x1 = plano.ancho;
+  const x0 = x1 - largo;
   return (
     <g aria-hidden>
-      <line x1={0} y1={y} x2={largo} y2={y} stroke="#334155" strokeWidth={e * 0.3} />
-      <line x1={0} y1={y - e} x2={0} y2={y + e} stroke="#334155" strokeWidth={e * 0.3} />
-      <line x1={largo} y1={y - e} x2={largo} y2={y + e} stroke="#334155" strokeWidth={e * 0.3} />
-      <text x={largo + e} y={y + e * 0.6} fontSize={e * 1.8} fill="#334155">
+      <line x1={x0} y1={y} x2={x1} y2={y} stroke="#334155" strokeWidth={e * 0.3} />
+      <line x1={x0} y1={y - e} x2={x0} y2={y + e} stroke="#334155" strokeWidth={e * 0.3} />
+      <line x1={x1} y1={y - e} x2={x1} y2={y + e} stroke="#334155" strokeWidth={e * 0.3} />
+      <text x={x0 - e} y={y + e * 0.6} fontSize={e * 1.8} fill="#334155" textAnchor="end">
         {largo} m
       </text>
     </g>

@@ -2,6 +2,12 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   aGrilla,
+  aUsuario,
+  deUsuario,
+  elementoDesdeRect,
+  esRectilineo,
+  rectDeElemento,
+  unirRectilineos,
   esquemaPlano,
   esquinasDeRack,
   girar,
@@ -96,5 +102,97 @@ describe("plano: lo que no se puede guardar", () => {
     assert.equal(esquemaPlano.safeParse(plano([{ id: "l", tipo: "limite", puntos: [[0, 0], [1, 1]] }])).success, false);
     assert.equal(esquemaPlano.safeParse(plano([{ id: "a", tipo: "acceso", puntos: [[0, 0]] }])).success, false);
     assert.equal(esquemaPlano.safeParse({ ancho: 5, largo: 50, elementos: [] }).success, false);
+  });
+});
+
+describe("plano: ejes de referencia", () => {
+  const p = { largo: 50, origen: { x: 10, y: 5 } };
+
+  test("ida y vuelta entre coordenadas internas y de usuario", () => {
+    const q: [number, number] = [37.5, 12];
+    assert.deepEqual(deUsuario(aUsuario(q, p), p), q);
+  });
+
+  test("sin origen, el (0,0) es la esquina de abajo a la izquierda e Y crece hacia arriba", () => {
+    assert.deepEqual(aUsuario([0, 50], { largo: 50 }), [0, 0]);
+    assert.deepEqual(aUsuario([0, 40], { largo: 50 }), [0, 10]);
+  });
+
+  test("un rectángulo cargado por medidas vuelve con las mismas medidas, para cada tipo", () => {
+    const r = { x: 3, y: 4, ancho: 20, alto: 6 };
+    for (const tipo of ["limite", "techado", "rack", "calle"] as const) {
+      assert.deepEqual(rectDeElemento(elementoDesdeRect(tipo, r, p), p), r, tipo);
+    }
+    const seg = { x: 3, y: 4, ancho: 8, alto: 0 };
+    assert.deepEqual(rectDeElemento(elementoDesdeRect("acceso", seg, p), p), seg);
+  });
+
+  test("una calle angosta y vertical: el ancho es el lado corto", () => {
+    const e = elementoDesdeRect("calle", { x: 0, y: 0, ancho: 4, alto: 30 }, p);
+    assert.equal((e as { ancho: number }).ancho, 4);
+  });
+
+  test("un polígono en L no se puede editar por medidas", () => {
+    const l: Elemento = { id: "l", tipo: "limite", puntos: [[0, 0], [10, 0], [10, 5], [5, 5], [5, 10], [0, 10]] };
+    assert.equal(rectDeElemento(l, p), null);
+  });
+});
+
+describe("plano: unir figuras", () => {
+  const rect = (x: number, y: number, w: number, h: number): [number, number][] => [
+    [x, y],
+    [x + w, y],
+    [x + w, y + h],
+    [x, y + h],
+  ];
+  const puntos = (r: ReturnType<typeof unirRectilineos>) => {
+    assert.ok("puntos" in r, "error" in r ? r.error : "");
+    return (r as { puntos: [number, number][] }).puntos;
+  };
+
+  test("dos rectángulos que se superponen dan una L con el área de la unión", () => {
+    const u = puntos(unirRectilineos([rect(0, 0, 10, 4), rect(0, 0, 4, 10)]));
+    assert.equal(u.length, 6);
+    assert.equal(superficie(u), 10 * 4 + 4 * 10 - 4 * 4);
+    assert.ok(esRectilineo(u));
+  });
+
+  test("tres rectángulos: el lote en forma de T", () => {
+    const u = puntos(unirRectilineos([rect(0, 0, 30, 10), rect(10, 10, 10, 20), rect(10, 5, 10, 10)]));
+    assert.equal(superficie(u), 300 + 200);
+    assert.equal(u.length, 8);
+  });
+
+  test("dos rectángulos que comparten un lado se funden en uno solo", () => {
+    const u = puntos(unirRectilineos([rect(0, 0, 10, 5), rect(10, 0, 10, 5)]));
+    assert.equal(u.length, 4);
+    assert.equal(superficie(u), 100);
+  });
+
+  test("uno adentro del otro: queda el de afuera", () => {
+    const u = puntos(unirRectilineos([rect(0, 0, 20, 20), rect(5, 5, 5, 5)]));
+    assert.equal(u.length, 4);
+    assert.equal(superficie(u), 400);
+  });
+
+  test("separados, o tocándose solo por una esquina: no se pueden unir", () => {
+    assert.ok("error" in unirRectilineos([rect(0, 0, 5, 5), rect(10, 10, 5, 5)]));
+    assert.ok("error" in unirRectilineos([rect(0, 0, 5, 5), rect(5, 5, 5, 5)]));
+  });
+
+  test("una unión que deja un hueco en el medio se rechaza", () => {
+    const anillo = [rect(0, 0, 30, 5), rect(0, 25, 30, 5), rect(0, 0, 5, 30), rect(25, 0, 5, 30)];
+    const r = unirRectilineos(anillo);
+    assert.ok("error" in r && /hueco/.test(r.error));
+  });
+
+  test("figuras con lados inclinados no se unen", () => {
+    assert.ok("error" in unirRectilineos([[[0, 0], [10, 0], [5, 8]], rect(0, 0, 5, 5)]));
+  });
+
+  test("el contorno arranca arriba a la izquierda y va en el mismo sentido que un rectángulo", () => {
+    const u = puntos(unirRectilineos([rect(0, 0, 10, 4), rect(0, 0, 4, 10)]));
+    assert.deepEqual(u[0], [0, 0]);
+    assert.deepEqual(u[1], [10, 0]);
   });
 });

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { guardarPlano } from "@/lib/acciones/plano";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
+import { FormularioPorMedidas, Medida, MedidasDelElemento } from "./medidas";
 import {
   DibujoElemento,
   Escala,
@@ -17,6 +18,12 @@ import {
   ETIQUETA_TIPO,
   MINIMO_DE_PUNTOS,
   aGrilla,
+  aUsuario,
+  deUsuario,
+  elementoDesdeRect,
+  origenDe,
+  unirRectilineos,
+  type RectUsuario,
   esPoligono,
   esSegmento,
   esquinasDeRack,
@@ -37,6 +44,14 @@ import {
 /**
  * El editor del plano. Todo en el navegador hasta que se toca "Guardar", que
  * manda el plano entero como una versión nueva.
+ *
+ * DOS MODOS. "Por medidas" es el principal: casi todo en una planta es un
+ * rectángulo alineado a los ejes, y se carga con X, Y, ancho y alto desde los
+ * ejes de referencia. "Dibujo libre" queda para lo que no entra en eso. Los dos
+ * editan el mismo plano.
+ *
+ * Shift + clic elige varias figuras a la vez, para UNIRLAS: el lote o un
+ * techado que no es un rectángulo se arma sumando rectángulos.
  *
  * Cómo se usa, que es lo mismo que dice la barra de ayuda:
  * - Elegir una herramienta y hacer clic en el plano para poner puntos.
@@ -86,6 +101,9 @@ export function EditorPlano({
   const [historia, setHistoria] = useState<Plano[]>([]);
   const [herramienta, setHerramienta] = useState<Herramienta>("seleccionar");
   const [seleccion, setSeleccion] = useState<string | null>(null);
+  /** Las otras elegidas con Shift + clic, para unir. */
+  const [otras, setOtras] = useState<string[]>([]);
+  const [modo, setModo] = useState<"medidas" | "dibujo">("medidas");
   const [borrador, setBorrador] = useState<Punto[]>([]);
   const [cursor, setCursor] = useState<Punto | null>(null);
   const [arrastre, setArrastre] = useState<Arrastre | null>(null);
@@ -132,9 +150,58 @@ export function EditorPlano({
     (id: string) => {
       cambiar({ ...plano, elementos: plano.elementos.filter((e) => e.id !== id) });
       setSeleccion(null);
+      setOtras([]);
     },
     [cambiar, plano],
   );
+
+  const agregar = (e: Elemento) => {
+    cambiar({ ...plano, elementos: [...plano.elementos, e] });
+    setSeleccion(e.id);
+    setOtras([]);
+  };
+
+  /**
+   * Une las figuras elegidas en la primera. Solo límites o techados, todas del
+   * mismo tipo y con lados rectos: ver `unirRectilineos`.
+   */
+  const elegidas = [seleccion, ...otras]
+    .filter((x): x is string => x != null)
+    .map((id) => plano.elementos.find((e) => e.id === id))
+    .filter((e): e is Elemento => e != null);
+  const unibles =
+    elegidas.length >= 2 &&
+    elegidas.every((e) => (e.tipo === "limite" || e.tipo === "techado") && e.tipo === elegidas[0].tipo);
+  function unir() {
+    const figuras = elegidas.map((e) => (e as Extract<Elemento, { puntos: Punto[] }>).puntos);
+    const r = unirRectilineos(figuras);
+    if ("error" in r) {
+      setAviso(r.error);
+      return;
+    }
+    const primera = elegidas[0];
+    const sacar = new Set(elegidas.slice(1).map((e) => e.id));
+    cambiar({
+      ...plano,
+      elementos: plano.elementos
+        .filter((e) => !sacar.has(e.id))
+        .map((e) => (e.id === primera.id ? ({ ...e, puntos: r.puntos } as Elemento) : e)),
+    });
+    setOtras([]);
+    setAviso(`Listo: ${elegidas.length} figuras unidas en una.`);
+  }
+
+  /** Suma un rectángulo a una figura existente (para el formulario por medidas). */
+  function sumarA(id: string, rect: RectUsuario): string | null {
+    const destino = plano.elementos.find((e) => e.id === id);
+    if (!destino || (destino.tipo !== "limite" && destino.tipo !== "techado")) return "No encontré la figura.";
+    const nuevo = elementoDesdeRect(destino.tipo, rect, plano) as Extract<Elemento, { puntos: Punto[] }>;
+    const r = unirRectilineos([destino.puntos, nuevo.puntos]);
+    if ("error" in r) return r.error;
+    reemplazar(id, (e) => ({ ...e, puntos: r.puntos }) as Elemento);
+    setSeleccion(id);
+    return null;
+  }
 
   /* --- Coordenadas ------------------------------------------------------- */
 
@@ -186,17 +253,40 @@ export function EditorPlano({
 
     if (herramienta === "seleccionar") {
       const vertice = objetivo?.getAttribute("data-vertice");
-      if (vertice && seleccion) {
+      const idTocado = objetivo?.getAttribute("data-id");
+      if (ev.shiftKey && idTocado) {
+        // Shift + clic: sumar o sacar de la selección, sin mover nada.
+        if (idTocado === seleccion) {
+          setSeleccion(otras[0] ?? null);
+          setOtras(otras.slice(1));
+        } else if (otras.includes(idTocado)) {
+          setOtras(otras.filter((x) => x !== idTocado));
+        } else if (seleccion) {
+          setOtras([...otras, idTocado]);
+        } else {
+          setSeleccion(idTocado);
+        }
+        return;
+      }
+      if (modo === "medidas" && idTocado) {
+        // Por medidas, el lienzo solo elige: mover se hace con los números.
+        setSeleccion(idTocado);
+        setOtras([]);
+        return;
+      }
+      if (vertice && seleccion && modo === "dibujo") {
         setHistoria((h) => [...h.slice(-49), plano]);
         setArrastre({ modo: "vertice", id: seleccion, indice: Number(vertice) });
       } else if (objetivo?.getAttribute("data-id")) {
         const id = objetivo.getAttribute("data-id")!;
         const original = plano.elementos.find((e) => e.id === id)!;
         setSeleccion(id);
+        setOtras([]);
         setHistoria((h) => [...h.slice(-49), plano]);
         setArrastre({ modo: "mover", id, desde: ajustar(p), original });
       } else {
         setSeleccion(null);
+        setOtras([]);
         setArrastre({ modo: "fondo", desdePantalla: [ev.clientX, ev.clientY], vista });
       }
       (ev.currentTarget as SVGSVGElement).setPointerCapture(ev.pointerId);
@@ -324,7 +414,12 @@ export function EditorPlano({
     });
   }
 
-  const ayuda = HERRAMIENTAS.find((h) => h.id === herramienta)!.ayuda;
+  const ayuda =
+    modo === "medidas"
+      ? "Cargá con números en el panel de la derecha. Clic en una figura para elegirla y ver sus medidas; Shift + clic para elegir varias y unirlas."
+      : HERRAMIENTAS.find((h) => h.id === herramienta)!.ayuda;
+  const origen = origenDe(plano);
+  const puntoOrigen = deUsuario([0, 0], plano);
   const gruposUsados = new Set(
     plano.elementos.flatMap((e) => (e.tipo === "rack" && e.grupoId != null && e.id !== seleccion ? [e.grupoId] : [])),
   );
@@ -337,7 +432,25 @@ export function EditorPlano({
 
       {/* Herramientas */}
       <div className="tarjeta flex flex-wrap items-center gap-2 p-3">
-        {HERRAMIENTAS.map((h) => (
+        {(["medidas", "dibujo"] as const).map((mo) => (
+          <button
+            key={mo}
+            type="button"
+            onClick={() => {
+              setModo(mo);
+              setHerramienta("seleccionar");
+              setBorrador([]);
+              setAviso(null);
+            }}
+            className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+              modo === mo ? "bg-slate-900 text-white" : "bg-white text-slate-700 ring-1 ring-slate-300"
+            }`}
+          >
+            {mo === "medidas" ? "Por medidas" : "Dibujo libre"}
+          </button>
+        ))}
+        <span className="mx-1 h-6 w-px bg-slate-200" />
+        {modo === "dibujo" && HERRAMIENTAS.map((h) => (
           <button
             key={h.id}
             type="button"
@@ -353,7 +466,7 @@ export function EditorPlano({
             {h.etiqueta}
           </button>
         ))}
-        <span className="mx-1 h-6 w-px bg-slate-200" />
+        {modo === "dibujo" && <span className="mx-1 h-6 w-px bg-slate-200" />}
         <button type="button" className="rounded-lg px-3 py-2 text-sm ring-1 ring-slate-300" onClick={() => zoom(1 / 1.3)} aria-label="Acercar">
           +
         </button>
@@ -393,11 +506,12 @@ export function EditorPlano({
 
       <div className="grid gap-3 lg:grid-cols-[1fr_280px]">
         {/* El lienzo */}
-        <div className="tarjeta overflow-hidden">
+        <div className="tarjeta self-start overflow-hidden">
           <svg
             ref={svgRef}
             viewBox={`${vista.x} ${vista.y} ${vista.w} ${vista.h}`}
-            className={`block h-[70vh] w-full touch-none select-none ${
+            style={{ aspectRatio: `${encuadre(plano).w} / ${encuadre(plano).h}` }}
+            className={`lienzo-plano block max-h-[75vh] w-full touch-none select-none ${
               herramienta === "seleccionar" ? (arrastre ? "cursor-grabbing" : "cursor-default") : "cursor-crosshair"
             }`}
             onPointerDown={alApretar}
@@ -411,7 +525,7 @@ export function EditorPlano({
             <Grilla plano={plano} />
             {ordenarParaDibujar(plano.elementos).map((e) => (
               <g key={e.id} data-id={e.id} className={herramienta === "seleccionar" ? "cursor-move" : ""}>
-                <DibujoElemento e={e} plano={plano} grupos={infoGrupos} resaltado={e.id === seleccion} />
+                <DibujoElemento e={e} plano={plano} grupos={infoGrupos} resaltado={e.id === seleccion || otras.includes(e.id)} />
                 {/* Un trazo fino es difícil de agarrar: se le suma una franja
                     invisible más ancha para el clic. */}
                 {e.tipo !== "rack" && (
@@ -426,7 +540,7 @@ export function EditorPlano({
             ))}
 
             {/* Los puntos del elegido, para arrastrarlos. */}
-            {elegido && elegido.tipo !== "rack" && herramienta === "seleccionar" &&
+            {elegido && elegido.tipo !== "rack" && herramienta === "seleccionar" && modo === "dibujo" &&
               elegido.puntos.map(([x, y], i) => (
                 <circle key={i} data-vertice={i} cx={x} cy={y} r={s * 0.9} fill="#fff" stroke="#0f172a" strokeWidth={s * 0.3} className="cursor-pointer" />
               ))}
@@ -447,11 +561,20 @@ export function EditorPlano({
               </g>
             )}
 
-            {cursor && herramienta !== "seleccionar" && (
+            {/* Los ejes de referencia: desde acá se miden X e Y. */}
+            <g pointerEvents="none">
+              <line x1={puntoOrigen[0]} y1={puntoOrigen[1]} x2={puntoOrigen[0] + s * 8} y2={puntoOrigen[1]} stroke="#dc2626" strokeWidth={s * 0.3} />
+              <line x1={puntoOrigen[0]} y1={puntoOrigen[1]} x2={puntoOrigen[0]} y2={puntoOrigen[1] - s * 8} stroke="#dc2626" strokeWidth={s * 0.3} />
+              <circle cx={puntoOrigen[0]} cy={puntoOrigen[1]} r={s * 0.6} fill="#dc2626" />
+              <text x={puntoOrigen[0] + s * 8.5} y={puntoOrigen[1] + s * 0.6} fontSize={s * 1.6} fontWeight={700} fill="#dc2626">X</text>
+              <text x={puntoOrigen[0] - s * 0.6} y={puntoOrigen[1] - s * 8.8} fontSize={s * 1.6} fontWeight={700} fill="#dc2626">Y</text>
+            </g>
+
+            {cursor && (herramienta !== "seleccionar" || modo === "medidas") && (
               <g pointerEvents="none">
                 <circle cx={cursor[0]} cy={cursor[1]} r={s * 0.5} fill="none" stroke="#2a78d6" strokeWidth={s * 0.2} />
-                <text x={cursor[0] + s} y={cursor[1] - s} fontSize={s * 1.4} fill="#2a78d6">
-                  {cursor[0].toLocaleString("es-AR")} ; {cursor[1].toLocaleString("es-AR")}
+                <text x={cursor[0] + s} y={cursor[1] - s} fontSize={s * 1.4} fill="#2a78d6" paintOrder="stroke" stroke="#fff" strokeWidth={s * 0.4}>
+                  X {aUsuario(cursor, plano)[0].toLocaleString("es-AR")} · Y {aUsuario(cursor, plano)[1].toLocaleString("es-AR")}
                 </text>
               </g>
             )}
@@ -468,7 +591,57 @@ export function EditorPlano({
               <Numero etiqueta="Largo (m)" valor={plano.largo} cambiar={(v) => cambiar({ ...plano, largo: v })} />
             </div>
             <p className="text-xs text-slate-500">Todo lo que se dibuja tiene que quedar adentro.</p>
+            <p className="pt-1 text-xs font-semibold text-slate-700">Ejes de referencia (en rojo)</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Medida
+                etiqueta="Desde la izquierda (m)"
+                valor={origen.x}
+                cambiar={(v) => cambiar({ ...plano, origen: { ...origen, x: v } })}
+                negativos
+                cero
+              />
+              <Medida
+                etiqueta="Desde abajo (m)"
+                valor={origen.y}
+                cambiar={(v) => cambiar({ ...plano, origen: { ...origen, y: v } })}
+                negativos
+                cero
+              />
+            </div>
+            <p className="text-xs text-slate-500">
+              Dónde está el (0,0). X crece hacia la derecha e Y hacia arriba. Correrlo no mueve nada: cambia desde dónde se mide.
+            </p>
           </div>
+
+          {otras.length > 0 && (
+            <div className="tarjeta space-y-2 p-4">
+              <p className="text-sm font-bold text-slate-900">{elegidas.length} figuras elegidas</p>
+              {unibles ? (
+                <>
+                  <button type="button" className="boton-primario min-h-10 w-full text-sm" onClick={unir}>
+                    Unir en una sola
+                  </button>
+                  <p className="text-xs text-slate-500">
+                    Suma las áreas y rearma el perímetro. Se tienen que tocar por un lado y tener lados horizontales y verticales.
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Solo se pueden unir límites con límites o techados con techados.
+                </p>
+              )}
+            </div>
+          )}
+
+          {modo === "medidas" && (
+            <FormularioPorMedidas
+              plano={plano}
+              grupos={grupos}
+              gruposUsados={new Set(plano.elementos.flatMap((e) => (e.tipo === "rack" && e.grupoId != null ? [e.grupoId] : [])))}
+              agregar={agregar}
+              sumarA={sumarA}
+            />
+          )}
 
           {elegido ? (
             <div className="tarjeta space-y-3 p-4">
@@ -483,6 +656,14 @@ export function EditorPlano({
                   placeholder={elegido.tipo === "frente" ? "Av. Siempreviva" : elegido.tipo === "acceso" ? "Portón 1" : ""}
                 />
               </label>
+
+              {modo === "medidas" && (
+                <MedidasDelElemento
+                  elemento={elegido}
+                  plano={plano}
+                  cambiar={(nuevo) => reemplazar(elegido.id, () => nuevo)}
+                />
+              )}
 
               {elegido.tipo === "rack" && (
                 <>
@@ -505,13 +686,17 @@ export function EditorPlano({
                       ))}
                     </select>
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Numero etiqueta="Ancho (m)" valor={elegido.ancho} cambiar={(v) => reemplazar(elegido.id, (e) => ({ ...e, ancho: v }) as Elemento)} />
-                    <Numero etiqueta="Largo (m)" valor={elegido.largo} cambiar={(v) => reemplazar(elegido.id, (e) => ({ ...e, largo: v }) as Elemento)} />
-                  </div>
-                  <button type="button" className="boton-secundario min-h-10 w-full text-sm" onClick={() => reemplazar(elegido.id, girar)}>
-                    Girar 90°
-                  </button>
+                  {modo === "dibujo" && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Numero etiqueta="Ancho (m)" valor={elegido.ancho} cambiar={(v) => reemplazar(elegido.id, (e) => ({ ...e, ancho: v }) as Elemento)} />
+                        <Numero etiqueta="Largo (m)" valor={elegido.largo} cambiar={(v) => reemplazar(elegido.id, (e) => ({ ...e, largo: v }) as Elemento)} />
+                      </div>
+                      <button type="button" className="boton-secundario min-h-10 w-full text-sm" onClick={() => reemplazar(elegido.id, girar)}>
+                        Girar 90°
+                      </button>
+                    </>
+                  )}
                   <p className="text-xs text-slate-500">
                     Ocupa {m(esquinasDeRack(elegido)[1][0] - esquinasDeRack(elegido)[0][0])} ×{" "}
                     {m(esquinasDeRack(elegido)[2][1] - esquinasDeRack(elegido)[1][1])} en el plano.
@@ -519,7 +704,7 @@ export function EditorPlano({
                 </>
               )}
 
-              {elegido.tipo === "calle" && (
+              {elegido.tipo === "calle" && modo === "dibujo" && (
                 <>
                   <Numero etiqueta="Ancho de la calle (m)" valor={elegido.ancho} cambiar={(v) => reemplazar(elegido.id, (e) => ({ ...e, ancho: v }) as Elemento)} />
                   <p className="text-xs text-slate-500">Recorrido: {m(largo(elegido.puntos))}.</p>
@@ -536,8 +721,11 @@ export function EditorPlano({
                 <p className="text-xs text-slate-500">Mide {m(largo(elegido.puntos))}.</p>
               )}
 
-              {elegido.tipo !== "rack" && (
+              {elegido.tipo !== "rack" && modo === "dibujo" && (
                 <p className="text-xs text-slate-500">Arrastrá los puntos blancos para cambiar la forma.</p>
+              )}
+              {(elegido.tipo === "limite" || elegido.tipo === "techado") && (
+                <p className="text-xs text-slate-500">Para sumarle otra figura: Shift + clic en las dos y «Unir en una sola».</p>
               )}
 
               <button type="button" className="boton-peligro min-h-10 w-full text-sm" onClick={() => borrar(elegido.id)}>
@@ -546,7 +734,7 @@ export function EditorPlano({
             </div>
           ) : (
             <div className="tarjeta p-4 text-xs text-slate-500">
-              Elegí algo del plano con <strong>Seleccionar</strong> para ver y cambiar sus datos.
+              Hacé clic en algo del plano para ver y cambiar sus datos.
             </div>
           )}
 
