@@ -207,6 +207,15 @@ El **suelto no tiene altura**, igual que no tiene cantidad normalizada: no hay
 dos sueltos iguales. Por eso no tiene fila en `normas` y por eso nunca se le
 revisa la altura.
 
+**Entrar es entrar con aire arriba.** Al guardar un palet el clark lo levanta
+por encima del larguero y después lo baja: si el hueco es justo, choca. Por eso
+el bulto entra solo si sobran al menos **10 cm** (`HOLGURA_CM`, en
+`lib/posiciones.ts`) entre su parte de arriba y el límite del nivel: un palet de
+1,30 m no va en un hueco de 1,33 m, y sí en uno de 1,40 m. La misma regla vale
+cuando un bulto alto de un penetrable ocupa también el hueco de arriba: la suma
+de los dos huecos tiene que dejar los 10 cm. Es una constante y no un parámetro
+de Administración porque es una regla física de la planta, no una preferencia.
+
 Si falta cualquiera de los dos datos —la norma sin medir, el nivel sin medir— **no
 se valida nada**. Se puede usar la app antes de tener toda la planta medida, y
 cada altura que se carga empieza a proteger sola.

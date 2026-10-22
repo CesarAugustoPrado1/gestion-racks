@@ -184,3 +184,32 @@ export function describirPosicion(p: {
   }
   return `${p.codigo} · ${partes.join(", ")}`;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Altura                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * El aire que tiene que quedar entre la parte de arriba del bulto y el límite
+ * del nivel, en centímetros.
+ *
+ * Al guardar un palet el clark lo LEVANTA por encima del larguero para entrarlo,
+ * y después lo baja. Si el hueco es justo, en esa maniobra choca arriba. Con
+ * menos de 10 cm no se entra, aunque el palet "quepa": un palet de 1,30 m no va
+ * en un nivel de 1,33 m.
+ *
+ * Es una regla de la planta y no una preferencia, por eso es una constante y no
+ * un parámetro de Administración. Si algún día cambia, se cambia acá y vale
+ * para todo: el motor, las pantallas y los datos de ejemplo.
+ */
+export const HOLGURA_CM = 10;
+
+/** Si un bulto de `bultoCm` entra en un hueco de `huecoCm`, con la holgura. */
+export function entraEnAltura(bultoCm: number, huecoCm: number): boolean {
+  return bultoCm + HOLGURA_CM <= huecoCm;
+}
+
+/** La altura máxima de bulto que admite un hueco: el hueco menos la holgura. */
+export function alturaAdmitida(huecoCm: number): number {
+  return huecoCm - HOLGURA_CM;
+}

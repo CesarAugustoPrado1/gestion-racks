@@ -10,6 +10,7 @@ import {
   SelectorEmpresa,
 } from "@/components/admin";
 import { numero } from "@/lib/formato";
+import { HOLGURA_CM } from "@/lib/posiciones";
 
 type Modelo = {
   id: number;
@@ -190,7 +191,9 @@ export function Modelos({
             </div>
             <p className="mt-1 text-xs text-slate-500">
               Es lo que se compara contra la altura libre del nivel al meter o
-              mover. Sin medir, no se valida nada. El <strong>suelto</strong> no
+              mover, dejando {HOLGURA_CM} cm de aire arriba para que el clark lo
+              levante sin chocar: un palet de 1,30 m necesita un hueco de 1,40 m.
+              Sin medir, no se valida nada. El <strong>suelto</strong> no
               lleva altura: no hay dos sueltos iguales.
             </p>
           </div>
