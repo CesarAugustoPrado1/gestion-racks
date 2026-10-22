@@ -6,11 +6,13 @@ import { guardarPlano } from "@/lib/acciones/plano";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
 import { FormularioPorMedidas, Medida, MedidasDelElemento } from "./medidas";
+import { EditorDeEstilo, EditorDeTipografia, ReglasDeEstilo } from "@/components/plano-estilos";
 import {
   DibujoElemento,
   Escala,
   Grilla,
   escalaDe,
+  margenDe,
   ordenarParaDibujar,
   type InfoDeGrupo,
 } from "@/components/plano-dibujo";
@@ -20,6 +22,7 @@ import {
   aGrilla,
   aUsuario,
   deUsuario,
+  estiloDe,
   elementoDesdeRect,
   origenDe,
   unirRectilineos,
@@ -109,7 +112,7 @@ export function EditorPlano({
   const [arrastre, setArrastre] = useState<Arrastre | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
 
-  const margen = escalaDe(plano) * 6;
+  const margen = margenDe(plano);
   const encuadre = useCallback(
     (p: Plano): Vista => ({ x: -margen, y: -margen, w: p.ancho + margen * 2, h: p.largo + margen * 2 }),
     [margen],
@@ -506,7 +509,9 @@ export function EditorPlano({
 
       <div className="grid gap-3 lg:grid-cols-[1fr_280px]">
         {/* El lienzo */}
-        <div className="tarjeta self-start overflow-hidden">
+        {/* Fijo en pantalla en la PC: el panel de la derecha es largo, y al
+            bajar a los estilos el plano no se tiene que ir de vista. */}
+        <div className="tarjeta self-start overflow-hidden lg:sticky lg:top-20">
           <svg
             ref={svgRef}
             viewBox={`${vista.x} ${vista.y} ${vista.w} ${vista.h}`}
@@ -728,6 +733,53 @@ export function EditorPlano({
                 <p className="text-xs text-slate-500">Para sumarle otra figura: Shift + clic en las dos y «Unir en una sola».</p>
               )}
 
+              <details className="rounded-lg bg-slate-50 p-3">
+                <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+                  Estilo de este elemento
+                  {elegido.estilo && Object.keys(elegido.estilo).length > 0 ? " · propio" : " · el de su tipo"}
+                </summary>
+                <div className="mt-3 space-y-3">
+                  <EditorDeEstilo
+                    tipo={elegido.tipo}
+                    efectivo={estiloDe(elegido, plano)}
+                    cambiar={(parche) =>
+                      reemplazar(elegido.id, (e) => ({ ...e, estilo: { ...e.estilo, ...parche } }) as Elemento)
+                    }
+                  />
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    {elegido.estilo && Object.keys(elegido.estilo).length > 0 && (
+                      <>
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-slate-600 underline"
+                          onClick={() => reemplazar(elegido.id, (e) => ({ ...e, estilo: undefined }) as Elemento)}
+                        >
+                          Volver al estilo del tipo
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-slate-600 underline"
+                          onClick={() => {
+                            // Este estilo pasa a ser la regla del tipo, y este
+                            // elemento deja de tener uno propio.
+                            const efectivo = estiloDe(elegido, plano);
+                            cambiar({
+                              ...plano,
+                              estilos: { ...plano.estilos, [elegido.tipo]: efectivo },
+                              elementos: plano.elementos.map((e) =>
+                                e.id === elegido.id ? ({ ...e, estilo: undefined } as Elemento) : e,
+                              ),
+                            });
+                          }}
+                        >
+                          Aplicarlo a todos los de este tipo
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </details>
+
               <button type="button" className="boton-peligro min-h-10 w-full text-sm" onClick={() => borrar(elegido.id)}>
                 Borrar
               </button>
@@ -738,6 +790,8 @@ export function EditorPlano({
             </div>
           )}
 
+          <ReglasDeEstilo plano={plano} cambiar={(p) => cambiar(p)} />
+          <EditorDeTipografia plano={plano} cambiar={(p) => cambiar(p)} />
           <ResumenDePlano plano={plano} grupos={grupos} />
         </aside>
       </div>
