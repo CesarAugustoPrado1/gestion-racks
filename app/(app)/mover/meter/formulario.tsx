@@ -7,7 +7,7 @@ import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
 import { validarComposicion, validarDescripcion } from "@/lib/bultos";
 import { ETIQUETA_PACKAGING, PACKAGINGS, numero } from "@/lib/formato";
-import { describirPosicion } from "@/lib/posiciones";
+import { SelectorPosicion } from "@/components/selector-posicion";
 import { avisoAjeno, esAjeno } from "@/lib/uso";
 import type { ModeloParaCargar, PosicionLibre } from "@/lib/consultas";
 import type { Packaging } from "@/lib/db/schema";
@@ -297,22 +297,12 @@ export function FormularioMeter({
             No hay ninguna posición con lugar. Podés meterlo sin ubicar.
           </Aviso>
         ) : (
-          <select
-            className="campo"
-            value={sinUbicar ? "" : (posicionId ?? "")}
-            disabled={sinUbicar}
-            onChange={(e) =>
-              setPosicionId(e.target.value ? Number(e.target.value) : null)
-            }
-          >
-            <option value="">Elegí una posición…</option>
-            {posiciones.map((p) => (
-              <option key={p.id} value={p.id}>
-                {describirPosicion(p)}
-                {p.empresa ? ` · ${p.empresa}` : ""}
-              </option>
-            ))}
-          </select>
+          <SelectorPosicion
+            posiciones={posiciones}
+            valor={posicionId}
+            onCambio={setPosicionId}
+            deshabilitado={sinUbicar}
+          />
         )}
 
         <label className="mt-3 flex items-start gap-2.5 text-sm text-slate-700">

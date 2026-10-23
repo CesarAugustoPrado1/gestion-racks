@@ -295,6 +295,8 @@ export type PosicionLibre = {
   empresaId: number | null;
   empresa: string | null;
   penetrable: boolean;
+  /** Calle (penetrable) o columna corrida (selectivo): lo que se elige después del grupo. */
+  calle: number;
   nivel: number;
   niveles: number;
   profundidad: number | null;
@@ -316,7 +318,7 @@ export async function posicionesLibres(): Promise<PosicionLibre[]> {
            g.codigo as rack,
            g.empresa_id, e.nombre as empresa,
            g.accesibilidad, g.niveles, g.profundidad as profundidad_max,
-           p.nivel, p.profundidad
+           p.unidad, p.columna, p.nivel, p.profundidad
       from posiciones p
       join grupos g on g.id = p.grupo_id
       left join empresas e on e.id = g.empresa_id
@@ -340,6 +342,8 @@ export async function posicionesLibres(): Promise<PosicionLibre[]> {
     accesibilidad: string;
     niveles: number;
     profundidad_max: number | null;
+    unidad: number;
+    columna: number | null;
     nivel: number;
     profundidad: number | null;
   }>;
@@ -351,6 +355,7 @@ export async function posicionesLibres(): Promise<PosicionLibre[]> {
     empresaId: f.empresa_id,
     empresa: f.empresa,
     penetrable: f.accesibilidad === "penetrable",
+    calle: f.accesibilidad === "penetrable" ? f.unidad : (f.columna ?? f.unidad),
     nivel: f.nivel,
     niveles: f.niveles,
     profundidad: f.profundidad,

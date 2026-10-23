@@ -6,7 +6,7 @@ import { mover, sacar } from "@/lib/acciones/flujo";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
 import { ETIQUETA_PACKAGING, numero } from "@/lib/formato";
-import { describirPosicion } from "@/lib/posiciones";
+import { SelectorPosicion } from "@/components/selector-posicion";
 import { avisoAjeno, esAjeno } from "@/lib/uso";
 import type { PosicionLibre } from "@/lib/consultas";
 import type { Packaging } from "@/lib/db/schema";
@@ -304,22 +304,16 @@ function Mover({
       </p>
       {error && <Aviso>{error}</Aviso>}
 
-      <select
-        className="campo"
-        value={alLimbo ? "" : (posicionId ?? "")}
-        disabled={alLimbo}
-        onChange={(e) =>
-          setPosicionId(e.target.value ? Number(e.target.value) : null)
-        }
-      >
-        <option value="">Elegí la posición nueva…</option>
-        {posiciones.map((p) => (
-          <option key={p.id} value={p.id}>
-            {describirPosicion(p)}
-                {p.empresa ? ` · ${p.empresa}` : ""}
-          </option>
-        ))}
-      </select>
+      {posiciones.length === 0 ? (
+        <Aviso tono="info">No hay ninguna posición con lugar.</Aviso>
+      ) : (
+        <SelectorPosicion
+          posiciones={posiciones}
+          valor={posicionId}
+          onCambio={setPosicionId}
+          deshabilitado={alLimbo}
+        />
+      )}
 
       {ajeno && destino && (
         <Aviso tono="advertencia">
