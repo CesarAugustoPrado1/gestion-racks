@@ -152,6 +152,13 @@ serializando del otro lado (no se arregla con `max`; ahí la salida es
 - [ ] La carga inicial de cada grupo (DISENO.md §4.3): el admin la abre en
       Grupos de racks y control la hace desde el celular.
 
+## Manual del operario
+
+Está en `public/manual.pdf` y se abre desde el botón **Manual** del encabezado,
+en todas las pantallas. Para actualizarlo, se reemplaza ese archivo con el
+mismo nombre: sale con el próximo despliegue, y el celular no lo guarda en
+caché (ver `next.config.ts`), así que siempre abre la última versión.
+
 ## Tests
 
 ```
