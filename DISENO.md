@@ -394,7 +394,7 @@ usa"; el objeto dice "este lugar está ocupado por algo que se puede mover".
 
 ## 4. Movimientos
 
-**En pantalla se llaman Ingreso, Egreso, Reubicación y Ajuste.** En la base
+**En pantalla se llaman Ingreso, Egreso, Reubicación y Ajuste** (y Carga inicial, §4.3). En la base
 siguen siendo `meter`, `sacar`, `mover` y `ajuste`: el nombre que se lee vive en
 `ETIQUETA_MOVIMIENTO` (lib/formato.ts) y cambiarlo no justifica migrar el
 historial. El ajuste es solo de control y admin: ninguna acción del autoelevador
@@ -449,6 +449,41 @@ autoelevadores con la pantalla abierta manden el mismo bulto a dos lados, o dos
 bultos a la misma posición. El segundo espera y falla con un mensaje concreto:
 *"B-4 ya está ocupada: Pedro subió un palet de Laja hace 2 minutos. Actualizá la
 pantalla."*
+
+### 4.3 Carga inicial
+
+El inventario de lo que ya estaba en el rack cuando se empezó a usar la app. Es
+un tipo de movimiento propio, `inicial` ("Carga inicial" en pantalla), por la
+regla de oro: se mide distinto.
+
+- Como **ingreso**, las estadísticas dirían que el primer día entraron cientos
+  de palets que ya estaban, y la antigüedad del stock arrancaría en cero.
+- Como **ajuste**, parecería que el primer mes hubo cientos de errores y la
+  confiabilidad arrancaría destruida.
+
+Cómo se hace:
+
+1. El **admin la abre por grupo** (Administración → Grupos de racks → *Iniciar
+   carga inicial*). Mientras está abierta, el autoelevador no ve el grupo como
+   destino (`exigirUsable` lo rechaza y `posicionesLibres` no lo ofrece): el
+   inventario no se cuenta mientras cambia.
+2. **Control la recorre con el celular** (`/control/carga/[grupo]`), posición
+   por posición: *Está vacía*, o qué hay y desde cuándo. Lo cargado se recuerda
+   para el hueco siguiente, que suele tener lo mismo.
+3. El bulto **nace verificado** —quien lo carga lo está contando parado
+   enfrente— y con **su fecha de ingreso real** en `creado_en`, así la
+   antigüedad del stock es verdad desde el primer día.
+4. Se registra **lo que hay**: si según las medidas no entraría, o la posición
+   figura fuera de uso, se carga igual y se avisa. Lo que hay que revisar es la
+   medida, no el palet que está ahí.
+5. Un error se **deshace**: el movimiento queda anulado (nada se borra), el
+   bulto sale del stock y la posición vuelve a pendiente.
+6. Control la **cierra**. Lo que quedó sin relevar entra a la recorrida normal
+   como nunca chequeado, y desde ahí el grupo se opera como cualquier otro. No
+   se reabre: lo que falte se ingresa como siempre.
+
+Una posición está *relevada* si se la chequeó después de abrir la carga. Las
+estadísticas de actividad (por hora, el tablero del día) no cuentan `inicial`.
 
 ---
 

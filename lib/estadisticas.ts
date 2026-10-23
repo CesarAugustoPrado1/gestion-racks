@@ -239,6 +239,8 @@ export async function estadisticas(dias: Periodo): Promise<Estadisticas> {
       select extract(hour from m.creado_en at time zone ${TZ})::int as hora, count(*)::int as movimientos
         from movimientos m
        where m.anulado_en is null and m.creado_en >= ${desde}
+         -- La carga inicial no es trabajo del autoelevador: deformaría las horas pico.
+         and m.tipo <> 'inicial'
        group by 1
     `) as unknown as Promise<Array<{ hora: number; movimientos: number }>>,
 

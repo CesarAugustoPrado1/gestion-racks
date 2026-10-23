@@ -19,6 +19,7 @@ const COLOR_TIPO: Record<string, string> = {
   sacar: "bg-vencido-suave text-vencido",
   mover: "bg-slate-100 text-slate-600",
   ajuste: "bg-dudoso-suave text-yellow-800",
+  inicial: "bg-sky-100 text-sky-900",
 };
 
 type Busqueda = {

@@ -133,6 +133,8 @@ export type PosicionVivo = {
   invasor: string | null;
   /** Si el clark llega a este nivel en este grupo. */
   alcanzable: boolean;
+  /** La carga inicial del grupo, si alguna vez se abrió. */
+  cargaInicial: { desde: Date; cerrada: boolean } | null;
   /** La exclusión vigente que la cubre, si hay. Ver `exclusiones`. */
   exclusion: { motivo: MotivoExclusion; nota: string | null } | null;
   /** La de arriba en la misma calle y profundidad, si el rack tiene nivel. */
@@ -175,6 +177,7 @@ export async function bloquearPosicion(
     select p.id, p.unidad, p.nivel, p.profundidad, p.activa, p.altura_max_cm,
            g.codigo || '-' || p.codigo as codigo,
            g.id as grupo_id, g.accesibilidad, g.niveles,
+           g.carga_inicial_desde, g.carga_inicial_cerrada_en,
            g.profundidad as profundidad_max,
            n.altura_max_cm as altura_nivel,
            coalesce(n.alcanzable, true) as alcanzable,
@@ -231,6 +234,8 @@ export async function bloquearPosicion(
     exclusion_motivo: MotivoExclusion | null;
     exclusion_nota: string | null;
     arriba_excluida: number | null;
+    carga_inicial_desde: string | Date | null;
+    carga_inicial_cerrada_en: string | Date | null;
   }>;
 
   if (filas.length === 0) fallar("Esa posición no existe.");
@@ -256,6 +261,13 @@ export async function bloquearPosicion(
     /** El bulto de abajo que se comió este hueco por alto. */
     invasor: p.invasor_codigo,
     alcanzable: p.alcanzable,
+    cargaInicial:
+      p.carga_inicial_desde == null
+        ? null
+        : {
+            desde: new Date(p.carga_inicial_desde),
+            cerrada: p.carga_inicial_cerrada_en != null,
+          },
     exclusion: p.exclusion_motivo
       ? { motivo: p.exclusion_motivo, nota: p.exclusion_nota }
       : null,
@@ -378,6 +390,14 @@ export function exigirLibre(pos: PosicionVivo) {
  * hay un palet en una calle en reparación, el ajuste tiene que poder decirlo.
  */
 export function exigirUsable(pos: PosicionVivo) {
+  // Mientras control hace la carga inicial de un grupo, nadie más mete ahí:
+  // el inventario se estaría contando mientras cambia.
+  if (pos.cargaInicial && !pos.cargaInicial.cerrada) {
+    fallar(
+      `El grupo de ${pos.codigo} está en carga inicial: hasta que control la cierre, ` +
+        `no se le puede meter nada. Elegí otra posición.`,
+    );
+  }
   const motivo = porQueNoSeUsa(pos);
   if (!motivo) return;
   if (pos.exclusion) {

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
-import { posicionesParaChequear } from "@/lib/consultas";
+import { gruposEnCarga, posicionesParaChequear } from "@/lib/consultas";
 import { olvidoDias, semividaDias } from "@/lib/configuracion";
 import {
   confianza,
@@ -20,11 +20,16 @@ export const dynamic = "force-dynamic";
 
 export default async function PantallaControl() {
   const sesion = await requerirRol("control", "admin");
-  const [posiciones, semivida, piso] = await Promise.all([
+  const [todas, semivida, piso, enCarga] = await Promise.all([
     posicionesParaChequear(),
     semividaDias(),
     olvidoDias(),
+    gruposEnCarga(),
   ]);
+
+  // Los grupos en carga inicial se recorren desde su carga, no desde acá.
+  const codigosEnCarga = new Set(enCarga.map((g) => g.codigo));
+  const posiciones = todas.filter((p) => !codigosEnCarga.has(p.rack));
 
   const conDatos = posiciones.map((p) => {
     const c = confianza(p, semivida);
@@ -60,6 +65,29 @@ export default async function PantallaControl() {
       <Titulo detalle={`${sesion.nombre} · primero lo que hace más que no se mira`}>
         Recorrida
       </Titulo>
+
+      {enCarga.length > 0 && (
+        <ul className="mb-4 space-y-2">
+          {enCarga.map((g) => (
+            <li key={g.id}>
+              <Link
+                href={`/control/carga/${g.id}`}
+                className="flex items-center gap-3 rounded-2xl bg-sky-50 p-4 ring-1 ring-sky-200 transition active:scale-[0.99]"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-sky-950">
+                    Carga inicial · grupo {g.codigo}
+                  </p>
+                  <p className="text-xs text-sky-900">
+                    {g.relevadas} de {g.total} posiciones relevadas
+                  </p>
+                </div>
+                <span className="text-sm font-semibold text-sky-900">Seguir →</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="tarjeta mb-4 p-5">
         <Indice {...resumen} />

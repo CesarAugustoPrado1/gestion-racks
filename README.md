@@ -149,11 +149,13 @@ serializando del otro lado (no se arregla con `max`; ahí la salida es
       único que falta para dejar de trabajar sobre datos inventados. Con eso,
       la empresa de cada grupo y de cada modelo, y hasta qué nivel llega el
       clark en cada grupo.
+- [ ] La carga inicial de cada grupo (DISENO.md §4.3): el admin la abre en
+      Grupos de racks y control la hace desde el celular.
 
 ## Tests
 
 ```
-npm test          # todo: 169 tests, ~2 segundos
+npm test          # todo: 175 tests, ~2 segundos
 npm run test:db   # solo los del motor, contra la base
 ```
 

@@ -18,6 +18,13 @@ import { codigoDePosicion, posicionesDe, type Geometria } from "../lib/posicione
 import { cubre, type ReglaExclusion } from "../lib/uso";
 import { joinExclusion } from "../lib/uso-sql";
 import { guardarVersion } from "../lib/plano-db";
+import {
+  abrirCarga,
+  cargarPosicion,
+  cerrarCarga,
+  confirmarVacia,
+  deshacerPosicion,
+} from "../lib/acciones/carga-motor";
 
 /**
  * El motor contra una base de verdad.
@@ -855,5 +862,146 @@ describe("plano: versiones", { skip: !hay && "sin base local" }, () => {
         ),
       /se sale del espacio de trabajo/,
     );
+  });
+});
+
+/**
+ * La carga inicial: suma al stock como un ingreso, pero el bulto nace
+ * verificado y con su fecha real, y un error se deshace sin romper el
+ * historial. Ver lib/acciones/carga-motor.ts.
+ */
+describe("carga inicial", { skip: !hay && "sin base local" }, () => {
+  let grupoId = 0;
+  const pos: number[] = [];
+  const usuario = () => ({ id: datos.usuario.id, nombre: datos.usuario.nombre });
+
+  before(async () => {
+    if (!hay) return;
+    const [g] = await base.db
+      .insert(schema.grupos)
+      .values({ codigo: "CI", accesibilidad: "selectivo", ancho: 1, niveles: 1, unidades: 3 })
+      .returning();
+    grupoId = g.id;
+    for (let u = 1; u <= 3; u++) {
+      const [p] = await base.db
+        .insert(schema.posiciones)
+        .values({ grupoId: g.id, codigo: `0${u}-1`, unidad: u, columna: u, nivel: 1 })
+        .returning();
+      pos.push(p.id);
+    }
+  });
+
+  test("sin abrirla, no se puede cargar", async () => {
+    await assert.rejects(
+      () =>
+        base.db.transaction((tx) =>
+          cargarPosicion(tx as Tx, {
+            posicionId: pos[0],
+            packaging: "suelto",
+            contenido: [{ modeloId: datos.laja.id, cantidad: 7 }],
+            fechaIngreso: new Date("2025-03-10T12:00:00Z"),
+            usuario: usuario(),
+          }),
+        ),
+      /no tiene la carga inicial abierta/,
+    );
+  });
+
+  test("abierta, el autoelevador no puede meter nada en el grupo", async () => {
+    await base.db.transaction((tx) => abrirCarga(tx as Tx, grupoId));
+    await assert.rejects(
+      () => base.db.transaction(async (tx) => exigirUsable(await bloquearPosicion(tx as Tx, pos[0]))),
+      /está en carga inicial/,
+    );
+  });
+
+  test("cargar suma al stock, con la fecha real y el bulto verificado", async () => {
+    const r = await base.db.transaction((tx) =>
+      cargarPosicion(tx as Tx, {
+        posicionId: pos[0],
+        packaging: "suelto",
+        contenido: [{ modeloId: datos.laja.id, cantidad: 7 }],
+        fechaIngreso: new Date("2025-03-10T15:00:00Z"),
+        nota: "estaba de antes",
+        usuario: usuario(),
+      }),
+    );
+    const [b] = (await base.db.execute(sql`
+      select creado_en, chequeado_en, chequeos_ok, chequeos_total, estado, posicion_id
+        from bultos where codigo = ${r.codigo}
+    `)) as unknown as Array<{
+      creado_en: string;
+      chequeado_en: string | null;
+      chequeos_ok: number;
+      chequeos_total: number;
+      estado: string;
+      posicion_id: number;
+    }>;
+    assert.equal(new Date(b.creado_en).toISOString(), "2025-03-10T15:00:00.000Z");
+    assert.ok(b.chequeado_en, "nace verificado");
+    assert.equal(b.chequeos_ok, 1);
+    assert.equal(b.estado, "ubicado");
+    assert.equal(b.posicion_id, pos[0]);
+    const [m] = (await base.db.execute(sql`
+      select tipo from movimientos m join bultos b on b.id = m.bulto_id where b.codigo = ${r.codigo}
+    `)) as unknown as Array<{ tipo: string }>;
+    assert.equal(m.tipo, "inicial");
+    await exigirQueCuadre("después de la carga inicial");
+  });
+
+  test("una fecha futura se rechaza", async () => {
+    await assert.rejects(
+      () =>
+        base.db.transaction((tx) =>
+          cargarPosicion(tx as Tx, {
+            posicionId: pos[1],
+            packaging: "suelto",
+            contenido: [{ modeloId: datos.laja.id, cantidad: 3 }],
+            fechaIngreso: new Date(Date.now() + 3 * 86400000),
+            usuario: usuario(),
+          }),
+        ),
+      /no puede ser futura/,
+    );
+  });
+
+  test("deshacer anula el movimiento, saca el bulto del stock y la deja pendiente", async () => {
+    await base.db.transaction((tx) => deshacerPosicion(tx as Tx, pos[0], usuario()));
+    const [p] = (await base.db.execute(sql`
+      select chequeado_en from posiciones where id = ${pos[0]}
+    `)) as unknown as Array<{ chequeado_en: string | null }>;
+    assert.equal(p.chequeado_en, null);
+    const [n] = (await base.db.execute(sql`
+      select count(*)::int as n from bultos where posicion_id = ${pos[0]} and estado = 'ubicado'
+    `)) as unknown as Array<{ n: number }>;
+    assert.equal(n.n, 0);
+    await exigirQueCuadre("después de deshacer");
+  });
+
+  test("al cerrar cuenta lo relevado, y el grupo vuelve a recibir", async () => {
+    await base.db.transaction((tx) =>
+      cargarPosicion(tx as Tx, {
+        posicionId: pos[0],
+        packaging: "suelto",
+        contenido: [{ modeloId: datos.laja.id, cantidad: 4 }],
+        fechaIngreso: new Date("2024-11-01T15:00:00Z"),
+        usuario: usuario(),
+      }),
+    );
+    await base.db.transaction((tx) => confirmarVacia(tx as Tx, pos[1]));
+    await assert.rejects(
+      () => base.db.transaction((tx) => confirmarVacia(tx as Tx, pos[0])),
+      /tiene cargado el bulto/,
+    );
+    const r = await base.db.transaction((tx) => cerrarCarga(tx as Tx, grupoId, datos.usuario.id));
+    assert.deepEqual(r, { relevadas: 2, pendientes: 1, bultos: 1 });
+
+    await base.db.transaction(async (tx) => exigirUsable(await bloquearPosicion(tx as Tx, pos[2])));
+    await assert.rejects(() => base.db.transaction((tx) => abrirCarga(tx as Tx, grupoId)), /ya se hizo y se cerró/);
+    await assert.rejects(
+      () => base.db.transaction((tx) => deshacerPosicion(tx as Tx, pos[0], usuario())),
+      /ya está cerrada/,
+    );
+    await exigirQueCuadre("después de cerrar la carga");
   });
 });

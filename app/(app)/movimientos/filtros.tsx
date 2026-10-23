@@ -14,7 +14,7 @@ type Valores = {
   anulados?: string;
 };
 
-const TIPOS = ["meter", "sacar", "mover", "ajuste"].map((id) => ({
+const TIPOS = ["meter", "sacar", "mover", "ajuste", "inicial"].map((id) => ({
   id,
   etiqueta: ETIQUETA_MOVIMIENTO[id],
 }));
