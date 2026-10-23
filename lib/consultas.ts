@@ -4,7 +4,7 @@ import { db } from "./db";
 import type { Packaging } from "./db/schema";
 import { alcanzable, empresasDelBulto, joinExclusion } from "./uso-sql";
 import { esAjeno, porQueNoSeUsa, type MotivoExclusion } from "./uso";
-import { ETIQUETA_MOVIMIENTO } from "./formato";
+import { ETIQUETA_MOVIMIENTO, ETIQUETA_PACKAGING } from "./formato";
 
 /**
  * TODAS las lecturas de pantalla viven acá, como en Control-Secaderos.
@@ -328,6 +328,8 @@ export async function posicionesLibres(): Promise<PosicionLibre[]> {
        and p.bloqueada_por_bulto_id is null
        and ${alcanzable("p")}
        and ex.id is null
+       -- Un grupo en carga inicial no recibe nada hasta que se cierre.
+       and (g.carga_inicial_desde is null or g.carga_inicial_cerrada_en is not null)
      order by g.orden, p.orden
   `)) as unknown as Array<{
     id: number;
@@ -907,6 +909,8 @@ export type GrupoDelMapa = {
   niveles: number;
   profundidad: number | null;
   unidades: number;
+  /** Con la carga inicial abierta: lo que muestra todavía no es el inventario. */
+  enCarga: boolean;
   celdas: CeldaDelMapa[];
 };
 
@@ -923,6 +927,7 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
     select g.id as grupo_id, g.codigo as grupo_codigo, g.nombre as grupo_nombre,
            g.accesibilidad, g.ancho, g.niveles, g.profundidad as profundidad_max,
            g.unidades, g.empresa_id, ge.nombre as grupo_empresa, g.acceso,
+           (g.carga_inicial_desde is not null and g.carga_inicial_cerrada_en is null) as en_carga,
            p.id as posicion_id, p.codigo, p.unidad, p.columna, p.nivel,
            p.profundidad, p.activa,
            ${alcanzable("p")} as alcanzable,
@@ -963,6 +968,7 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
     unidades: number;
     empresa_id: number | null;
     grupo_empresa: string | null;
+    en_carga: boolean;
     acceso: "izquierda" | "derecha";
     alcanzable: boolean;
     exclusion_motivo: MotivoExclusion | null;
@@ -1000,6 +1006,7 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
         empresaId: f.empresa_id,
         empresa: f.grupo_empresa,
         acceso: f.acceso,
+        enCarga: f.en_carga,
         penetrable: f.accesibilidad === "penetrable",
         ancho: f.ancho,
         niveles: f.niveles,
@@ -1404,4 +1411,158 @@ export async function bultosConChequeo(): Promise<BultoConChequeo[]> {
     chequeosOk: f.chequeos_ok,
     chequeosTotal: f.chequeos_total,
   }));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Carga inicial                                                              */
+/* -------------------------------------------------------------------------- */
+
+export type GrupoEnCarga = {
+  id: number;
+  codigo: string;
+  nombre: string | null;
+  desde: Date;
+  relevadas: number;
+  total: number;
+};
+
+/**
+ * Los grupos con la carga inicial ABIERTA, con su avance. Una posición está
+ * relevada si se la chequeó después de abrir la carga. Ver carga-motor.ts.
+ */
+export async function gruposEnCarga(): Promise<GrupoEnCarga[]> {
+  const filas = (await db.execute(sql`
+    select g.id, g.codigo, g.nombre, g.carga_inicial_desde as desde,
+           count(p.id) filter (where p.chequeado_en >= g.carga_inicial_desde)::int as relevadas,
+           count(p.id)::int as total
+      from grupos g
+      left join posiciones p on p.grupo_id = g.id and p.activa
+     where g.activo and g.carga_inicial_desde is not null and g.carga_inicial_cerrada_en is null
+     group by g.id
+     order by g.orden, g.codigo
+  `)) as unknown as Array<{
+    id: number;
+    codigo: string;
+    nombre: string | null;
+    desde: Date | string;
+    relevadas: number;
+    total: number;
+  }>;
+  return filas.map((f) => ({ ...f, desde: comoFecha(f.desde)! }));
+}
+
+export type PosicionDeCarga = {
+  id: number;
+  codigo: string;
+  nivel: number;
+  relevada: boolean;
+  /** Lo que se cargó, si se cargó algo. */
+  ocupante: { codigo: string; contenido: string; creadoEn: Date; deLaCarga: boolean } | null;
+  /** Código del bulto de abajo que la tapa por alto. */
+  invasor: string | null;
+  fueraDeUso: string | null;
+};
+
+export type CargaDelGrupo = {
+  grupo: {
+    id: number;
+    codigo: string;
+    nombre: string | null;
+    niveles: number;
+    estado: "sin_iniciar" | "en_curso" | "cerrada";
+    desde: Date | null;
+    cerradaEn: Date | null;
+    cerradaPor: string | null;
+  };
+  /** En orden de recorrida: módulo por módulo, de abajo hacia arriba. */
+  posiciones: PosicionDeCarga[];
+};
+
+export async function cargaDelGrupo(grupoId: number): Promise<CargaDelGrupo | null> {
+  const [g] = (await db.execute(sql`
+    select g.id, g.codigo, g.nombre, g.niveles,
+           g.carga_inicial_desde, g.carga_inicial_cerrada_en, u.nombre as cerrada_por
+      from grupos g left join usuarios u on u.id = g.carga_inicial_cerrada_por
+     where g.id = ${grupoId}
+  `)) as unknown as Array<{
+    id: number;
+    codigo: string;
+    nombre: string | null;
+    niveles: number;
+    carga_inicial_desde: Date | string | null;
+    carga_inicial_cerrada_en: Date | string | null;
+    cerrada_por: string | null;
+  }>;
+  if (!g) return null;
+  const desde = comoFecha(g.carga_inicial_desde);
+
+  const filas = (await db.execute(sql`
+    select p.id, g.codigo || '-' || p.codigo as codigo, p.nivel,
+           (${desde ? sql`p.chequeado_en >= ${desde.toISOString()}` : sql`false`}) as relevada,
+           b.codigo as bulto_codigo, b.creado_en as bulto_creado_en, b.packaging, b.descripcion,
+           exists (select 1 from movimientos m
+                    where m.bulto_id = b.id and m.tipo = 'inicial' and m.anulado_en is null) as de_la_carga,
+           (select string_agg(m.nombre || ' ' || c.cantidad, ' · ' order by m.orden, m.nombre)
+              from bulto_contenido c join modelos m on m.id = c.modelo_id
+             where c.bulto_id = b.id) as contenido,
+           (select bi.codigo from bultos bi where bi.id = p.bloqueada_por_bulto_id) as invasor,
+           ${alcanzable("p")} as alcanzable,
+           ex.motivo as exclusion_motivo, ex.nota as exclusion_nota
+      from posiciones p
+      join grupos g on g.id = p.grupo_id
+      left join bultos b on b.posicion_id = p.id and b.estado = 'ubicado'
+      ${joinExclusion("p", "ex")}
+     where p.grupo_id = ${grupoId} and p.activa
+     order by p.unidad, p.columna nulls first, p.profundidad nulls first, p.nivel, p.orden, p.id
+  `)) as unknown as Array<{
+    id: number;
+    codigo: string;
+    nivel: number;
+    relevada: boolean;
+    bulto_codigo: string | null;
+    bulto_creado_en: Date | string | null;
+    packaging: Packaging | null;
+    descripcion: string | null;
+    de_la_carga: boolean;
+    contenido: string | null;
+    invasor: string | null;
+    alcanzable: boolean;
+    exclusion_motivo: MotivoExclusion | null;
+    exclusion_nota: string | null;
+  }>;
+
+  return {
+    grupo: {
+      id: g.id,
+      codigo: g.codigo,
+      nombre: g.nombre,
+      niveles: g.niveles,
+      estado: desde == null ? "sin_iniciar" : g.carga_inicial_cerrada_en == null ? "en_curso" : "cerrada",
+      desde,
+      cerradaEn: comoFecha(g.carga_inicial_cerrada_en),
+      cerradaPor: g.cerrada_por,
+    },
+    posiciones: filas.map((f) => ({
+      id: f.id,
+      codigo: f.codigo,
+      nivel: f.nivel,
+      relevada: f.relevada,
+      ocupante: f.bulto_codigo
+        ? {
+            codigo: f.bulto_codigo,
+            contenido:
+              f.packaging === "objeto"
+                ? `Objeto: ${f.descripcion ?? ""}`
+                : `${f.contenido ?? ""}${f.packaging ? ` (${ETIQUETA_PACKAGING[f.packaging].toLowerCase()})` : ""}`,
+            creadoEn: comoFecha(f.bulto_creado_en)!,
+            deLaCarga: f.de_la_carga,
+          }
+        : null,
+      invasor: f.invasor,
+      fueraDeUso: porQueNoSeUsa({
+        alcanzable: f.alcanzable,
+        exclusion: f.exclusion_motivo ? { motivo: f.exclusion_motivo, nota: f.exclusion_nota } : null,
+      }),
+    })),
+  };
 }

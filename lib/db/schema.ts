@@ -215,6 +215,13 @@ export const tipoMovimientoEnum = pgEnum("tipo_movimiento", [
   "sacar",
   "mover",
   "ajuste",
+  /**
+   * La CARGA INICIAL: lo que ya estaba en el rack cuando se empezó a usar la
+   * app. Suma como un `meter` -el historial tiene que seguir dando el stock-,
+   * pero no es producción que entró ni un error corregido, así que las
+   * estadísticas lo dejan aparte. Solo lo escribe la carga inicial de un grupo.
+   */
+  "inicial",
 ]);
 export type TipoMovimiento = (typeof tipoMovimientoEnum.enumValues)[number];
 
@@ -338,6 +345,14 @@ export const grupos = pgTable("grupos", {
   empresaId: integer("empresa_id").references(() => empresas.id),
   /** De qué lado entra el clark. Solo penetrables; ver `ladoAccesoEnum`. */
   acceso: ladoAccesoEnum("acceso").notNull().default("derecha"),
+  /**
+   * La carga inicial del grupo: abierta desde `cargaInicialDesde` hasta
+   * `cargaInicialCerradaEn`. Mientras está abierta, solo control carga ahí: el
+   * autoelevador no lo ve como destino. Ver lib/acciones/carga-motor.ts.
+   */
+  cargaInicialDesde: timestamp("carga_inicial_desde", { withTimezone: true }),
+  cargaInicialCerradaEn: timestamp("carga_inicial_cerrada_en", { withTimezone: true }),
+  cargaInicialCerradaPor: integer("carga_inicial_cerrada_por").references((): AnyPgColumn => usuarios.id),
   activo: boolean("activo").notNull().default(true),
   orden: integer("orden").notNull().default(0),
 });

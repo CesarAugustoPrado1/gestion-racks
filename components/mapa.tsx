@@ -215,6 +215,9 @@ export function MapaDeGrupo({
               {grupo.empresa}
             </span>
           )}
+          {grupo.enCarga && (
+            <span className="ml-2 chip bg-sky-100 align-middle text-sky-900">en carga inicial</span>
+          )}
         </h2>
         <p className="text-xs text-slate-500">
           {grupo.nombre ? `${grupo.nombre} · ` : ""}

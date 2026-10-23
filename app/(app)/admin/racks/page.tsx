@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { empresas as leerEmpresas } from "@/lib/consultas";
 import { Titulo } from "@/components/ui";
 import { Grupos } from "./lista";
+import { estadoDeCarga } from "@/lib/carga";
 
 export const metadata = { title: "Racks · Racks" };
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ export default async function PantallaGrupos() {
     db.execute(sql`
       select g.id, g.codigo, g.nombre, g.accesibilidad, g.ancho, g.niveles,
              g.profundidad, g.unidades, g.activo,
+             g.carga_inicial_desde, g.carga_inicial_cerrada_en,
              g.empresa_id, e.nombre as empresa_nombre, g.acceso,
              count(p.id)::int as posiciones,
              count(b.id)::int as ocupadas
@@ -35,6 +37,8 @@ export default async function PantallaGrupos() {
         profundidad: number | null;
         unidades: number;
         activo: boolean;
+        carga_inicial_desde: string | Date | null;
+        carga_inicial_cerrada_en: string | Date | null;
         empresa_id: number | null;
         empresa_nombre: string | null;
         acceso: "izquierda" | "derecha";
@@ -73,6 +77,10 @@ export default async function PantallaGrupos() {
           ...g,
           empresaId: g.empresa_id,
           empresaNombre: g.empresa_nombre,
+          carga: estadoDeCarga({
+            cargaInicialDesde: g.carga_inicial_desde,
+            cargaInicialCerradaEn: g.carga_inicial_cerrada_en,
+          }),
         }))}
         empresas={empresas}
         niveles={niveles.map((n) => ({

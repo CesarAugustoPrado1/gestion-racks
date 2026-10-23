@@ -18,6 +18,9 @@ import { puedeVer } from "@/lib/permisos";
 import { Titulo } from "@/components/ui";
 
 export const metadata = { title: "Tablero · Racks" };
+/** La carga inicial no es actividad del día: es el inventario de arranque. */
+const TIPOS_DEL_DIA = ["meter", "sacar", "mover", "ajuste"] as const;
+
 export const dynamic = "force-dynamic";
 
 /**
@@ -75,7 +78,13 @@ export default async function PantallaTablero() {
     );
   }
 
+  const enCarga = t.grupos.filter((g) => g.enCarga);
   const pendientes = [
+    enCarga.length > 0 && {
+      texto: `${enCarga.length === 1 ? "El grupo" : "Los grupos"} ${enCarga.map((g) => g.codigo).join(", ")} en carga inicial`,
+      detalle: "hasta que control la cierre, el autoelevador no puede meter nada ahí",
+      href: puedeVer(sesion.rol, "/control") ? "/control" : undefined,
+    },
     t.bultos.sinUbicar > 0 && {
       texto: `${numero(t.bultos.sinUbicar)} bulto${t.bultos.sinUbicar === 1 ? "" : "s"} sin ubicar`,
       detalle: `el más viejo hace ${dias(t.bultos.sinUbicarMasViejoDias)}`,
@@ -146,7 +155,7 @@ export default async function PantallaTablero() {
         />
         <Tile
           etiqueta="Movimientos hoy"
-          valor={numero(Object.values(t.actividad.hoy).reduce((s, n) => s + n, 0))}
+          valor={numero(TIPOS_DEL_DIA.reduce((s, tipo) => s + (t.actividad.hoy[tipo] ?? 0), 0))}
           detalle={`${numero(Object.values(t.actividad.semana).reduce((s, n) => s + n, 0))} en los últimos 7 días`}
           href={puedeVer(sesion.rol, "/movimientos") ? "/movimientos" : undefined}
         />
@@ -201,6 +210,9 @@ export default async function PantallaTablero() {
                         {g.empresa ? ` · ${g.empresa}` : ""}
                         {g.nombre ? ` · ${g.nombre}` : ""}
                       </span>
+                      {g.enCarga && (
+                        <span className="ml-2 chip bg-sky-100 align-middle text-sky-900">en carga inicial</span>
+                      )}
                     </span>
                     <span className="shrink-0 text-xs text-slate-500">
                       <span className="cifra text-slate-900">
@@ -347,7 +359,7 @@ export default async function PantallaTablero() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {(["meter", "sacar", "mover", "ajuste"] as const).map((tipo) => (
+              {TIPOS_DEL_DIA.map((tipo) => (
                 <tr key={tipo}>
                   <td className="px-4 py-2 text-slate-700">{ETIQUETA_MOVIMIENTO[tipo]}</td>
                   <td className="cifra px-2 py-2 text-right">{numero(t.actividad.hoy[tipo] ?? 0)}</td>

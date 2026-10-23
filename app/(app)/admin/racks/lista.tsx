@@ -6,6 +6,9 @@ import {
   guardarAlturaNivel,
   guardarGrupo,
 } from "@/lib/acciones/admin";
+import { iniciarCargaInicial } from "@/lib/acciones/carga";
+import type { EstadoCarga } from "@/lib/carga";
+import Link from "next/link";
 import { Campo, Formulario, Interruptor, SelectorEmpresa } from "@/components/admin";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
@@ -34,6 +37,7 @@ type Grupo = {
   acceso: "izquierda" | "derecha";
   posiciones: number;
   ocupadas: number;
+  carga: EstadoCarga;
 };
 
 type Nivel = {
@@ -135,6 +139,11 @@ export function Grupos({
                       suspendido
                     </span>
                   )}
+                  {g.carga === "en_curso" && (
+                    <span className="ml-2 chip bg-sky-100 text-sky-900">
+                      en carga inicial
+                    </span>
+                  )}
                 </p>
                 <p className="text-xs text-slate-500">
                   {g.nombre ? `${g.nombre} · ` : ""}
@@ -166,6 +175,8 @@ export function Grupos({
                 Editar
               </button>
             </div>
+
+            {g.activo && g.carga !== "cerrada" && <CargaInicial grupo={g} />}
 
             <Niveles
               grupo={g}
@@ -503,6 +514,65 @@ function Niveles({ grupo, niveles }: { grupo: Grupo; niveles: Nivel[] }) {
           no se ofrece{sinAlcance === 1 ? "" : "n"} como destino ni cuenta
           {sinAlcance === 1 ? "" : "n"} como lugar libre.
         </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * La carga inicial del grupo: el inventario de lo que ya estaba. La abre el
+ * admin y la hace control. Ver lib/acciones/carga-motor.ts.
+ */
+function CargaInicial({ grupo }: { grupo: Grupo }) {
+  const router = useRouter();
+  const { ejecutar, enviando, error, limpiar } = useAccion();
+  const [confirmando, setConfirmando] = useState(false);
+
+  if (grupo.carga === "en_curso") {
+    return (
+      <div className="mt-3 rounded-xl bg-sky-50 p-3 text-xs text-sky-900 ring-1 ring-sky-200">
+        Carga inicial en curso: el autoelevador no puede meter nada en este grupo hasta que control la cierre.{" "}
+        <Link href={`/control/carga/${grupo.id}`} className="font-semibold underline">
+          Ver la carga
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3">
+      {error && <Aviso>{error}</Aviso>}
+      {!confirmando ? (
+        <button type="button" className="text-sm font-semibold text-slate-600 underline" onClick={() => setConfirmando(true)}>
+          Iniciar carga inicial
+        </button>
+      ) : (
+        <div className="space-y-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-700 ring-1 ring-slate-200">
+          <p>
+            Control va a recorrer el grupo {grupo.codigo} posición por posición y cargar lo que ya está, con su fecha de
+            ingreso. Mientras dure, <strong>el autoelevador no puede meter nada en este grupo</strong>. Se hace una sola
+            vez.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" className="boton-secundario text-sm" onClick={() => setConfirmando(false)}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="boton-primario text-sm"
+              disabled={enviando}
+              onClick={() => {
+                limpiar();
+                void ejecutar(() => iniciarCargaInicial(grupo.id), () => {
+                  setConfirmando(false);
+                  router.refresh();
+                });
+              }}
+            >
+              {enviando ? "Abriendo…" : "Iniciar"}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

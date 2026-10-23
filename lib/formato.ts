@@ -31,6 +31,7 @@ export const ETIQUETA_MOVIMIENTO: Record<string, string> = {
   sacar: "Egreso",
   mover: "Reubicación",
   ajuste: "Ajuste",
+  inicial: "Carga inicial",
 };
 
 /** El orden de las solapas, que es el que pidió la planta. */

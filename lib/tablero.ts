@@ -36,6 +36,8 @@ export type GrupoEnTablero = {
   objetos: number;
   /** Bultos de otra empresa guardados en este grupo. */
   ajenos: number;
+  /** Con la carga inicial abierta: el autoelevador no puede meter nada. */
+  enCarga: boolean;
 };
 
 export type NivelEnTablero = {
@@ -100,6 +102,7 @@ export async function tablero(): Promise<Tablero> {
     await Promise.all([
       db.execute(sql`
         select g.id, g.codigo, g.nombre, e.nombre as empresa,
+               (g.carga_inicial_desde is not null and g.carga_inicial_cerrada_en is null) as en_carga,
                count(*) filter (where p.activa)::int as total,
                count(*) filter (where p.activa and b.id is not null)::int as ocupadas,
                count(*) filter (where p.activa and b.id is null
@@ -129,6 +132,7 @@ export async function tablero(): Promise<Tablero> {
           codigo: string;
           nombre: string | null;
           empresa: string | null;
+          en_carga: boolean;
           total: number;
           ocupadas: number;
           tapadas: number;
@@ -330,6 +334,7 @@ export async function tablero(): Promise<Tablero> {
       fueraDeUso: g.fuera,
       objetos: g.objetos,
       ajenos: g.ajenos,
+      enCarga: g.en_carga,
     })),
     niveles: [...porNombre.values()].sort((a, c) => a.orden - c.orden),
     lineas: lineas.map((l) => ({

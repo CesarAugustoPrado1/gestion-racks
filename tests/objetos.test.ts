@@ -27,12 +27,13 @@ describe("objetos: lo que ocupa lugar sin ser producto", () => {
 });
 
 describe("los nombres de los movimientos, como se dicen en la planta", () => {
-  test("ingreso, egreso, reubicación y ajuste", () => {
+  test("ingreso, egreso, reubicación, ajuste y carga inicial", () => {
     assert.deepEqual(ETIQUETA_MOVIMIENTO, {
       meter: "Ingreso",
       sacar: "Egreso",
       mover: "Reubicación",
       ajuste: "Ajuste",
+      inicial: "Carga inicial",
     });
   });
 });
