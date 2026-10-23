@@ -32,6 +32,15 @@ export default async function LayoutApp({
                 {ETIQUETA_ROL[sesion.rol]}
               </p>
             </div>
+            {/* El manual se publica con la app: el link abre siempre la última versión. */}
+            <a
+              href="/manual.pdf"
+              target="_blank"
+              rel="noopener"
+              className="rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-500 ring-1 ring-slate-300 hover:bg-slate-100"
+            >
+              Manual
+            </a>
             <form action={cerrarSesion}>
               <button
                 type="submit"
