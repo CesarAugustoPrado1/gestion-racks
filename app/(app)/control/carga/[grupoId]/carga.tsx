@@ -289,6 +289,8 @@ function Formulario({
   const [objeto, setObjeto] = useState(recuerdo.objeto);
   const [packaging, setPackaging] = useState<Packaging>(recuerdo.packaging);
   const [lineas, setLineas] = useState(recuerdo.lineas);
+  /** El modelo recién tocado: solo ahí salta el cursor, no al llegar a cada posición. */
+  const [recienTocado, setRecienTocado] = useState<number | null>(null);
   const [descripcion, setDescripcion] = useState("");
   const [nota, setNota] = useState("");
   const [fecha, setFecha] = useState(hoy());
@@ -311,13 +313,30 @@ function Formulario({
     }
   }
 
+  /**
+   * Al cambiar el packaging la cantidad sale de la norma del nuevo. El suelto
+   * no tiene norma: la cantidad queda VACÍA para que se cuente, y no arrastra
+   * la del palet, que en un suelto nunca es la que hay.
+   */
+  function cambiarPackaging(x: Packaging) {
+    setPackaging(x);
+    setLineas((ls) =>
+      ls.map((l) => {
+        const norma = modelos.find((m) => m.id === l.modeloId)?.normas[x];
+        return { ...l, cantidad: norma != null ? String(norma) : "" };
+      }),
+    );
+  }
+
   const contenido = lineas
     .map((l) => ({ modeloId: l.modeloId, cantidad: Number(l.cantidad) }))
     .filter((l) => l.cantidad > 0);
+  const faltaCantidad = !objeto && lineas.some((l) => !(Number(l.cantidad) > 0));
   const problema = objeto ? null : contenido.length > 0 ? validarComposicion(packaging, contenido) : null;
   const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(fecha) && fecha <= hoy();
   const completo =
-    fechaValida && (objeto ? validarDescripcion(descripcion) == null : contenido.length > 0 && !problema);
+    fechaValida &&
+    (objeto ? validarDescripcion(descripcion) == null : contenido.length > 0 && !faltaCantidad && !problema);
 
   return (
     <div className="tarjeta space-y-4 p-5">
@@ -376,7 +395,7 @@ function Formulario({
                 <button
                   key={x}
                   type="button"
-                  onClick={() => setPackaging(x)}
+                  onClick={() => cambiarPackaging(x)}
                   className={`min-h-12 rounded-xl text-sm font-semibold ${
                     packaging === x ? "bg-slate-900 text-white" : "bg-white text-slate-700 ring-1 ring-slate-300"
                   }`}
@@ -396,8 +415,13 @@ function Formulario({
                   <li key={l.modeloId} className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{m.nombre}</span>
                     <input
-                      className="campo w-24 text-right"
+                      className={`campo w-24 text-right ${
+                        Number(l.cantidad) > 0 ? "" : "ring-2 ring-amber-400"
+                      }`}
                       inputMode="numeric"
+                      placeholder="Cant."
+                      // Sin norma (suelto) la cantidad se escribe: el cursor va directo ahí.
+                      autoFocus={recienTocado === l.modeloId && l.cantidad === ""}
                       value={l.cantidad}
                       onChange={(e) =>
                         setLineas((ls) =>
@@ -428,12 +452,13 @@ function Formulario({
                 key={m.id}
                 type="button"
                 disabled={lineas.some((l) => l.modeloId === m.id)}
-                onClick={() =>
+                onClick={() => {
+                  setRecienTocado(m.id);
                   setLineas((ls) => [
                     ...ls,
                     { modeloId: m.id, cantidad: m.normas[packaging] != null ? String(m.normas[packaging]) : "" },
-                  ])
-                }
+                  ]);
+                }}
                 className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-40"
               >
                 {m.nombre}
@@ -441,6 +466,13 @@ function Formulario({
             ))}
           </div>
 
+          {faltaCantidad && (
+            <Aviso tono="info">
+              {packaging === "suelto"
+                ? "Suelto no tiene cantidad fija: escribí cuántas hay de cada modelo."
+                : "Escribí la cantidad de cada modelo."}
+            </Aviso>
+          )}
           {problema && <Aviso tono="info">{problema}</Aviso>}
         </>
       )}
@@ -464,7 +496,12 @@ function Formulario({
         disabled={enviando || !completo}
         onClick={() => {
           limpiar();
-          recuerdo = { objeto, packaging, lineas };
+          // No hay dos sueltos iguales: del suelto se recuerdan los modelos, no la cantidad.
+          recuerdo = {
+            objeto,
+            packaging,
+            lineas: packaging === "suelto" ? lineas.map((l) => ({ ...l, cantidad: "" })) : lineas,
+          };
           void ejecutar(
             () =>
               cargarEnPosicion({

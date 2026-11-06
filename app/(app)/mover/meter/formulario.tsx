@@ -48,6 +48,7 @@ export function FormularioMeter({
 
   const problema =
     contenido.length > 0 ? validarComposicion(packaging, contenido) : null;
+  const faltaCantidad = lineas.some((l) => !(Number(l.cantidad) > 0));
 
   const unidad = lineas[0] ? porId.get(lineas[0].modeloId)?.unidadPlural : null;
   const total = contenido.reduce((s, l) => s + l.cantidad, 0);
@@ -75,7 +76,8 @@ export function FormularioMeter({
     setLineas((l) =>
       l.map((x) => {
         const norma = porId.get(x.modeloId)?.normas[p];
-        return { ...x, cantidad: norma != null ? String(norma) : x.cantidad };
+        // Sin norma (suelto) queda vacía para que se cuente: la del palet nunca es la que hay.
+        return { ...x, cantidad: norma != null ? String(norma) : "" };
       }),
     );
   }
@@ -88,7 +90,7 @@ export function FormularioMeter({
   const conLugar = posicionId != null || sinUbicar;
   const listo = objeto
     ? !problemaDescripcion && conLugar
-    : contenido.length > 0 && !problema && conLugar;
+    : contenido.length > 0 && !faltaCantidad && !problema && conLugar;
 
   /**
    * De otra empresa: se avisa ANTES de guardar y no se frena. El operario puede
@@ -229,8 +231,12 @@ export function FormularioMeter({
                       )}
                     </span>
                     <input
-                      className="campo w-24 text-right"
+                      className={`campo w-24 text-right ${
+                        Number(l.cantidad) > 0 ? "" : "ring-2 ring-amber-400"
+                      }`}
                       inputMode="numeric"
+                      placeholder="Cant."
+                      autoFocus={l.cantidad === ""}
                       value={l.cantidad}
                       onChange={(e) =>
                         setLineas((ls) =>
@@ -278,6 +284,16 @@ export function FormularioMeter({
                 </div>
               ))}
             </div>
+
+            {faltaCantidad && (
+              <div className="mt-3">
+                <Aviso tono="info">
+                  {packaging === "suelto"
+                    ? "Suelto no tiene cantidad fija: escribí cuántas hay de cada modelo."
+                    : "Escribí la cantidad de cada modelo."}
+                </Aviso>
+              </div>
+            )}
 
             {problema && (
               <div className="mt-3">
