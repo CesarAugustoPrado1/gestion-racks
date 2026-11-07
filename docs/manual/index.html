@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Manual del operario · Gestión de Racks</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+  :root {
+    --tinta: #0f172a; --gris: #475569; --suave: #64748b; --linea: #e2e8f0; --fondo: #f1f5f9;
+    --azul: #2a78d6; --azul-suave: #dbeafe; --verde: #15803d; --verde-suave: #dcfce7;
+    --ambar: #a16207; --ambar-suave: #fef3c7; --rojo: #b91c1c; --rojo-suave: #fee2e2;
+    --naranja: #c2410c; --naranja-suave: #ffedd5;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: Inter, sans-serif; color: var(--tinta); font-size: 10.5pt; line-height: 1.45; margin: 0; }
+  h1 { font-size: 34pt; line-height: 1.05; margin: 0 0 8pt; letter-spacing: -0.02em; }
+  h2 { font-size: 17pt; margin: 16pt 0 6pt; letter-spacing: -0.01em; }
+  h3 { font-size: 12.5pt; margin: 12pt 0 4pt; break-after: avoid; }
+  h2 { break-after: avoid; }
+  ol.pasos > li, ul > li { break-inside: avoid; }
+  p { margin: 0 0 6pt; }
+  code, .cod { font-family: "JetBrains Mono", monospace; font-size: 0.92em; background: var(--fondo); padding: 0 3pt; border-radius: 3pt; }
+  .pagina { page-break-before: always; }
+  .seccion { background: #334155; color: white; border-radius: 10pt; padding: 16pt 18pt; margin: 0 0 12pt; }
+  .seccion .num { font-size: 9pt; letter-spacing: 0.15em; text-transform: uppercase; opacity: 0.8; }
+  .seccion h2 { color: white; margin: 2pt 0 2pt; font-size: 22pt; }
+  .seccion p { margin: 0; opacity: 0.9; }
+  .s-clark { background: #0f172a; } .s-control { background: #15803d; } .s-sup { background: #1d4ed8; }
+  .s-admin { background: #475569; } .s-prob { background: #9a3412; }
+  .caja { border-radius: 8pt; padding: 9pt 12pt; margin: 8pt 0; border-left: 4pt solid; break-inside: avoid; }
+  .caja b.t { display: block; margin-bottom: 2pt; }
+  .info { background: var(--azul-suave); border-color: var(--azul); }
+  .ok { background: var(--verde-suave); border-color: var(--verde); }
+  .ojo { background: var(--ambar-suave); border-color: #ca8a04; }
+  .mal { background: var(--rojo-suave); border-color: var(--rojo); }
+  .ej { background: var(--fondo); border-color: #94a3b8; }
+  .dos { display: grid; grid-template-columns: 1fr 62mm; gap: 12pt; align-items: start; }
+  .dos.ancho { grid-template-columns: 1fr 75mm; }
+  .tel { width: 100%; border: 5pt solid #0f172a; border-radius: 16pt; display: block; }
+  .parte { width: 100%; border: 1pt solid var(--linea); border-radius: 8pt; display: block; }
+  figure { margin: 0; break-inside: avoid; }
+  figcaption { font-size: 8.5pt; color: var(--suave); text-align: center; margin-top: 3pt; }
+  ol.pasos { list-style: none; padding: 0; margin: 4pt 0 8pt; counter-reset: p; }
+  ol.pasos > li { counter-increment: p; position: relative; padding-left: 24pt; margin-bottom: 5pt; }
+  ol.pasos > li::before { content: counter(p); position: absolute; left: 0; top: -1pt; width: 17pt; height: 17pt; border-radius: 50%; background: var(--tinta); color: white; font-weight: 700; font-size: 9pt; display: flex; align-items: center; justify-content: center; }
+  .s-control-pasos > li::before { background: var(--verde) !important; }
+  .btn { display: inline-block; border-radius: 5pt; padding: 0 5pt; font-weight: 600; font-size: 0.92em; background: var(--tinta); color: white; white-space: nowrap; }
+  .btn.sec { background: white; color: var(--tinta); border: 1pt solid #cbd5e1; }
+  .btn.rojo { background: #dc2626; }
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0 10pt; font-size: 9.8pt; break-inside: avoid; }
+  th { text-align: left; font-size: 8pt; letter-spacing: 0.06em; text-transform: uppercase; color: var(--suave); background: var(--fondo); padding: 5pt 7pt; }
+  td { padding: 5pt 7pt; border-bottom: 1pt solid var(--linea); vertical-align: top; }
+  .chip { display: inline-block; border-radius: 99pt; padding: 0 6pt; font-size: 0.85em; font-weight: 600; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8pt; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10pt; }
+  .tarj { border: 1pt solid var(--linea); border-radius: 8pt; padding: 8pt 10pt; break-inside: avoid; }
+  .tarj b { display: block; }
+  .muted { color: var(--suave); }
+  .chico { font-size: 9pt; }
+  /* esquemas de racks */
+  .rack { display: grid; gap: 3pt; margin: 6pt 0; }
+  .hueco { border: 1.5pt solid #93c5fd; background: #eff6ff; border-radius: 3pt; font-family: "JetBrains Mono", monospace; font-size: 7.5pt; text-align: center; padding: 6pt 0; font-weight: 600; }
+  .hueco.vacio { border-style: dashed; border-color: #cbd5e1; background: white; color: #94a3b8; }
+  .hueco.marca { border-color: #ca8a04; background: #fef9c3; }
+  .ejes { display: grid; gap: 3pt; font-size: 7.5pt; color: var(--suave); text-align: center; }
+  .indice { columns: 2; column-gap: 20pt; font-size: 10pt; }
+  .indice h4 { margin: 8pt 0 2pt; font-size: 10.5pt; break-after: avoid; }
+  .indice div { color: var(--gris); padding-left: 10pt; }
+  .tapa { height: 250mm; display: flex; flex-direction: column; justify-content: center; }
+  .rapida { display: grid; grid-template-columns: 1fr 1fr; gap: 8pt; }
+  .rapida .tarj { border: 1.5pt solid var(--tinta); }
+  .rapida .tarj.v { border-color: var(--verde); }
+  .rapida .tarj.a { border-color: #1d4ed8; }
+  .rapida ol { margin: 3pt 0 0 14pt; padding: 0; font-size: 9.5pt; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================== TAPA -->
+<section class="tapa">
+  <div style="font-weight:700; color:#475569; font-size:12pt; margin-bottom:60mm">▤ Gestión de Racks</div>
+  <h1>Manual del operario</h1>
+  <p style="font-size:14pt; color:#475569">Cómo se usa la app en el galpón, paso a paso.<br>Para quien empieza hoy y para quien ya la usa.</p>
+  <div class="grid3" style="margin-top:18pt">
+    <div class="tarj" style="background:#0f172a; color:white; border:0"><b style="font-size:13pt">Clarkista</b>Ingresar, sacar, reubicar y cambiar de categoría los bultos.</div>
+    <div class="tarj" style="background:#15803d; color:white; border:0"><b style="font-size:13pt">Control</b>Recorrer, verificar, corregir y hacer la carga inicial.</div>
+    <div class="tarj" style="background:#1d4ed8; color:white; border:0"><b style="font-size:13pt">Supervisión</b>Resumen, estadísticas y curvas de confiabilidad.</div>
+  </div>
+  <p class="muted chico" style="margin-top:40mm; border-top:1pt solid var(--linea); padding-top:6pt">
+    Versión de noviembre de 2026. Reemplaza a la de octubre de 2026, que queda guardada.
+    Las capturas son de la app real con datos de prueba; los nombres de las personas son de ejemplo.
+  </p>
+</section>
+
+<!-- ============================================================ ÍNDICE -->
+<section class="pagina">
+  <h2>Qué hay en este manual</h2>
+  <div class="indice">
+    <h4>1 · Antes de empezar</h4>
+    <div>La regla de oro</div><div>Entrar a la app</div><div>Cómo está armada la pantalla</div>
+    <h4>2 · Lo que tenés que saber del galpón</h4>
+    <div>Grupos, posiciones y códigos</div><div>Racks numerados de derecha a izquierda</div><div>Bultos y packaging</div><div>Primera y segunda</div><div>Empresas y metros cuadrados</div>
+    <h4>3 · Clarkista</h4>
+    <div>Tu pantalla: Mover</div><div>Ingreso al rack</div><div>Cuando la app no te deja</div><div>Buscar un bulto</div><div>Egreso</div><div>Reubicar</div><div>Pasaje de categoría</div><div>Mirar los racks</div>
+    <h4>4 · Control</h4>
+    <div>La confiabilidad</div><div>La recorrida</div><div>Chequear una posición</div><div>Cuando hay una diferencia</div><div>Carga inicial de un grupo</div>
+    <h4>5 · Supervisión</h4>
+    <div>Resumen: la foto del stock</div><div>Estadísticas: lo que pasó en un período</div><div>Confiabilidad: las curvas</div><div>Stock y Movimientos</div>
+    <h4>6 · Administración</h4>
+    <div>Grupos de racks</div><div>Modelos: normas y m²</div>
+    <h4>7 · Problemas frecuentes</h4>
+    <h4>8 · Glosario y hoja de referencia rápida</h4>
+  </div>
+  <div class="caja info"><b class="t">Si sos clarkista</b>leé las secciones 1, 2, 3 y 7. La 4 te sirve para entender qué hace control con lo que cargás.</div>
+  <div class="caja ok"><b class="t">Si sos de control</b>leé de la 1 a la 4 y la 7: para verificar bien tenés que saber cómo trabaja el clarkista.</div>
+  <div class="caja ej"><b class="t">Si supervisás o administrás</b>la 5 y la 6 son para vos, pero conviene conocer todo.</div>
+  <div class="caja ej"><b class="t">El manual siempre a mano</b>El botón <span class="btn sec">Manual</span> arriba de cualquier pantalla abre la última versión.</div>
+</section>
+
+<!-- ======================================================= 1. EMPEZAR -->
+<section class="pagina">
+  <div class="seccion"><div class="num">Sección 1</div><h2>Antes de empezar</h2><p>Para qué sirve la app y cómo entrar.</p></div>
+  <h3>La regla de oro</h3>
+  <div class="caja info" style="font-size:12pt"><b class="t">Lo que dice la app tiene que ser lo que hay en el rack.</b>
+    Cada vez que un bulto entra, sale, cambia de lugar o de categoría, se registra <u>en ese momento</u>, desde el celular, antes del siguiente movimiento.</div>
+  <p>La app reemplaza la planilla y la memoria. Ventas consulta en la app cuánto hay y dónde está. Si un palet se movió y nadie lo registró, la app miente: alguien lo va a buscar donde no está, o se vende algo que no existe.</p>
+  <p>No hace falta ser rápido con el celular. Hace falta <b>no dejar nada para después</b>.</p>
+
+  <div class="dos">
+    <div>
+      <h3>Entrar a la app</h3>
+      <p>Se abre en el navegador del celular, como una página web. Tu supervisor te da un <b>usuario</b> y un <b>PIN de 4 números</b>.</p>
+      <ol class="pasos">
+        <li>Escribí tu usuario. Por ejemplo, <code>juan</code>.</li>
+        <li>Tocá los 4 números del PIN en el teclado de la pantalla.</li>
+        <li>Tocá la flecha <span class="btn">→</span> para entrar.</li>
+      </ol>
+      <p>La app te lleva a tu puesto: el clarkista a <b>Mover</b>, control a <b>Recorrida</b>, supervisión al <b>Resumen</b>.</p>
+      <div class="caja ojo"><b class="t">Cuidado con el PIN</b>Si le errás 5 veces seguidas, tu usuario se bloquea 5 minutos. No compartas el PIN: cada movimiento queda firmado con tu nombre.</div>
+      <div class="caja ej"><b class="t">Agregala a la pantalla de inicio</b>En el navegador del celular, abrí el menú y elegí <i>Agregar a pantalla de inicio</i>. Así la abrís con un toque.</div>
+    </div>
+    <figure><img class="tel" src="img/01-login.png"><figcaption>Usuario escrito y PIN a medio cargar.</figcaption></figure>
+  </div>
+</section>
+
+<section class="pagina">
+  <h3>Cómo está armada la pantalla</h3>
+  <div class="dos">
+    <div>
+      <table>
+        <tr><th></th><th>Qué es</th></tr>
+        <tr><td><b>Arriba a la izquierda</b></td><td>El nombre de la app. Tocándolo volvés a tu pantalla principal.</td></tr>
+        <tr><td><b>Arriba a la derecha</b></td><td>Tu nombre y tu puesto. Fijate que sea el tuyo: si el celular es compartido, puede haber quedado abierta la sesión de otro. <span class="btn sec">Manual</span> abre este manual y <span class="btn sec">Salir</span> cierra tu sesión.</td></tr>
+        <tr><td><b>El medio</b></td><td>Lo que estás haciendo.</td></tr>
+        <tr><td><b>La barra de abajo</b></td><td>Las secciones que podés usar. Si no entran todas, el resto está en <b>⋯ Más</b>.</td></tr>
+      </table>
+      <div class="caja info"><b class="t">Colores que se repiten en toda la app</b>
+        <span class="btn">Negro</span> es la acción principal. <span class="btn rojo">Rojo</span> es un egreso: algo sale del rack.
+        <span class="chip" style="background:#fef3c7;color:#92400e">Ámbar</span> es un aviso: se puede seguir, pero leelo.
+        <span class="chip" style="background:#fee2e2;color:#b91c1c">Rojo claro</span> es un error: no se guardó nada.
+        <span class="chip" style="background:#dcfce7;color:#15803d">Verde</span> es que salió bien.
+        <span class="chip" style="background:#ffedd5;color:#9a3412">Naranja</span> es producto <b>de segunda</b>.</div>
+      <div class="caja mal"><b class="t">Si se corta la señal</b>La app reintenta sola. Si no puede, te avisa con un cartel rojo: <i>"El movimiento NO se guardó"</i>. Cuando vuelva la señal, <b>hacelo de nuevo</b>. Si no ves ese cartel, se guardó.</div>
+    </div>
+    <figure><img class="tel" src="img/10-mover.png"><figcaption>La pantalla del clarkista, con la barra de abajo.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ======================================================== 2. GALPÓN -->
+<section class="pagina">
+  <div class="seccion"><div class="num">Sección 2</div><h2>Lo que tenés que saber del galpón</h2><p>Las palabras que vas a leer todo el tiempo.</p></div>
+  <h3>Grupo, posición y nivel</h3>
+  <p>Los racks están organizados en <b>grupos</b>, con una letra cada uno: <b>A</b>, <b>B</b>, <b>C</b>, <b>D</b>… Cada hueco donde entra un bulto es una <b>posición</b>, y cada posición tiene un código pintado en el fierro. Hay dos tipos de rack.</p>
+
+  <h3>Rack selectivo: cada hueco se alcanza directo</h3>
+  <div class="grid2">
+    <div>
+      <div class="rack" style="grid-template-columns: 34pt repeat(6, 1fr)">
+        <div class="ejes" style="align-self:center">nivel 3</div><div class="hueco vacio">D-01-3</div><div class="hueco vacio">D-02-3</div><div class="hueco vacio">D-03-3</div><div class="hueco vacio">D-04-3</div><div class="hueco vacio">D-05-3</div><div class="hueco marca">D-06-3</div>
+        <div class="ejes" style="align-self:center">nivel 2</div><div class="hueco">D-01-2</div><div class="hueco">D-02-2</div><div class="hueco vacio">D-03-2</div><div class="hueco">D-04-2</div><div class="hueco vacio">D-05-2</div><div class="hueco vacio">D-06-2</div>
+        <div class="ejes" style="align-self:center">nivel 1</div><div class="hueco">D-01-1</div><div class="hueco">D-02-1</div><div class="hueco vacio">D-03-1</div><div class="hueco">D-04-1</div><div class="hueco">D-05-1</div><div class="hueco vacio">D-06-1</div>
+      </div>
+      <div class="ejes" style="grid-template-columns: 34pt repeat(6, 1fr)"><div></div><div>col. 01</div><div>col. 02</div><div>col. 03</div><div>col. 04</div><div>col. 05</div><div>col. 06</div></div>
+    </div>
+    <div class="caja ej" style="margin-top:0"><b class="t">Ejemplo · <span class="cod">D-06-3</span></b>
+      <b>D</b>: el grupo.<br><b>06</b>: la columna, contada desde la izquierda.<br><b>3</b>: el nivel, contado desde el piso (1 = piso).<br><br>
+      El nivel 1 es el <b>piso</b> y el más alto es <b>arriba</b>; con 3 niveles, el del medio es <b>medio</b>. En la app vas a leer, por ejemplo, <code>D-06-3 · arriba</code>.</div>
+  </div>
+
+  <h3>Rack penetrable: el clark entra a la calle</h3>
+  <p>En el penetrable los palets se guardan <b>uno detrás de otro</b>. El clark entra por el pasillo y deja el primero al fondo, contra la pared. El código tiene un número más: la profundidad.</p>
+  <div class="grid2">
+    <div>
+      <div class="rack" style="grid-template-columns: 34pt 1fr 1fr 8pt">
+        <div class="ejes" style="align-self:center">arriba</div><div class="hueco vacio">B-07-3-1</div><div class="hueco vacio">B-07-3-2</div><div style="background:#94a3b8;border-radius:2pt"></div>
+        <div class="ejes" style="align-self:center">medio</div><div class="hueco marca">B-07-2-1</div><div class="hueco">B-07-2-2</div><div style="background:#94a3b8;border-radius:2pt"></div>
+        <div class="ejes" style="align-self:center">piso</div><div class="hueco">B-07-1-1</div><div class="hueco">B-07-1-2</div><div style="background:#94a3b8;border-radius:2pt"></div>
+      </div>
+      <div class="ejes" style="grid-template-columns: 34pt 1fr 1fr 8pt"><div>← entra</div><div>1 · pasillo</div><div>2 · fondo</div><div>pared</div></div>
+    </div>
+    <div class="caja ej" style="margin-top:0"><b class="t">Ejemplo · <span class="cod">B-07-2-1</span></b>
+      <b>B</b>: el grupo. <b>07</b>: la calle. <b>2</b>: el nivel (medio). <b>1</b>: la profundidad (1 = la del pasillo, la más cercana).</div>
+  </div>
+  <div class="caja ojo"><b class="t">En el penetrable, el orden importa</b>Para sacar el del fondo primero hay que sacar el de adelante. Y el palet del piso le corta el paso al clark: si <code>B-07-1-1</code> está ocupada, no se puede llegar a <code>B-07-2-2</code>. <b>La app lo sabe y te avisa</b> (sección 3).</div>
+</section>
+
+<section class="pagina">
+  <div class="dos ancho">
+    <div>
+      <h3>Racks numerados de derecha a izquierda</h3>
+      <p>Por cómo quedaron ubicados en la planta, algunos grupos tienen la columna o la calle <b>01 a la derecha</b>. En la app esos grupos se dibujan igual que en la realidad: la 01 a la derecha. Los códigos del fierro no cambian.</p>
+      <p>Lo vas a ver en el mapa de racks y también en los botones para elegir la posición: en esos grupos las columnas aparecen de mayor a menor (08, 07… 01).</p>
+      <div class="caja info"><b class="t">Qué número se ve</b>En los selectivos, abajo de cada columna va su número de columna (01, 02…). En los penetrables, el número de calle. El módulo no se numera: nadie lo busca por ese número.</div>
+      <h3>Sin ubicar</h3>
+      <p>Un bulto <b>sin ubicar</b> está en el galpón y cuenta como stock, pero no está en ninguna posición del rack. Por ejemplo, un palet que quedó en el piso porque el rack estaba lleno. Es una situación de paso: hay que buscarle lugar lo antes posible.</p>
+    </div>
+    <figure><img class="parte" src="img/22-grupo-3d.png"><figcaption>Grupo D, numerado de derecha a izquierda: la 01 está a la derecha.</figcaption></figure>
+  </div>
+
+  <h3>Bulto</h3>
+  <p>Un <b>bulto</b> es lo que el clark levanta de una vez: un palet, un optimizado, un montón de producto suelto o un objeto. Cada bulto tiene un <b>código único</b> que le pone la app cuando entra: <code>P-00021</code>. Ese código lo acompaña hasta que se va del galpón. Un bulto puede llevar <b>un solo modelo</b> (48 paquetes de Laja) o <b>varios mezclados</b> (30 de Laja y 10 de Ekos, siempre como suelto).</p>
+
+  <h3>Packaging: cómo viene armado el bulto</h3>
+  <table>
+    <tr><th>Packaging</th><th>Cuándo se usa</th><th>Ejemplo</th></tr>
+    <tr><td><b>Palet</b></td><td>El armado de fábrica, con la cantidad normal de cada modelo. La app la propone sola.</td><td>Laja: 48 paquetes.</td></tr>
+    <tr><td><b>Optimizado</b></td><td>Un palet cargado de más, con su propia cantidad normal. Es más alto.</td><td>Laja: 60 paquetes.</td></tr>
+    <tr><td><b>Suelto</b></td><td>Cualquier otra cantidad: lo que sobró, un palet abierto, producto apilado. <b>La cantidad se escribe siempre</b>: no hay dos sueltos iguales.</td><td>Laja: 23 paquetes.</td></tr>
+    <tr><td><b>Objeto</b></td><td>Algo que ocupa lugar en el rack pero <b>no es stock para vender</b>. Se describe con palabras.</td><td>"6 sillas a reparar".</td></tr>
+  </table>
+  <div class="caja info"><b class="t">Si a un palet le sacás una parte, deja de ser palet</b>Pasa a <b>suelto</b> solo. La app te avisa cuando va a pasar.</div>
+</section>
+
+<section class="pagina">
+  <div class="dos">
+    <div>
+      <h3>Primera y segunda</h3>
+      <p>Cada bulto de producto es de <b>primera</b> o de <b>segunda</b>. Vale igual para placas, piedras y pisos, y es del bulto entero: un palet es de una o de la otra.</p>
+      <ul>
+        <li><b>Todo entra de primera.</b> Si es de segunda, al ingresarlo se marca el tilde <b>De segunda</b>, que se pone naranja.</li>
+        <li>En las listas, los bultos de segunda llevan la marca <span class="chip" style="background:#ffedd5;color:#9a3412">2da</span>.</li>
+        <li>Si después se detecta que es de la otra categoría, se hace un <b>pasaje de categoría</b> (sección 3). Si fue un error de registro, lo corrige control (sección 4).</li>
+      </ul>
+      <div class="caja ojo"><b class="t">La categoría nunca cambia en silencio</b>Cada cambio queda registrado con quién, cuándo, de qué a qué y por qué. Se ve en Movimientos y en Estadísticas.</div>
+
+      <h3>Empresas: Rustikas y Pirka</h3>
+      <p>Cada grupo de racks es de una empresa, y cada modelo también. Lo normal es que los productos de cada una estén en sus racks. Si guardás un palet en un rack de la otra, <b>la app te deja</b> -a veces no hay otro lugar- pero te avisa en ámbar y lo marca para reacomodarlo cuando se pueda.</p>
+
+      <h3>Metros cuadrados</h3>
+      <p>Cada modelo tiene cargado cuántos m² ocupa una unidad (por ejemplo, una placa 0,3 m² o un paquete de piedra 0,26 m²). Así el stock también se ve en m², y a diferencia de placas y paquetes, <b>los m² se pueden sumar</b> entre todas las líneas.</p>
+    </div>
+    <figure><img class="parte" src="img/13-segunda.png"><figcaption>El tilde «De segunda» marcado, en naranja.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ========================================================= 3. CLARK -->
+<section class="pagina">
+  <div class="seccion s-clark"><div class="num">Sección 3</div><h2>Clarkista</h2><p>Todo lo que entra, sale o se mueve del rack pasa por vos.</p></div>
+  <div class="grid3" style="margin-bottom:8pt">
+    <div class="tarj" style="background:#0f172a;color:white;border:0;text-align:center"><b>Ingreso</b>del piso al rack · suma stock</div>
+    <div class="tarj" style="background:#dc2626;color:white;border:0;text-align:center"><b>Egreso</b>del rack afuera · resta stock</div>
+    <div class="tarj" style="text-align:center"><b>Reubicar</b>de una posición a otra · no suma ni resta</div>
+  </div>
+  <div class="dos">
+    <div>
+      <h3>Tu pantalla: Mover</h3>
+      <p>Es lo primero que ves al entrar:</p>
+      <ul>
+        <li><span class="btn">+ Ingreso al rack</span> para registrar un bulto nuevo que entra.</li>
+        <li>El <b>buscador</b> para encontrar un bulto que ya está: por posición (<code>B-4</code>), por código (<code>P-00021</code>) o por modelo (<code>Laja</code>).</li>
+        <li><b>Sin ubicar</b>: los bultos que están en el galpón pero sin posición. Es tu lista de pendientes.</li>
+        <li><b>Hoy</b>: los movimientos del día, con la hora y quién los hizo. Sirve para confirmar que lo tuyo se guardó.</li>
+      </ul>
+      <div class="caja info"><b class="t">Ordená el día así</b>Al empezar el turno mirá la lista <b>Sin ubicar</b>. Si hay algo y tenés lugar, ubicalo primero.</div>
+    </div>
+    <figure><img class="tel" src="img/10-mover.png"><figcaption>Mover, con tres bultos sin ubicar.</figcaption></figure>
+  </div>
+</section>
+
+<section class="pagina">
+  <h3>Ingreso al rack, paso a paso</h3>
+  <p>Cuando llega un palet de producción para guardar, tocá <span class="btn">+ Ingreso al rack</span> y completá de arriba hacia abajo:</p>
+  <div class="dos">
+    <ol class="pasos">
+      <li><b>Qué entra</b>: <span class="btn">Producto</span> (lo normal) u <span class="btn sec">Objeto</span> si no es mercadería.</li>
+      <li><b>Packaging</b>: <span class="btn">Palet</span>, <span class="btn sec">Optimizado</span> o <span class="btn sec">Suelto</span>. Si es de segunda, marcá el tilde <b>De segunda</b>.</li>
+      <li><b>Qué lleva</b>: elegí el <b>tipo de producto</b> (Placas, Piedras…) y empezá a escribir el modelo: a medida que escribís, quedan solo los que empiezan con eso. Tocá el modelo.</li>
+      <li>La <b>cantidad</b> se completa sola con la norma del packaging. Si contaste otra, corregila. En <b>suelto</b> siempre la escribís vos: el recuadro aparece en ámbar hasta que la pongas.</li>
+      <li><b>Dónde va</b>: elegí por partes, como buscás en el galpón: <b>grupo</b> → <b>columna</b> (o <b>calle</b>) → <b>altura</b> → <b>profundidad</b> (solo en penetrables). Solo aparecen opciones con lugar. Abajo se ve en grande el código elegido: comparalo con el del fierro.</li>
+      <li>Si querés, escribí una <b>nota</b>. Por ejemplo: "esquinero roto".</li>
+      <li>Tocá <span class="btn">Ingresar 72 placas</span>. El botón dice cuánto entra: <b>leelo antes de tocarlo</b>.</li>
+    </ol>
+    <figure><img class="parte" src="img/12-buscador.png"><figcaption>Placas + «st»: quedan solo los Standard.</figcaption></figure>
+  </div>
+  <div class="dos">
+    <div>
+      <div class="caja ej"><b class="t">Ejemplo · Palet de Standard 9.5 al C-02-1</b>Producto → Palet → Placas → escribís «st» → Standard 9.5 (se completa 72) → grupo C → columna 02 → altura 1 (piso) → <span class="btn">Ingresar 72 placas</span>.</div>
+      <div class="caja info"><b class="t">Un paso con una sola opción se elige solo</b>Si en esa columna queda un solo nivel libre, ya aparece marcado. Igual mirá el código grande antes de guardar.</div>
+      <h3>Después de tocar Ingresar</h3>
+      <p>La app crea el bulto, le pone su código (<code>P-00061</code>) y te lo muestra. También aparece en la lista <b>Hoy</b>.</p>
+      <h3>Ingresar sin posición</h3>
+      <p>Si no hay lugar, o el que hay está reservado, marcá <b>Sin ubicar</b> en vez de elegir una posición. Cuenta como stock igual y va a la lista de pendientes.</p>
+      <h3>Ingresar un objeto</h3>
+      <p>Tocá <span class="btn sec">Objeto</span> y escribí qué es, con palabras que entienda cualquiera: "6 sillas a reparar". No lleva modelos, cantidades ni categoría.</p>
+    </div>
+    <figure><img class="parte" src="img/14-donde-va.png"><figcaption>Dónde va: grupo C, columna 02, piso → C-02-1.</figcaption></figure>
+  </div>
+</section>
+
+<section class="pagina">
+  <h3>Cuando la app no te deja</h3>
+  <p>La app revisa cada movimiento antes de guardarlo. Si algo no cierra, <b>no guarda nada</b> y te explica por qué en un cartel rojo arriba del formulario. No es un error de la app: te está frenando antes de que el sistema quede mal.</p>
+  <table>
+    <tr><th>El cartel dice</th><th>Qué pasa</th><th>Qué hacer</th></tr>
+    <tr><td><b>"…el paso está tapado"</b></td><td>En un penetrable elegiste una posición del fondo o de arriba, pero hay palets que te cortan el camino. El cartel dice cuáles: <i>"Primero hay que bajar P-00001 (A-01-1-1)…"</i></td><td>Elegí otra posición, o primero reubicá los que tapan.</td></tr>
+    <tr><td><b>"No entra: …"</b></td><td>Cada nivel tiene una altura libre, y al palet tienen que sobrarle <b>al menos 10 cm</b> arriba para poder levantarlo por encima del larguero. Un palet de 1,40 m no entra en un hueco de 1,45 m. En un penetrable, un optimizado alto puede entrar ocupando también el hueco de arriba, si está libre: la app lo permite y marca las dos.</td><td>Elegí un nivel más alto o una posición de otro grupo.</td></tr>
+    <tr><td><b>"…ya tiene el bulto…"</b></td><td>Mientras tenías la pantalla abierta, otro clarkista ocupó esa posición.</td><td>Elegí otra.</td></tr>
+  </table>
+
+  <div class="dos">
+    <div>
+      <h3>Buscar un bulto</h3>
+      <p>Para sacar o mover algo que ya está en el rack, primero buscalo. En el buscador de Mover podés escribir:</p>
+      <table>
+        <tr><th>Escribís</th><th>Encuentra</th></tr>
+        <tr><td><code>B-03-3-3</code></td><td>El bulto de esa posición.</td></tr>
+        <tr><td><code>B-03</code></td><td>Todo lo de la calle 03 del grupo B.</td></tr>
+        <tr><td><code>P-00034</code></td><td>Ese bulto, por su código.</td></tr>
+        <tr><td><code>Laja</code></td><td>Todos los bultos que llevan Laja.</td></tr>
+      </table>
+      <p>Tocá el resultado para abrir la ficha del bulto.</p>
+      <div class="caja ojo"><b class="t">Si aparecen varios</b>Fijate en la posición, que es lo primero de cada fila, y elegí el que está físicamente frente a vos.</div>
+    </div>
+    <figure><img class="tel" src="img/16-buscar.png"><figcaption>Búsqueda por modelo: «Laja».</figcaption></figure>
+  </div>
+</section>
+
+<section class="pagina">
+  <div class="dos">
+    <div>
+      <h3>La ficha del bulto</h3>
+      <p>Arriba dice dónde está, el packaging, la categoría y el código. Abajo, qué lleva y si control lo chequeó. Desde acá se hacen tres cosas:</p>
+      <ul>
+        <li><span class="btn rojo">Egreso</span>: sale del rack.</li>
+        <li><span class="btn sec">Reubicar</span>: cambia de posición.</li>
+        <li><span class="btn sec">Cambiar a segunda</span> (o <i>a primera</i>): el pasaje de categoría.</li>
+      </ul>
+      <h3>Egreso: sacar del rack</h3>
+      <ol class="pasos">
+        <li>Buscá el bulto y abrilo.</li>
+        <li>Tocá <span class="btn rojo">Egreso</span>.</li>
+        <li>Elegí <span class="btn sec">Todo el bulto</span> o <span class="btn">Una parte</span>. Si es una parte, escribí <b>cuánto sale</b> de cada modelo.</li>
+        <li><b>Por qué sale</b>: elegí el motivo (entrega a cliente, muestra, rotura…).</li>
+        <li>Si sirve, escribí una nota: remito, cliente…</li>
+        <li>Tocá <span class="btn rojo">Egreso de 10</span>. El botón dice cuánto sale.</li>
+      </ol>
+      <div class="caja info"><b class="t">"Rearmado o reempaque" no es una venta</b>Es el único motivo que dice <i>vuelve al rack</i>: el producto sale para rearmarse y después vuelve a entrar con un ingreso nuevo.</div>
+    </div>
+    <figure><img class="tel" src="img/18-egreso.png"><figcaption>Egreso de una parte, con el motivo.</figcaption></figure>
+  </div>
+</section>
+
+<section class="pagina">
+  <div class="dos">
+    <div>
+      <h3>Reubicar: cambiar de posición</h3>
+      <ol class="pasos">
+        <li>Buscá el bulto y abrilo.</li>
+        <li>Tocá <span class="btn sec">Reubicar</span>.</li>
+        <li>Elegí la <b>posición nueva</b> por partes: grupo → columna o calle → altura → profundidad.</li>
+        <li>Tocá <span class="btn">Reubicar</span>.</li>
+      </ol>
+      <p>Reubicar <b>no suma ni resta stock</b>: el bulto sigue siendo el mismo, con su código.</p>
+      <div class="caja ojo"><b class="t">Bajarlo al piso</b>Si lo bajás del rack pero sigue en el galpón (para despejar una calle, por ejemplo), marcá <b>Dejarlo sin ubicar</b>. No uses Egreso: eso lo saca del stock.</div>
+      <div class="caja mal"><b class="t">No hagas el movimiento sin registrarlo</b>"Lo muevo ahora y lo cargo después" es la forma más común de que la app quede mal. Registrá <b>cada</b> reubicación, aunque sea al lado.</div>
+      <h3>Sin ubicar: tu lista de pendientes</h3>
+      <p>Cuando haya lugar, buscá el bulto en la lista <b>Sin ubicar</b> de Mover, abrilo y usá <span class="btn sec">Reubicar</span> para darle posición. Mientras está sin ubicar, control no lo puede verificar.</p>
+    </div>
+    <figure><img class="tel" src="img/19-reubicar.png"><figcaption>Reubicación: se elige la posición nueva por partes.</figcaption></figure>
+  </div>
+</section>
+
+<section class="pagina">
+  <div class="dos">
+    <div>
+      <h3>Pasaje de categoría</h3>
+      <p>Si un bulto se ingresó de primera y después se detecta que es de segunda (o al revés), se hace un <b>pasaje de categoría</b>:</p>
+      <ol class="pasos">
+        <li>Buscá el bulto y abrilo.</li>
+        <li>Tocá <span class="btn sec">Cambiar a segunda</span> (o <i>a primera</i>).</li>
+        <li>La pantalla muestra en grande de qué a qué pasa: <b>PRIMERA → SEGUNDA</b>.</li>
+        <li>Escribí <b>por qué</b>. Es obligatorio: sin eso no se puede guardar.</li>
+        <li>Tocá <span class="btn">Pasar a segunda</span>.</li>
+      </ol>
+      <p>No cambia la cantidad ni el lugar. Queda en el historial con tu nombre, la hora y el porqué.</p>
+      <div class="caja ojo"><b class="t">Pasaje no es corrección</b>El pasaje es para cuando el producto se registró bien y después se decidió que es de la otra categoría. Si alguien lo <b>cargó mal</b>, avisale a control: lo corrige desde el chequeo y queda como error de registro.</div>
+      <div class="caja info"><b class="t">Después del pasaje, el bulto queda "sin chequear"</b>Como en cualquier movimiento: control había verificado la categoría anterior.</div>
+    </div>
+    <figure><img class="tel" src="img/20-pasaje.png"><figcaption>Pasaje de primera a segunda, con el porqué.</figcaption></figure>
+  </div>
+</section>
+
+<section class="pagina">
+  <h3>Mirar el rack: Racks y Plano</h3>
+  <div class="dos ancho">
+    <div>
+      <p><b>Racks</b> es el mapa de todas las posiciones, como se ven paradas en el galpón: en 3D por defecto, o en grilla con <b>Plano</b>. <b>Cada cuadradito es una posición</b>: tocala para ver qué hay. Arriba te dice cuánto está ocupado y si hay bultos en racks de la otra empresa.</p>
+      <table>
+        <tr><th>Ves</th><th>Significa</th></tr>
+        <tr><td><span class="chip" style="background:#dbeafe;color:#1d4ed8">PL</span> <span class="chip" style="background:#ffe4e6;color:#be123c">PI</span></td><td>Ocupada. La marca dice la línea: <b>PL</b> placas, <b>PI</b> piedras.</td></tr>
+        <tr><td>Recuadro vacío</td><td>Libre.</td></tr>
+        <tr><td><span class="chip" style="border:1pt dashed #475569">Ob</span></td><td>Un objeto.</td></tr>
+        <tr><td>Rayado con ↑ o ✕</td><td>Fuera de uso: el clark no llega (↑) o está excluida (✕).</td></tr>
+        <tr><td>Un <b>!</b> en la esquina</td><td>Producto de otra empresa.</td></tr>
+      </table>
+      <p><b>Plano</b> (en la barra de abajo) es el galpón visto desde arriba: dónde está cada grupo, las calles y los accesos. Sirve para orientarte los primeros días.</p>
+    </div>
+    <figure><img class="parte" src="img/23-grupo-plano.png"><figcaption>Grupo C en grilla: arriba de cada columna, su número.</figcaption></figure>
+  </div>
+
+  <h3>Un día del clarkista, en tres reglas</h3>
+  <div class="caja info"><ol style="margin:0 0 0 14pt;padding:0">
+    <li><b>Registrá en el momento</b>, con el bulto frente a vos. Nunca "después".</li>
+    <li><b>Leé el botón antes de tocarlo</b>: dice cuánto entra o sale, y si es de segunda.</li>
+    <li><b>Si la app te frena, no busques la vuelta</b>: leé el cartel. Si no lo entendés, llamá a control o al supervisor.</li></ol></div>
+  <div class="caja ojo"><b class="t">¿Te equivocaste en un movimiento?</b>No lo "arregles" haciendo otro movimiento al revés. Avisale a <b>control</b>: verifican la posición y la corrigen con el motivo que corresponde. Así el error queda registrado y se puede aprender de él.</div>
+</section>
+
+<!-- ======================================================= 4. CONTROL -->
+<section class="pagina">
+  <div class="seccion s-control"><div class="num">Sección 4</div><h2>Control</h2><p>Recorrer el rack y confirmar que lo que dice la app es lo que hay.</p></div>
+  <h3>Qué hace control y por qué importa</h3>
+  <p>Aunque todos registren bien, con el tiempo aparecen diferencias: un palet que se movió sin registrar, una cantidad mal contada, una categoría mal cargada. <b>Control encuentra esas diferencias y las corrige.</b> Es el <b>único puesto que puede corregir</b> lo que dice el sistema, y cada corrección queda registrada con un motivo: así se sabe cuánto y en qué se equivoca el sistema.</p>
+  <h3>La confiabilidad: cómo envejece un chequeo</h3>
+  <p>Cuando chequeás una posición, esa información es muy confiable <b>hoy</b>. Con los días vale cada vez menos, porque pudo haber pasado algo. La app lo mide así: <b>un chequeo vale la mitad a los 30 días</b>. Y una posición donde siempre aparecen diferencias baja aunque se haya mirado ayer.</p>
+  <table>
+    <tr><th>Estado</th><th>Qué significa</th></tr>
+    <tr><td><span class="chip" style="background:#dcfce7;color:#15803d">Confiable</span></td><td>Chequeada hace poco y con buen historial. Vale 50 % o más.</td></tr>
+    <tr><td><span class="chip" style="background:#fef9c3;color:#854d0e">A chequear</span></td><td>Empieza a envejecer. Entre 25 % y 50 %.</td></tr>
+    <tr><td><span class="chip" style="background:#fee2e2;color:#b91c1c">Poco confiable</span></td><td>Hace mucho que nadie la mira. Menos de 25 %.</td></tr>
+    <tr><td><span class="chip" style="background:#e2e8f0;color:#475569">Nunca chequeado</span></td><td>No tiene ningún chequeo, o se movió después del último. No cuenta como malo: cuenta como desconocido.</td></tr>
+  </table>
+  <div class="caja ojo"><b class="t">Un movimiento borra el chequeo del bulto</b>Si chequeaste un palet y después el clarkista lo reubicó, o le cambió la categoría, ese chequeo ya no sirve. Vuelve a figurar como <i>sin chequear</i>.</div>
+</section>
+
+<section class="pagina">
+  <div class="dos">
+    <div>
+      <h3>La recorrida: tu lista del día</h3>
+      <p>Es tu pantalla principal. Arriba está el <b>índice de confiabilidad</b> de todo el rack. Si hay una <b>carga inicial</b> abierta, aparece un recuadro celeste. Abajo, las posiciones <b>en el orden en que conviene chequearlas</b>:</p>
+      <ul>
+        <li>Primero las <span class="chip" style="background:#fee2e2;color:#b91c1c">olvidadas</span>: hace más de 60 días que nadie las mira. Suben aunque tengan poco producto.</li>
+        <li>Después, las que <b>hace más tiempo que no se miran y más producto tienen</b>. Un error en un palet de 72 placas pesa más que uno en un suelto de 5.</li>
+      </ul>
+      <div class="caja info"><b class="t">No hace falta hacer toda la lista en un día</b>Trabajá de arriba hacia abajo. Lo más importante siempre está primero. Las posiciones vacías también cuentan: confirmar que algo está vacío también es información.</div>
+      <h3>Chequear una posición</h3>
+      <ol class="pasos s-control-pasos">
+        <li>En la recorrida, tocá la posición.</li>
+        <li>Parate frente a ella. Leé el código en el fierro y <b>comprobá que es el mismo</b> de la pantalla.</li>
+        <li>Compará lo que dice <b>"El sistema dice que acá hay"</b> con lo que ves: packaging, <b>categoría</b>, modelo y cantidad.</li>
+        <li>Si coincide, tocá <span class="btn">Está bien</span>. <b>Un solo toque</b> y volvés a la lista.</li>
+        <li>Si no coincide, usá los botones de <b>"Hay una diferencia"</b>.</li>
+      </ol>
+      <div class="caja mal"><b class="t">No toques "Está bien" sin mirar</b>Es el botón más fácil a propósito, porque es lo que pasa casi siempre. Por eso mismo, si lo tocás sin mirar, el índice dice que todo está bien cuando nadie lo comprobó.</div>
+    </div>
+    <figure><img class="tel" src="img/31-chequeo.png"><figcaption>Chequeo: el sistema dice un palet de Standard 9.5, de primera.</figcaption></figure>
+  </div>
+</section>
+
+<section class="pagina">
+  <h3>Cuando hay una diferencia</h3>
+  <p>Hay cuatro casos. En todos tenés que elegir <b>qué pasó</b> (el motivo): así se sabe por qué se equivoca el sistema.</p>
+  <table>
+    <tr><th>Botón</th><th>Cuándo</th><th>Qué hace</th></tr>
+    <tr><td><span class="btn sec">Otra cantidad</span></td><td>El bulto está, pero hay más o menos.</td><td>Escribís cuánto hay de verdad de cada modelo. La app muestra la diferencia ("−17 placas").</td></tr>
+    <tr><td><span class="btn sec">Es de segunda</span><br><span class="muted chico">(o «Es de primera»)</span></td><td>El bulto está registrado con la categoría que no es.</td><td>Lo pasa a la otra categoría. El motivo «Categoría equivocada» viene elegido. No cambia la cantidad ni el lugar.</td></tr>
+    <tr><td><span class="btn sec">No está acá</span></td><td>El sistema dice que hay un bulto y no está.</td><td>El bulto pasa a <b>sin ubicar</b>: el producto existe, lo que se perdió es saber dónde está. Si sabés algo, ponelo en la nota.</td></tr>
+    <tr><td><span class="btn sec">Hay algo que el sistema no tiene</span></td><td>Hay un bulto que el sistema no conoce.</td><td>Lo registrás como un ingreso: producto u objeto, packaging, <b>De segunda</b> si corresponde, tipo y modelo con el buscador, y cantidades.</td></tr>
+  </table>
+  <div class="grid2">
+    <figure><img class="tel" src="img/32-otra-categoria.png"><figcaption>«Es de segunda»: pasa de PRIMERA a SEGUNDA.</figcaption></figure>
+    <div>
+      <div class="caja ojo"><b class="t">Antes de registrar algo "nuevo"</b>Buscalo: puede ser un bulto que el sistema tiene en otra posición, o sin ubicar. Si es así, el motivo es <i>"Bulto en otra posición"</i>.</div>
+      <table>
+        <tr><th>Motivo</th><th>Cuándo usarlo</th></tr>
+        <tr><td>Cantidad distinta a la registrada</td><td>El bulto es el correcto pero la cantidad no.</td></tr>
+        <tr><td>Bulto en otra posición</td><td>El bulto existe pero está en otro lugar.</td></tr>
+        <tr><td>Modelo equivocado</td><td>Se cargó un modelo y en realidad es otro.</td></tr>
+        <tr><td>Posición vacía en el sistema</td><td>Había algo que nunca se registró.</td></tr>
+        <tr><td>Categoría equivocada</td><td>Está cargado de primera y es de segunda, o al revés.</td></tr>
+      </table>
+      <p class="chico muted">Cada corrección cuenta como una diferencia en la confiabilidad: es un error que alguien cometió antes. Por eso se elige el motivo que más se acerque a lo que pasó, no el primero de la lista.</p>
+    </div>
+  </div>
+</section>
+
+<section class="pagina">
+  <h3>Carga inicial de un grupo</h3>
+  <p>Cuando un grupo de racks empieza a usarse con la app, hay que cargar <b>lo que ya estaba</b>. Eso es la <b>carga inicial</b>. La abre el administrador y la hace control, una sola vez por grupo.</p>
+  <div class="caja ojo"><b class="t">Mientras dura la carga, ese grupo está cerrado para el clark</b>El autoelevador no puede meter nada en ese grupo hasta que control la cierre. En el mapa y en el resumen figura <span class="chip" style="background:#e0f2fe;color:#075985">en carga inicial</span>.</div>
+  <div class="dos">
+    <div>
+      <ol class="pasos s-control-pasos">
+        <li>En la recorrida aparece un recuadro celeste: <b>Carga inicial · grupo A</b>. Tocá <b>Seguir →</b>.</li>
+        <li>Arriba ves el avance: <i>"5 de 36 relevadas"</i>.</li>
+        <li><b>Dónde estás</b>: la app te pone en la primera posición pendiente. Para ir a otra, elegila por partes: grupo → calle o columna → altura → profundidad. Lo ya relevado se ve en <b>verde</b>.</li>
+        <li>Parate frente a esa posición, leé el código del fierro y fijate qué hay.</li>
+      </ol>
+      <table>
+        <tr><th>Ves…</th><th>Tocás…</th></tr>
+        <tr><td>Nada</td><td><span class="btn sec">Está vacía</span></td></tr>
+        <tr><td>Algo que la app ya tenía y coincide</td><td><span class="btn">Está</span></td></tr>
+        <tr><td>Algo que la app ya tenía, pero no coincide</td><td><span class="btn sec">No coincide</span>: te lleva al chequeo normal.</td></tr>
+        <tr><td>Un bulto que la app no tiene</td><td>Completás el formulario y <span class="btn">Cargar</span>.</td></tr>
+      </table>
+      <p>Al guardar, la app <b>pasa sola a la siguiente pendiente</b>.</p>
+    </div>
+    <figure><img class="tel" src="img/34-carga-donde.png"><figcaption>«Dónde estás»: lo relevado, en verde.</figcaption></figure>
+  </div>
+</section>
+
+<section class="pagina">
+  <div class="dos">
+    <div>
+      <h3>Cargar lo que hay</h3>
+      <ol class="pasos s-control-pasos">
+        <li><b>Producto</b> u <b>Objeto</b>.</li>
+        <li><b>Packaging</b>, y <b>De segunda</b> si corresponde.</li>
+        <li><b>Tipo de producto</b> y el <b>modelo</b>, escribiendo el principio del nombre. La cantidad normal se completa sola; corregila si contaste otra. En suelto, escribila siempre.</li>
+        <li><b>Desde cuándo está</b>: la fecha aproximada en que entró al rack. No tiene que ser exacta: con el mes alcanza. <b>Es obligatoria</b>.</li>
+        <li>Tocá <span class="btn">Cargar</span>.</li>
+      </ol>
+      <div class="caja info"><b class="t">Cada posición arranca en blanco</b>La app no trae lo que cargaste en la posición anterior: ni el producto, ni la cantidad, ni la fecha. Así no se carga nada sin mirarlo.</div>
+      <h3>Si te equivocaste</h3>
+      <p>Elegí esa posición en <b>Dónde estás</b> (está en verde) y tocá <span class="btn sec">Me equivoqué: deshacer</span>. La posición vuelve a pendiente y la cargás de nuevo. No se borra nada: el error queda registrado como anulado.</p>
+      <h3>Avisos ámbar</h3>
+      <p>Si según las medidas ese palet no debería entrar, o la posición figura fuera de uso, la app <b>lo carga igual</b> y te avisa. Se registra lo que hay. Pasale el aviso al administrador: lo que hay que revisar es la medida, no el palet.</p>
+      <h3>Cerrar la carga</h3>
+      <p>Cuando terminaste el grupo, bajá al final y tocá <span class="btn sec">Cerrar carga inicial</span>. La app te dice cuántas posiciones faltan; si cerrás igual, quedan como <i>nunca chequeadas</i> y aparecen en la recorrida normal. Desde ese momento el grupo se usa como cualquier otro.</p>
+      <div class="caja mal"><b class="t">Se cierra una sola vez</b>Una vez cerrada, la carga inicial no se reabre. Lo que falte se ingresa desde Mover o se registra desde la recorrida con <i>"Hay algo que el sistema no tiene"</i>.</div>
+    </div>
+    <figure><img class="parte" src="img/35-carga-formulario.png"><figcaption>Formulario en blanco: Piedras + «pa», y la fecha obligatoria.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ==================================================== 5. SUPERVISIÓN -->
+<section class="pagina">
+  <div class="seccion s-sup"><div class="num">Sección 5</div><h2>Supervisión</h2><p>Para administrador, auditor, comercial y control.</p></div>
+  <div class="grid2">
+    <div class="tarj"><b>Resumen = una foto</b>Cómo estaba el stock en un momento: ahora, o al cierre de cualquier día.</div>
+    <div class="tarj"><b>Estadísticas = una evolución</b>Qué pasó en un período y cómo se compara con el anterior.</div>
+  </div>
+  <div class="dos">
+    <div>
+      <h3>Resumen: la foto del stock</h3>
+      <p>Es la pantalla donde entra el administrador y el auditor. Arriba se elige <b>de cuándo es la foto</b>: <b>Ahora</b>, <b>Ayer al cierre</b>, <b>Cierre de la semana pasada</b>, <b>Cierre del mes pasado</b>, o cualquier día.</p>
+      <ul>
+        <li><b>Los números de arriba</b>: stock en m² (todas las líneas sumadas), bultos en stock, ocupación, posiciones libres, sin ubicar, en rack de otra empresa y de segunda.</li>
+        <li><b>Stock por línea y por modelo</b>, cada línea en su unidad, con los m² y lo de segunda.</li>
+        <li><b>Lugar, por grupo</b>: el porcentaje y cuántas libres de cuántas útiles; las fuera de uso, aparte.</li>
+        <li><b>Antigüedad del stock</b> y los bultos más viejos.</li>
+        <li>Con la foto de <b>ahora</b>: la confiabilidad y lo <b>pendiente</b>, con un link a donde se resuelve.</li>
+      </ul>
+      <div class="caja info"><b class="t">Comparar dos fotos</b>Abrí <b>Comparar con otra foto</b> y elegí otro momento. Cada número muestra cuánto cambió: <i>"▲ +15 (+38 %) vs 15 de octubre al cierre"</i>. Las diferencias van en gris, sin verde ni rojo: que haya más o menos no es bueno ni malo por sí solo.</div>
+    </div>
+    <figure><img class="parte" src="img/41b-resumen-comparado-numeros.png"><figcaption>Cierre de octubre comparado con el 15 de octubre.</figcaption></figure>
+  </div>
+</section>
+
+<section class="pagina">
+  <div class="dos">
+    <div>
+      <h3>La foto diaria guardada</h3>
+      <p>Todas las noches, apenas pasada la medianoche, la app <b>guarda la foto del cierre del día</b>: el stock, la ocupación con los racks de ese día, los m² y la confiabilidad de esa noche.</p>
+      <ul>
+        <li>Esas fotos <b>no se pueden modificar ni borrar</b>, ni siquiera desde la base de datos. Son el registro de cómo se informó el stock.</li>
+        <li>Al pedir un día que tiene foto guardada, aparece en verde <b>"Foto guardada al cierre"</b>.</li>
+        <li>Si una noche no se guardó, el día se muestra <b>reconstruido</b> desde el historial: el stock es exacto, pero sin la confiabilidad de esa noche. La pantalla lo avisa.</li>
+        <li>Al pie del Resumen dice cuántas fotos hay y de cuándo es la última.</li>
+      </ul>
+      <div class="caja ojo"><b class="t">Lo que la foto reconstruida toma de hoy</b>Las posiciones, el alcance del clark y la lista de exclusión no tienen historia: la foto reconstruida los toma como están hoy.</div>
+    </div>
+    <figure><img class="parte" src="img/40c-resumen-lugar.png"><figcaption>Lugar por grupo: libres de cuántas útiles.</figcaption></figure>
+  </div>
+
+  <h3>Estadísticas: lo que pasó en un período</h3>
+  <div class="dos">
+    <div>
+      <p>Arriba se elige el período: <b>Hoy</b>, <b>Ayer</b>, <b>Anteayer</b>, <b>Esta semana</b>, <b>Semana anterior</b> (de lunes a domingo), <b>Mes en curso</b>, <b>Mes anterior</b>, <b>Últimos 30</b> o <b>90 días</b>, <b>Año en curso</b>, o un <b>desde–hasta</b>.</p>
+      <p>Cada número se compara con el <b>período anterior equivalente</b>. Si el período está en curso, se compara con el mismo tramo: del 1 al 7 de noviembre contra del 1 al 7 de octubre; hoy hasta esta hora contra ayer hasta esta hora.</p>
+      <ul>
+        <li>Bultos que entraron y que salieron enteros, <b>m² que entraron y salieron</b>, egresos, reubicaciones, chequeos y cuánto coincidían.</li>
+        <li><b>Cómo evolucionó el stock</b>: un gráfico de m² (todas las líneas), uno de bultos y uno por línea en su unidad. Tocando la línea se ve el valor de cada día.</li>
+        <li>Movimientos por hora, día, semana o mes; lo que más sale y por qué; cuánto tarda en salir; control; primera y segunda; quién hace qué y a qué hora.</li>
+      </ul>
+    </div>
+    <figure><img class="parte" src="img/42b-estadisticas-numeros.png"><figcaption>Mes en curso, comparado con el mismo tramo de octubre.</figcaption></figure>
+  </div>
+</section>
+
+<section class="pagina">
+  <h3>Confiabilidad: las curvas</h3>
+  <p>En <b>Confiabilidad</b> (en el celular, dentro de <b>⋯ Más</b>), debajo del número de hoy, está <b>"Cómo evolucionó"</b>, con los mismos períodos que Estadísticas. Todas las curvas van de 0 a 100 %, con líneas guía en 50 % (Confiable) y 25 % (A chequear), así se comparan a ojo. Un tramo sin nada medido deja un hueco: no es cero, es que no hay dato.</p>
+  <div class="grid2">
+    <figure><img class="parte" src="img/44-curva-general.png"><figcaption>La confiabilidad general en 90 días.</figcaption></figure>
+    <figure><img class="parte" src="img/45-curva-dias.png"><figcaption>Días promedio desde el último chequeo.</figcaption></figure>
+  </div>
+  <table>
+    <tr><th>Curva</th><th>Qué contesta</th></tr>
+    <tr><td><b>General</b> y <b>cuánto se miró alguna vez</b></td><td>¿De cuánto del stock nos podemos fiar? Un 80 % sobre la mitad del stock no es lo mismo que sobre todo.</td></tr>
+    <tr><td><b>Días desde el último chequeo</b></td><td>Lo mismo, dicho en días. La línea marca los 30 días, cuando un chequeo vale la mitad.</td></tr>
+    <tr><td><b>Chequeos que hubo que corregir</b> y <b>correcciones por semana</b></td><td>¿Se registra cada vez mejor? Si bajan, sí.</td></tr>
+    <tr><td><b>Por grupo</b>, <b>por altura</b>, <b>por tipo de mercadería</b>, <b>por empresa</b>, <b>por packaging</b></td><td>¿Dónde está el problema? Por ejemplo, si los niveles de arriba o los sueltos se chequean menos.</td></tr>
+    <tr><td><b>Por modelo</b></td><td>Se elige con un botón; abajo hay una tabla con cuánto cambió cada modelo.</td></tr>
+    <tr><td><b>Por posición</b></td><td>Se escribe el código (por ejemplo <code>B-07-2-1</code>).</td></tr>
+  </table>
+  <p class="chico muted">Las curvas se arman con toda la historia de chequeos y movimientos. Única excepción: en la carga inicial, el «Está» sobre un palet que ya estaba cargado no deja registro, así que en esos casos la curva del pasado queda un poco más baja que lo que fue.</p>
+
+  <h3>Stock y Movimientos</h3>
+  <div class="grid2">
+    <div><p><b>Stock</b>: cada modelo con lo que hay por packaging, y lo de segunda aparte. Tocando un modelo se ve cada bulto y dónde está.</p>
+    <p><b>Movimientos</b>: todo lo que pasó, con quién y cuándo. Se filtra por fecha, tipo, modelo y persona, y se descarga en CSV para Excel. El filtro <b>Todo cambio de categoría</b> junta los pasajes y las correcciones de control; cada uno muestra <span class="chip" style="background:#ffedd5;color:#9a3412">Primera → Segunda</span>.</p></div>
+    <figure><img class="tel" src="img/48-movimientos-categoria.png"><figcaption>Movimientos: todo cambio de categoría.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ========================================================== 6. ADMIN -->
+<section class="pagina">
+  <div class="seccion s-admin"><div class="num">Sección 6</div><h2>Administración</h2><p>Lo que configura el administrador. Lo demás se hace desde las pantallas de siempre.</p></div>
+  <div class="dos">
+    <div>
+      <h3>Grupos de racks</h3>
+      <p>En <b>Administración → Racks</b>, <span class="btn sec">Editar</span> abre el formulario del grupo (la pantalla sube sola hasta él):</p>
+      <ul>
+        <li><b>Código</b>, nombre, <b>empresa</b> y <b>tipo</b> (selectivo o penetrable).</li>
+        <li>La geometría: ancho, niveles y módulos (selectivo) o niveles, profundidad y calles (penetrable). Las posiciones se generan solas; las que ya existen no se tocan.</li>
+        <li>En los penetrables, de qué lado entra el clark.</li>
+        <li><b>Numerado de derecha a izquierda</b>: el tilde para los grupos con la 01 a la derecha.</li>
+        <li>Por nivel: la altura libre en cm y si el clark llega.</li>
+        <li><b>Iniciar carga inicial</b>, cuando el grupo empieza a usarse.</li>
+      </ul>
+    </div>
+    <figure><img class="parte" src="img/50-admin-grupo.png"><figcaption>Editar grupo: el tilde de numeración.</figcaption></figure>
+  </div>
+  <div class="dos">
+    <div>
+      <h3>Modelos: normas y m²</h3>
+      <p>En <b>Administración → Modelos</b>, cada modelo tiene:</p>
+      <ul>
+        <li><b>Línea</b> y <b>empresa</b>.</li>
+        <li><b>m² por unidad</b>: cuántos m² ocupa una unidad (placa 0,3; paquete de piedra 0,26). Acepta coma o punto. Vacío = sin medir: el modelo queda afuera de los m², y el Resumen avisa cuáles faltan.</li>
+        <li><b>Cantidad normalizada</b> por palet y por optimizado: es la que la app propone al ingresar. Vacío no es cero: significa que no hay norma.</li>
+        <li><b>Altura</b> del palet y del optimizado, que se compara contra la altura libre del nivel.</li>
+      </ul>
+      <div class="caja ojo"><b class="t">Las fotos guardadas no cambian</b>Si cambiás los m² de un modelo, las fotos diarias ya guardadas siguen con los m² que tenía esa noche. Las estadísticas, en cambio, usan los de hoy.</div>
+    </div>
+    <figure><img class="parte" src="img/51-admin-modelo.png"><figcaption>Editar modelo: m² por unidad y normas.</figcaption></figure>
+  </div>
+</section>
+
+<!-- ====================================================== 7. PROBLEMAS -->
+<section class="pagina">
+  <div class="seccion s-prob"><div class="num">Sección 7</div><h2>Problemas frecuentes</h2><p>Qué hacer cuando algo no sale.</p></div>
+  <table>
+    <tr><th style="width:42%">Pasa esto…</th><th>Hacé esto</th></tr>
+    <tr><td><b>No puedo entrar: "usuario bloqueado".</b></td><td>Le erraste al PIN 5 veces. Esperá 5 minutos. Si no te acordás el PIN, pedile uno nuevo al supervisor.</td></tr>
+    <tr><td><b>"No se pudo contactar al servidor. El movimiento NO se guardó."</b></td><td>Se cortó la señal. Acercate a donde haya señal y <b>hacé el movimiento de nuevo</b>. No se guardó nada, así que no queda duplicado.</td></tr>
+    <tr><td><b>No aparece la posición donde quiero meter el palet.</b></td><td>Solo se ofrecen posiciones libres y que se pueden usar. Puede estar ocupada en el sistema, ser inalcanzable, estar excluida, o el grupo puede estar en carga inicial. Mirala en <b>Racks</b>.</td></tr>
+    <tr><td><b>Las columnas de un grupo aparecen al revés.</b></td><td>Es un grupo numerado de derecha a izquierda: la app lo muestra como está en el galpón.</td></tr>
+    <tr><td><b>En suelto, el botón de guardar no se habilita.</b></td><td>Falta la cantidad: el recuadro está en ámbar. Escribí cuántas hay de cada modelo.</td></tr>
+    <tr><td><b>En la carga inicial, el botón Cargar no se habilita.</b></td><td>Falta la fecha de "desde cuándo está". Con el mes alcanza.</td></tr>
+    <tr><td><b>La app dice que una posición está ocupada y está vacía (o al revés).</b></td><td>No la uses ni la fuerces. Avisale a <b>control</b> para que la chequee y la corrija.</td></tr>
+    <tr><td><b>"El paso está tapado".</b></td><td>En un penetrable, hay palets adelante o en el piso. Elegí otra posición o reubicá primero los que tapan.</td></tr>
+    <tr><td><b>"No entra: …" (altura).</b></td><td>El palet necesita 10 cm de aire arriba y el hueco no los tiene. Elegí un nivel más alto o una posición de otro grupo.</td></tr>
+    <tr><td><b>Registré un ingreso con la cantidad o el modelo mal.</b></td><td>Avisale a control. No hagas un egreso para "compensar".</td></tr>
+    <tr><td><b>Ingresé de primera algo que es de segunda.</b></td><td>Si fue un error al cargarlo, avisale a control (lo corrige como «Categoría equivocada»). Si se detectó después, hacé el pasaje de categoría desde la ficha.</td></tr>
+    <tr><td><b>Moví un palet y me olvidé de registrarlo.</b></td><td>Registralo ahora con <b>Reubicar</b>, apenas te acuerdes. Si ya no sabés dónde quedó, avisale a control.</td></tr>
+    <tr><td><b>Aviso ámbar de "otra empresa".</b></td><td>Se puede ingresar igual. Si hay lugar en un rack de la empresa correcta, usá ese.</td></tr>
+    <tr><td><b>En la pantalla aparece el nombre de otra persona.</b></td><td>Tocá <b>Salir</b> y entrá con tu usuario. Todo lo que hagas queda a nombre de quien figura arriba.</td></tr>
+    <tr><td><b>El Resumen de un día dice "reconstruida".</b></td><td>Esa noche no se guardó la foto automática. El stock es exacto igual. Si pasa seguido, avisale al administrador.</td></tr>
+  </table>
+</section>
+
+<!-- ======================================================= 8. GLOSARIO -->
+<section class="pagina">
+  <div class="seccion"><div class="num">Sección 8</div><h2>Glosario</h2><p>Las palabras de la app, en una línea.</p></div>
+  <table>
+    <tr><td style="width:30%"><b>Grupo</b></td><td>Un conjunto de racks iguales, identificado con una letra (A, B, C…).</td></tr>
+    <tr><td><b>Selectivo / Penetrable</b></td><td>Rack donde cada posición se alcanza directo / donde el clark entra a la calle y los palets van uno detrás de otro.</td></tr>
+    <tr><td><b>Posición</b></td><td>Un hueco del rack donde entra un bulto. Tiene un código: <code>D-06-3</code>, <code>B-07-2-1</code>.</td></tr>
+    <tr><td><b>Columna / Calle</b></td><td>El número después del grupo: columna en el selectivo, calle en el penetrable.</td></tr>
+    <tr><td><b>Nivel</b></td><td>La altura: piso (1), medio, arriba.</td></tr>
+    <tr><td><b>Profundidad</b></td><td>En un penetrable: pasillo (1) hasta pared o fondo.</td></tr>
+    <tr><td><b>Bulto</b></td><td>Lo que el clark levanta de una vez. Tiene un código <code>P-00021</code>.</td></tr>
+    <tr><td><b>Packaging</b></td><td>Cómo viene armado el bulto: suelto, palet, optimizado u objeto.</td></tr>
+    <tr><td><b>Primera / Segunda</b></td><td>La categoría del bulto. Todo entra de primera salvo que se marque.</td></tr>
+    <tr><td><b>Pasaje de categoría</b></td><td>Cambiar un bulto de primera a segunda o al revés, con el porqué.</td></tr>
+    <tr><td><b>Objeto</b></td><td>Algo que ocupa lugar en el rack y no es producto para vender.</td></tr>
+    <tr><td><b>m² por unidad</b></td><td>Cuántos m² ocupa una unidad de un modelo. Con eso el stock se suma en m².</td></tr>
+    <tr><td><b>Ingreso / Egreso / Reubicación</b></td><td>Un bulto entra (suma stock) / sale, entero o una parte (resta) / cambia de posición (no cambia el stock).</td></tr>
+    <tr><td><b>Sin ubicar</b></td><td>Bulto que está en el galpón pero en ninguna posición.</td></tr>
+    <tr><td><b>Chequeo / Ajuste</b></td><td>Control confirma que una posición está como dice el sistema / la corrección que hace cuando encuentra una diferencia.</td></tr>
+    <tr><td><b>Confiabilidad</b></td><td>Cuánto se puede creer lo que dice la app. Baja con los días desde el último chequeo.</td></tr>
+    <tr><td><b>Olvidada</b></td><td>Posición que nadie chequea hace más de 60 días.</td></tr>
+    <tr><td><b>Fuera de uso</b></td><td>Posición donde no se guarda nada: el clark no llega o está excluida.</td></tr>
+    <tr><td><b>Carga inicial</b></td><td>El inventario de lo que ya estaba en un grupo al empezar a usar la app.</td></tr>
+    <tr><td><b>Resumen / Foto diaria</b></td><td>La foto del stock en un momento / la foto del cierre de cada día, guardada e inmodificable.</td></tr>
+    <tr><td><b>Estadísticas</b></td><td>Lo que pasó en un período, comparado con el período anterior equivalente.</td></tr>
+  </table>
+</section>
+
+<section class="pagina">
+  <h2>Hoja de referencia rápida</h2>
+  <p class="muted">Para imprimir y tener a mano en el autoelevador.</p>
+  <div class="rapida">
+    <div class="tarj"><b>Clarkista: entra un bulto</b><ol><li>Mover → <b>+ Ingreso al rack</b></li><li>Producto · packaging · ¿de segunda?</li><li>Tipo · modelo (escribí el principio) · cantidad</li><li>Dónde va: grupo → columna/calle → altura → profundidad (o Sin ubicar)</li><li><b>Ingresar</b>: leé el botón</li></ol></div>
+    <div class="tarj"><b>Clarkista: sale un bulto</b><ol><li>Buscar (posición, código o modelo)</li><li><b>Egreso</b> → todo o una parte</li><li>Motivo · nota</li><li><b>Egreso de N</b>: leé el botón</li></ol></div>
+    <div class="tarj"><b>Clarkista: cambia de lugar o de categoría</b><ol><li>Buscar y abrir</li><li><b>Reubicar</b> → posición nueva por partes · bajarlo al piso = <b>Dejarlo sin ubicar</b></li><li><b>Cambiar a segunda/primera</b> → porqué obligatorio</li></ol></div>
+    <div class="tarj"><b>Código de posición</b><p style="margin:3pt 0 0"><code>D-06-3</code> = grupo D · columna 06 · nivel 3<br><code>B-07-2-1</code> = grupo B · calle 07 · nivel 2 · profundidad 1 (pasillo)<br>Nivel 1 = piso. Profundidad 1 = la del pasillo.</p></div>
+    <div class="tarj v"><b>Control: chequear</b><ol><li>Recorrida → tocar la primera</li><li>Leer el código del fierro</li><li>Coincide (también la categoría) → <b>Está bien</b></li><li>No coincide → <b>Otra cantidad</b> / <b>Es de segunda</b> / <b>No está acá</b> / <b>Hay algo que el sistema no tiene</b> + motivo</li></ol></div>
+    <div class="tarj v"><b>Control: carga inicial</b><ol><li>Recorrida → recuadro celeste → <b>Seguir</b></li><li>Dónde estás (lo verde ya está)</li><li><b>Está vacía</b> / <b>Está</b> / cargar con fecha</li><li>Error → <b>Me equivoqué: deshacer</b></li><li>Al final → <b>Cerrar carga inicial</b></li></ol></div>
+    <div class="tarj a"><b>Supervisión</b><ol><li><b>Resumen</b>: la foto de ahora o de un cierre, y comparar</li><li><b>Estadísticas</b>: período y comparación con el anterior</li><li><b>Confiabilidad</b>: las curvas</li><li><b>Movimientos</b>: el detalle y el CSV</li></ol></div>
+    <div class="tarj" style="background:#dbeafe;border-color:#2a78d6"><b>La regla de oro</b>Lo que dice la app tiene que ser lo que hay en el rack. Registrá cada movimiento <b>en el momento</b>. Si la app te frena, <b>leé el cartel</b>. Si algo no cierra, <b>avisá a control</b>.</div>
+  </div>
+</section>
+
+</body>
+</html>
