@@ -487,7 +487,15 @@ export default async function PantallaEstadisticas({
       </Seccion>
 
       <p className="mt-6 text-sm text-slate-500">
-        La antigüedad del stock y la foto de cualquier día están en{" "}
+        Las curvas de confiabilidad -general, por grupo, altura, tipo, modelo y posición- están en{" "}
+        <Link href={
+            rango.id === "rango"
+              ? `/confiabilidad?desde=${rango.desdeDia}&hasta=${rango.hastaDia}`
+              : `/confiabilidad?p=${rango.id}`
+          } className="font-semibold underline">
+          Confiabilidad
+        </Link>
+        . La antigüedad del stock y la foto de cualquier día están en{" "}
         <Link href="/resumen" className="font-semibold underline">
           Resumen
         </Link>
