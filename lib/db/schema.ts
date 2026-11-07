@@ -346,6 +346,12 @@ export const grupos = pgTable("grupos", {
   /** De qué lado entra el clark. Solo penetrables; ver `ladoAccesoEnum`. */
   acceso: ladoAccesoEnum("acceso").notNull().default("derecha"),
   /**
+   * Numerado de derecha a izquierda: la columna o calle 01 está a la DERECHA.
+   * Los códigos no cambian; cambia el dibujo, para que la pantalla se vea como
+   * el rack parado enfrente.
+   */
+  numeracionInvertida: boolean("numeracion_invertida").notNull().default(false),
+  /**
    * La carga inicial del grupo: abierta desde `cargaInicialDesde` hasta
    * `cargaInicialCerradaEn`. Mientras está abierta, solo control carga ahí: el
    * autoelevador no lo ve como destino. Ver lib/acciones/carga-motor.ts.

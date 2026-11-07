@@ -214,6 +214,8 @@ const esquemaGrupo = z.object({
   empresaId: z.number({ invalid_type_error: "Elegí de qué empresa es el grupo." }).int().positive("Elegí de qué empresa es el grupo."),
   /** De qué lado entra el clark. Solo importa en un penetrable. */
   acceso: z.enum(["izquierda", "derecha"]).default("derecha"),
+  /** La 01 está a la derecha. Solo cambia el dibujo, no los códigos. */
+  numeracionInvertida: z.boolean().default(false),
   activo: z.boolean(),
 });
 
@@ -297,6 +299,7 @@ export async function guardarGrupo(
       unidades: d.unidades,
       empresaId: d.empresaId,
       acceso: d.acceso,
+      numeracionInvertida: d.numeracionInvertida,
       activo: d.activo,
     };
 

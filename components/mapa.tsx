@@ -201,9 +201,20 @@ export function MapaDeGrupo({
   const niveles = [...new Set(grupo.celdas.map((c) => c.nivel))].sort(
     (a, b) => b - a,
   );
+  /**
+   * Numerado de derecha a izquierda: la 01 se dibuja a la derecha, como está
+   * en el galpón. Se dan vuelta las calles o módulos y, en un selectivo, las
+   * columnas de cada módulo. La profundidad de un penetrable no se toca.
+   */
+  const sentido = grupo.numeracionInvertida ? -1 : 1;
   const unidades = [...new Set(grupo.celdas.map((c) => c.unidad))].sort(
-    (a, b) => a - b,
+    (a, b) => sentido * (a - b),
   );
+  const columnasDe = (u: number) =>
+    [...new Set(grupo.celdas.filter((c) => c.unidad === u).map((c) => c.columna ?? 0))].sort(
+      (a, b) => sentido * (a - b),
+    );
+  const dos = (n: number) => String(n).padStart(2, "0");
 
   return (
     <section id={`grupo-${grupo.codigo}`} className="tarjeta scroll-mt-20 overflow-hidden">
@@ -223,7 +234,8 @@ export function MapaDeGrupo({
           {grupo.nombre ? `${grupo.nombre} · ` : ""}
           {grupo.penetrable
             ? `${grupo.unidades} calles de ${grupo.niveles} × ${grupo.profundidad}`
-            : `${grupo.unidades} módulos de ${grupo.ancho} × ${grupo.niveles}`}
+            : `${grupo.unidades * (grupo.ancho ?? 1)} columnas de ${grupo.niveles} niveles`}
+          {grupo.numeracionInvertida ? " · numerado de derecha a izquierda" : ""}
         </p>
       </header>
 
@@ -249,20 +261,29 @@ export function MapaDeGrupo({
         </div>
 
         <div>
+          {/* Arriba, el número que se lee en el fierro: la calle en un
+              penetrable, la columna en un selectivo. El módulo no se numera:
+              nadie lo busca por ese número. */}
           <div className="flex gap-2">
-            {unidades.map((u) => (
-              <div
-                key={u}
-                className="text-center text-[10px] text-slate-400 tabular-nums"
-                style={{
-                  width: grupo.penetrable
-                    ? (grupo.profundidad ?? 1) * 36 + ((grupo.profundidad ?? 1) - 1) * 2
-                    : (grupo.ancho ?? 1) * 36 + ((grupo.ancho ?? 1) - 1) * 2,
-                }}
-              >
-                {u}
-              </div>
-            ))}
+            {unidades.map((u) =>
+              grupo.penetrable ? (
+                <div
+                  key={u}
+                  className="h-4 text-center text-[10px] font-semibold text-slate-500 tabular-nums"
+                  style={{ width: (grupo.profundidad ?? 1) * 36 + ((grupo.profundidad ?? 1) - 1) * 2 }}
+                >
+                  calle {dos(u)}
+                </div>
+              ) : (
+                <div key={u} className="flex gap-0.5">
+                  {columnasDe(u).map((col) => (
+                    <div key={col} className="h-4 w-9 text-center text-[10px] font-semibold text-slate-500 tabular-nums">
+                      {dos(col)}
+                    </div>
+                  ))}
+                </div>
+              ),
+            )}
           </div>
 
           {niveles.map((n) => (
@@ -271,10 +292,10 @@ export function MapaDeGrupo({
                 <div key={u} className="flex gap-0.5">
                   {grupo.celdas
                     .filter((c) => c.nivel === n && c.unidad === u)
-                    .sort(
-                      (a, b) =>
-                        (a.profundidad ?? a.columna ?? 0) -
-                        (b.profundidad ?? b.columna ?? 0),
+                    .sort((a, b) =>
+                      a.profundidad != null
+                        ? a.profundidad - (b.profundidad ?? 0)
+                        : sentido * ((a.columna ?? 0) - (b.columna ?? 0)),
                     )
                     .map((c) => (
                       <Celda

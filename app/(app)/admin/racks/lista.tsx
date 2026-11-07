@@ -35,6 +35,7 @@ type Grupo = {
   empresaId: number | null;
   empresaNombre: string | null;
   acceso: "izquierda" | "derecha";
+  numeracionInvertida: boolean;
   posiciones: number;
   ocupadas: number;
   carga: EstadoCarga;
@@ -62,6 +63,7 @@ type Edicion = {
   unidades: string;
   empresaId: number | null;
   acceso: "izquierda" | "derecha";
+  numeracionInvertida: boolean;
   activo: boolean;
 };
 
@@ -75,6 +77,7 @@ const NUEVO: Edicion = {
   unidades: "",
   empresaId: null,
   acceso: "derecha",
+  numeracionInvertida: false,
   activo: true,
 };
 
@@ -139,6 +142,9 @@ export function Grupos({
                       suspendido
                     </span>
                   )}
+                  {g.numeracionInvertida && (
+                    <span className="ml-2 chip bg-slate-100 text-slate-600">01 a la derecha</span>
+                  )}
                   {g.carga === "en_curso" && (
                     <span className="ml-2 chip bg-sky-100 text-sky-900">
                       en carga inicial
@@ -168,6 +174,7 @@ export function Grupos({
                     unidades: String(g.unidades),
                     empresaId: g.empresaId,
                     acceso: g.acceso,
+                    numeracionInvertida: g.numeracionInvertida,
                     activo: g.activo,
                   })
                 }
@@ -233,6 +240,7 @@ function FormularioGrupo({
           unidades: geometria.unidades,
           empresaId: edicion.empresaId ?? 0,
           acceso: edicion.acceso,
+          numeracionInvertida: edicion.numeracionInvertida,
           activo: edicion.activo,
         })
       }
@@ -366,6 +374,22 @@ function FormularioGrupo({
           </p>
         </div>
       )}
+
+      <label className="flex items-start gap-2.5 text-sm text-slate-700">
+        <input
+          type="checkbox"
+          className="mt-0.5 h-5 w-5"
+          checked={edicion.numeracionInvertida}
+          onChange={(e) => cambiar({ ...edicion, numeracionInvertida: e.target.checked })}
+        />
+        <span>
+          <strong>Numerado de derecha a izquierda</strong>
+          <span className="block text-xs text-slate-500">
+            La {selectivo ? "columna" : "calle"} 01 está a la derecha, mirando el grupo de frente. Los
+            códigos no cambian: el grupo se dibuja con la 01 a la derecha, como está en el galpón.
+          </span>
+        </span>
+      </label>
 
       {puede && (
         <Aviso tono="info">
