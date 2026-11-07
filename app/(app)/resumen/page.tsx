@@ -414,7 +414,8 @@ export default async function PantallaResumen({
                     </span>
                     <span className="shrink-0 text-xs text-slate-500">
                       <span className="cifra text-slate-900">{porcentaje(g.ocupadas + g.tapadas, utilesG)}%</span> ·{" "}
-                      {numero(g.libres)} libre{g.libres === 1 ? "" : "s"}
+                      {/* Libres sobre las útiles, que es sobre lo que se calcula el porcentaje. */}
+                      {numero(g.libres)} libre{g.libres === 1 ? "" : "s"} de {numero(utilesG)}
                       {o && o.ocupadas !== g.ocupadas && (
                         <span className="ml-1 text-slate-700">
                           ({g.ocupadas > o.ocupadas ? "+" : "−"}
@@ -424,11 +425,23 @@ export default async function PantallaResumen({
                     </span>
                   </div>
                   <BarraPosiciones conteo={g} />
-                  {(g.ajenos > 0 || g.objetos > 0) && (
+                  {(g.ajenos > 0 || g.objetos > 0 || g.fueraDeUso > 0) && (
                     <p className="mt-1 text-xs text-slate-500">
-                      {g.ajenos > 0 && <span className="text-amber-800">{numero(g.ajenos)} de otra empresa</span>}
-                      {g.ajenos > 0 && g.objetos > 0 && " · "}
-                      {g.objetos > 0 && `${numero(g.objetos)} objeto${g.objetos === 1 ? "" : "s"}`}
+                      {[
+                        g.fueraDeUso > 0 && (
+                          <span key="f">
+                            y {numero(g.fueraDeUso)} fuera de uso, que no cuentan como lugar
+                          </span>
+                        ),
+                        g.ajenos > 0 && (
+                          <span key="a" className="text-amber-800">
+                            {numero(g.ajenos)} de otra empresa
+                          </span>
+                        ),
+                        g.objetos > 0 && <span key="o">{`${numero(g.objetos)} objeto${g.objetos === 1 ? "" : "s"}`}</span>,
+                      ]
+                        .filter(Boolean)
+                        .flatMap((x, i) => (i === 0 ? [x] : [" · ", x]))}
                     </p>
                   )}
                 </li>
@@ -452,7 +465,7 @@ export default async function PantallaResumen({
                 clave: n.nombre,
                 etiqueta: n.nombre,
                 valor: pct,
-                texto: `${pct}% · ${numero(n.libres)} libres`,
+                texto: `${pct}% · ${numero(n.libres)} libres de ${numero(utilesN)}`,
                 detalle: `${numero(n.ocupadas)} ocupadas de ${numero(utilesN)} útiles`,
               };
             })}

@@ -147,19 +147,35 @@ export function GraficoConfianza({
   titulo,
   serie,
   detalle,
+  unidad,
+  maximo,
+  cortes = [
+    { valor: 0.5, etiqueta: "50 %" },
+    { valor: 0.25, etiqueta: "25 %" },
+  ],
 }: {
   titulo: string;
   serie: Array<{ clave: string; etiqueta: string; valor: number | null; medidos?: number; sinDatos?: number }>;
   detalle?: string;
+  /**
+   * Sin unidad, los valores son proporciones (0 a 1) y se muestran en %, de 0
+   * a 100. Con unidad ("días"), son números de 0 a `maximo`.
+   */
+  unidad?: string;
+  maximo?: number;
+  /** Las líneas guía, en la misma escala que los valores. */
+  cortes?: Array<{ valor: number; etiqueta: string }>;
 }) {
   const [activo, setActivo] = useState<number | null>(null);
   if (serie.length === 0) return null;
 
   const ancho = 300;
   const alto = 96;
+  const tope = unidad ? Math.max(maximo ?? 0, ...serie.map((s) => s.valor ?? 0), 1) : 1;
   const x = (i: number) => (serie.length === 1 ? ancho / 2 : (i / (serie.length - 1)) * ancho);
-  const y = (v: number) => alto - v * alto;
-  const pct = (v: number | null) => (v == null ? "sin dato" : `${Math.round(v * 100)} %`);
+  const y = (v: number) => alto - (Math.min(v, tope) / tope) * alto;
+  const pct = (v: number | null) =>
+    v == null ? "sin dato" : unidad ? `${Math.round(v)} ${unidad}` : `${Math.round(v * 100)} %`;
 
   // Tramos continuos de la línea: se corta donde no hay dato.
   const tramos: string[] = [];
@@ -176,7 +192,9 @@ export function GraficoConfianza({
   const primeroConDato = serie.find((s) => s.valor != null);
   const mostrado = activo != null ? serie[activo] : (ultimoConDato ?? serie[serie.length - 1]);
   const cambio =
-    ultimoConDato && primeroConDato ? Math.round((ultimoConDato.valor! - primeroConDato.valor!) * 100) : null;
+    ultimoConDato && primeroConDato
+      ? Math.round((ultimoConDato.valor! - primeroConDato.valor!) * (unidad ? 1 : 100))
+      : null;
 
   return (
     <figure className="tarjeta p-4">
@@ -192,7 +210,10 @@ export function GraficoConfianza({
           (mostrado.medidos != null
             ? `${mostrado.medidos} medidos${mostrado.sinDatos ? ` · ${mostrado.sinDatos} sin chequear` : ""}`
             : "")}
-        {activo == null && cambio != null && cambio !== 0 && ` · ${cambio > 0 ? "+" : "−"}${Math.abs(cambio)} puntos en el período`}
+        {activo == null &&
+          cambio != null &&
+          cambio !== 0 &&
+          ` · ${cambio > 0 ? "+" : "−"}${Math.abs(cambio)} ${unidad ?? "puntos"} en el período`}
       </p>
       <div className="relative">
         <svg
@@ -203,13 +224,13 @@ export function GraficoConfianza({
           aria-label={`${titulo}: ${pct(mostrado.valor)}`}
           onMouseLeave={() => setActivo(null)}
         >
-          {[0.5, 0.25].map((corte) => (
+          {cortes.map((corte) => (
             <line
-              key={corte}
+              key={corte.etiqueta}
               x1={0}
               x2={ancho}
-              y1={y(corte)}
-              y2={y(corte)}
+              y1={y(corte.valor)}
+              y2={y(corte.valor)}
               stroke="var(--color-slate-300)"
               strokeWidth={1}
               strokeDasharray="3 3"
@@ -254,12 +275,15 @@ export function GraficoConfianza({
             );
           })}
         </svg>
-        <span className="pointer-events-none absolute right-0 text-[9px] text-slate-400" style={{ top: `${(1 - 0.5) * 100}%`, transform: "translateY(-100%)" }}>
-          50 %
-        </span>
-        <span className="pointer-events-none absolute right-0 text-[9px] text-slate-400" style={{ top: `${(1 - 0.25) * 100}%`, transform: "translateY(-100%)" }}>
-          25 %
-        </span>
+        {cortes.map((corte) => (
+          <span
+            key={corte.etiqueta}
+            className="pointer-events-none absolute right-0 text-[9px] text-slate-400"
+            style={{ top: `${(y(corte.valor) / alto) * 100}%`, transform: "translateY(-100%)" }}
+          >
+            {corte.etiqueta}
+          </span>
+        ))}
         {activo != null && serie[activo].valor != null && (
           <span
             className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-medida ring-2 ring-white"

@@ -713,7 +713,16 @@ los mismos períodos que Estadísticas. Hay curvas para:
 - cada altura (piso, medio, arriba);
 - cada tipo de mercadería;
 - cada modelo;
+- cada empresa;
+- cada packaging (¿los sueltos son menos confiables que los palets?);
 - una posición que se elige por código.
+
+Además, dos medidas más fáciles de explicar:
+
+- los **días promedio desde el último chequeo**;
+- las **correcciones de control**, por semana, y qué parte de los chequeos tuvo
+  que corregir. Por día, esa parte se mira en una ventana de 7 días: día por día
+  es ruido.
 
 Todas van de 0 a 100 % con los cortes de 50 % y 25 % marcados, así se comparan
 a ojo.

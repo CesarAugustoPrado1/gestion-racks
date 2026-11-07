@@ -109,4 +109,29 @@ describe("la confiabilidad en el pasado", () => {
     // Acierto (0 + 1) / (1 + 2) = 1/3, recién chequeado.
     assert.ok(Math.abs(p[0].general.valor! - 1 / 3) < 1e-6);
   });
+
+  test("por empresa y packaging, días desde el chequeo y correcciones del tramo", () => {
+    const p = curvasDeConfianza(
+      [
+        mov({ t: T0, id: 1, bultoId: 1, packaging: "palet", hasta: 10 }),
+        mov({ t: T0, id: 2, bultoId: 2, packaging: "suelto", hasta: 11, lineas: [{ modeloId: 2, cantidad: 5 }] }),
+      ],
+      [
+        { t: T0 + DIA, id: 1, posicionId: 10, bien: true },
+        { t: T0 + 2 * DIA, id: 2, posicionId: 11, bien: false },
+      ],
+      [T0 + 1.5 * DIA, T0 + 4 * DIA],
+      30,
+      { ...dim, empresaDe: (m: number) => (m === 1 ? "Pirka" : "Rustikas") },
+    );
+    // Primer tramo: un chequeo, ninguno corregido. Segundo: uno, corregido.
+    assert.deepEqual([p[0].chequeosEnTramo, p[0].corregidosEnTramo], [1, 0]);
+    assert.deepEqual([p[1].chequeosEnTramo, p[1].corregidosEnTramo], [1, 1]);
+    assert.equal(p[1].porEmpresa.Pirka.medidos, 1);
+    assert.equal(p[1].porEmpresa.Rustikas.medidos, 1);
+    assert.ok(p[1].porPackaging.palet.valor! > p[1].porPackaging.suelto.valor!, "el suelto tuvo una corrección");
+    // Al día 4: uno chequeado hace 3 días y otro hace 2 → 2,5 de promedio.
+    assert.ok(Math.abs(p[1].diasDesdeChequeo! - 2.5) < 1e-9);
+    assert.equal(p[0].diasDesdeChequeo !== null, true);
+  });
 });

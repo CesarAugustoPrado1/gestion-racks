@@ -48,6 +48,8 @@ export type Dimensiones = {
   grupoDe: (posicionId: number) => string | null;
   nivelDe: (posicionId: number) => string | null;
   lineaDe: (modeloId: number) => string | null;
+  /** De qué empresa es el modelo. */
+  empresaDe?: (modeloId: number) => string | null;
 };
 
 export type Indice = ReturnType<typeof indice>;
@@ -59,6 +61,17 @@ export type PuntoDeCurva = {
   porNivel: Record<string, Indice>;
   porLinea: Record<string, Indice>;
   porModelo: Record<number, Indice>;
+  porEmpresa: Record<string, Indice>;
+  porPackaging: Record<string, Indice>;
+  /**
+   * Cuántos días pasaron, en promedio, desde el último chequeo de cada bulto
+   * que se chequeó alguna vez. Es la misma información que el índice, dicha
+   * en días: más fácil de explicar. Null si no hay nada chequeado.
+   */
+  diasDesdeChequeo: number | null;
+  /** Chequeos hechos en el tramo que termina en este instante, y cuántos hubo que corregir. */
+  chequeosEnTramo: number;
+  corregidosEnTramo: number;
   /** La confianza de una posición pedida (la de la posición, no la del bulto). */
   posicion: number | null;
 };
@@ -86,7 +99,13 @@ export function curvasDeConfianza(
     ...chequeos.map((c) => ({ t: c.t, orden: 1, id: c.id, m: null as EventoMovimiento | null, c })),
   ].sort((a, b) => a.t - b.t || a.orden - b.orden || a.id - b.id);
 
-  type Bulto = Verificacion & { pos: number | null; lineas: EventoMovimiento["lineas"]; enStock: boolean; objeto: boolean };
+  type Bulto = Verificacion & {
+    pos: number | null;
+    lineas: EventoMovimiento["lineas"];
+    enStock: boolean;
+    objeto: boolean;
+    packaging: string;
+  };
   const bultos = new Map<number, Bulto>();
   const enPosicion = new Map<number, Set<number>>();
   const posiciones = new Map<number, Verificacion>();
@@ -103,6 +122,8 @@ export function curvasDeConfianza(
   const salida: PuntoDeCurva[] = [];
   let i = 0;
   for (const instante of [...instantes].sort((a, b) => a - b)) {
+    let chequeosEnTramo = 0;
+    let corregidosEnTramo = 0;
     // Todo lo que pasó ANTES del instante.
     for (; i < eventos.length && eventos[i].t < instante; i++) {
       const e = eventos[i];
@@ -110,7 +131,17 @@ export function curvasDeConfianza(
         const m = e.m;
         const previo = bultos.get(m.bultoId);
         const salio = m.tipo === "sacar" && m.cantidad === 0;
-        const b: Bulto = previo ?? { chequeadoEn: null, chequeosOk: 0, chequeosTotal: 0, pos: null, lineas: [], enStock: true, objeto: false };
+        const b: Bulto = previo ?? {
+          chequeadoEn: null,
+          chequeosOk: 0,
+          chequeosTotal: 0,
+          pos: null,
+          lineas: [],
+          enStock: true,
+          objeto: false,
+          packaging: m.packaging,
+        };
+        b.packaging = m.packaging;
         sacarDe(b.pos, m.bultoId);
         b.pos = salio ? null : m.hasta;
         b.lineas = m.lineas.filter((l) => l.cantidad > 0);
@@ -140,6 +171,8 @@ export function curvasDeConfianza(
         }
       } else if (e.c) {
         const c = e.c;
+        chequeosEnTramo++;
+        if (!c.bien) corregidosEnTramo++;
         const vp = verificacionDePos(c.posicionId);
         vp.chequeadoEn = new Date(c.t);
         vp.chequeosTotal++;
@@ -164,11 +197,21 @@ export function curvasDeConfianza(
     const porNivel = new Map<string, Array<ReturnType<typeof confianza>>>();
     const porLinea = new Map<string, Array<ReturnType<typeof confianza>>>();
     const porModelo = new Map<string, Array<ReturnType<typeof confianza>>>();
+    const porEmpresa = new Map<string, Array<ReturnType<typeof confianza>>>();
+    const porPackaging = new Map<string, Array<ReturnType<typeof confianza>>>();
+    let sumaDias = 0;
+    let conChequeo = 0;
     for (const b of bultos.values()) {
       if (!b.enStock || b.objeto) continue;
       const c = confianza(b, semivida, ahora);
       for (const l of b.lineas) {
         todas.push(c);
+        agregar(porPackaging, b.packaging, c);
+        if (dim.empresaDe) agregar(porEmpresa, dim.empresaDe(l.modeloId), c);
+        if (b.chequeadoEn) {
+          sumaDias += Math.max(0, (instante - b.chequeadoEn.getTime()) / 86_400_000);
+          conChequeo++;
+        }
         if (b.pos != null) {
           agregar(porGrupo, dim.grupoDe(b.pos), c);
           agregar(porNivel, dim.nivelDe(b.pos), c);
@@ -187,6 +230,11 @@ export function curvasDeConfianza(
       porNivel: aIndices(porNivel),
       porLinea: aIndices(porLinea),
       porModelo: aIndices(porModelo),
+      porEmpresa: aIndices(porEmpresa),
+      porPackaging: aIndices(porPackaging),
+      diasDesdeChequeo: conChequeo > 0 ? sumaDias / conChequeo : null,
+      chequeosEnTramo,
+      corregidosEnTramo,
       posicion:
         posicionPedida == null
           ? null
