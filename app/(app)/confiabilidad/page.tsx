@@ -13,6 +13,11 @@ import { FilaDeIndice } from "@/components/confiabilidad";
 import { numero } from "@/lib/formato";
 import { describirPosicion } from "@/lib/posiciones";
 import { Titulo } from "@/components/ui";
+import { curvas } from "@/lib/curvas";
+import { leerRango, POR } from "@/lib/periodos";
+import { SelectorPeriodo } from "@/components/periodo";
+import { GraficoConfianza } from "@/components/evolucion";
+import type { Indice, PuntoDeCurva } from "@/lib/confianza-historia";
 
 export const metadata = { title: "Confiabilidad · Racks" };
 export const dynamic = "force-dynamic";
@@ -31,14 +36,48 @@ const CUANTAS_OLVIDADAS = 12;
  * cantidad sí pesa, pero donde corresponde: en el orden de la recorrida, que
  * multiplica por unidades, y en el ranking de abajo.
  */
-export default async function PantallaConfiabilidad() {
+export default async function PantallaConfiabilidad({
+  searchParams,
+}: {
+  searchParams: Promise<{ p?: string; desde?: string; hasta?: string; modelo?: string; posicion?: string }>;
+}) {
   await requerirRol("admin", "auditor", "control", "comercial");
-  const [bultos, posiciones, semivida, piso] = await Promise.all([
+  const q = await searchParams;
+  const rango = leerRango(q, new Date());
+  const [bultos, posiciones, semivida, piso, curva] = await Promise.all([
     bultosConChequeo(),
     posicionesParaChequear(),
     semividaDias(),
     olvidoDias(),
+    curvas(rango, q.posicion ?? null),
   ]);
+
+  // Una curva a partir de los puntos: el índice de cada tramo, o nada.
+  const serie = (de: (p: PuntoDeCurva) => Indice | undefined) =>
+    curva.puntos.map((p) => {
+      const i = de(p);
+      return { clave: p.clave, etiqueta: p.etiqueta, valor: i?.valor ?? null, medidos: i?.medidos ?? 0, sinDatos: i?.sinDatos ?? 0 };
+    });
+  const cobertura = curva.puntos.map((p) => {
+    const total = p.general.medidos + p.general.sinDatos;
+    return { clave: p.clave, etiqueta: p.etiqueta, valor: total > 0 ? p.general.medidos / total : null };
+  });
+  const tiene = (de: (p: PuntoDeCurva) => Indice | undefined) =>
+    curva.puntos.some((p) => (de(p)?.medidos ?? 0) + (de(p)?.sinDatos ?? 0) > 0);
+  const modelosConDato = curva.modelos.filter((m) => tiene((p) => p.porModelo[m.id]));
+  const modeloElegido = modelosConDato.find((m) => String(m.id) === q.modelo) ?? modelosConDato[0] ?? null;
+  const ultimo = curva.puntos[curva.puntos.length - 1];
+  const linkCon = (extra: Record<string, string>) => {
+    const u = new URLSearchParams();
+    if (q.desde && q.hasta) {
+      u.set("desde", q.desde);
+      u.set("hasta", q.hasta);
+    } else u.set("p", rango.id);
+    if (q.posicion) u.set("posicion", q.posicion);
+    if (q.modelo) u.set("modelo", q.modelo);
+    for (const [k, v] of Object.entries(extra)) u.set(k, v);
+    return `/confiabilidad?${u.toString()}`;
+  };
 
   const conConfianza = <T extends { chequeadoEn: Date | null; chequeosOk: number; chequeosTotal: number }>(
     filas: T[],
@@ -89,8 +128,8 @@ export default async function PantallaConfiabilidad() {
     semivida,
   )!;
 
-  const cobertura = global.medidos + global.sinDatos;
-  const porcentaje = cobertura > 0 ? Math.round((global.medidos / cobertura) * 100) : 0;
+  const totalBultos = global.medidos + global.sinDatos;
+  const porcentaje = totalBultos > 0 ? Math.round((global.medidos / totalBultos) * 100) : 0;
 
   return (
     <>
@@ -135,7 +174,7 @@ export default async function PantallaConfiabilidad() {
                   <span className="cifra font-semibold text-slate-900">
                     {porcentaje}%
                   </span>{" "}
-                  de {numero(cobertura)} bultos
+                  de {numero(totalBultos)} bultos
                 </span>
               </div>
               <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-sin-datos-suave">
@@ -154,8 +193,175 @@ export default async function PantallaConfiabilidad() {
             </div>
           </div>
 
-          <h2 className="mt-6 mb-1 text-base font-bold text-slate-900">
-            Por línea y modelo
+          {/* ------------------------------------------------------------ */}
+          {/* Curvas: cómo evolucionó                                      */}
+          {/* ------------------------------------------------------------ */}
+          <h2 className="mt-6 mb-1 text-base font-bold text-slate-900">Cómo evolucionó</h2>
+          <p className="mb-2 text-sm text-slate-600">
+            La confiabilidad al cierre de cada {rango.granularidad === "hora" ? "hora" : rango.granularidad === "dia" ? "día" : rango.granularidad}
+            , rearmada con el historial de chequeos y movimientos. Todas las curvas van de 0 a 100 %: se pueden comparar a
+            ojo.
+          </p>
+          <SelectorPeriodo rango={rango} ruta="/confiabilidad" />
+
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <GraficoConfianza titulo="Confiabilidad general" serie={serie((p) => p.general)} />
+            <GraficoConfianza
+              titulo="Cuánto se miró alguna vez"
+              serie={cobertura}
+              detalle="Bultos con al menos un chequeo, sobre todo el stock."
+            />
+          </div>
+
+          <h3 className="mt-5 mb-1 text-sm font-bold text-slate-900">Por grupo de racks</h3>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {curva.grupos
+              .filter((g) => tiene((p) => p.porGrupo[g]))
+              .map((g) => (
+                <GraficoConfianza key={g} titulo={`Grupo ${g}`} serie={serie((p) => p.porGrupo[g])} />
+              ))}
+          </div>
+
+          <h3 className="mt-5 mb-1 text-sm font-bold text-slate-900">Por altura</h3>
+          <p className="mb-2 text-xs text-slate-500">
+            Si los niveles de arriba se chequean menos, acá se ve: cuesta más mirarlos.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {curva.niveles
+              .filter((n) => tiene((p) => p.porNivel[n]))
+              .map((n) => (
+                <GraficoConfianza key={n} titulo={n} serie={serie((p) => p.porNivel[n])} />
+              ))}
+          </div>
+
+          <h3 className="mt-5 mb-1 text-sm font-bold text-slate-900">Por tipo de mercadería</h3>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {curva.lineas
+              .filter((l) => tiene((p) => p.porLinea[l]))
+              .map((l) => (
+                <GraficoConfianza key={l} titulo={l} serie={serie((p) => p.porLinea[l])} />
+              ))}
+          </div>
+
+          <h3 className="mt-5 mb-1 text-sm font-bold text-slate-900">Por modelo</h3>
+          {modelosConDato.length === 0 ? (
+            <p className="tarjeta p-4 text-sm text-slate-500">Ningún modelo tuvo stock en este período.</p>
+          ) : (
+            <>
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {modelosConDato.map((m) => (
+                  <Link
+                    key={m.id}
+                    href={linkCon({ modelo: String(m.id) })}
+                    scroll={false}
+                    className={`rounded-full px-3 py-1.5 text-sm font-semibold ${
+                      modeloElegido?.id === m.id
+                        ? "bg-slate-900 text-white"
+                        : "bg-white text-slate-700 ring-1 ring-slate-300"
+                    }`}
+                  >
+                    {m.nombre}
+                  </Link>
+                ))}
+              </div>
+              {modeloElegido && (
+                <GraficoConfianza
+                  titulo={`${modeloElegido.nombre} · ${modeloElegido.linea}`}
+                  serie={serie((p) => p.porModelo[modeloElegido.id])}
+                />
+              )}
+              <div className="tarjeta mt-2 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-xs text-slate-500">
+                    <tr>
+                      <th className="px-4 py-2 font-medium">Modelo</th>
+                      <th className="px-2 py-2 text-right font-medium">Primer dato</th>
+                      <th className="px-2 py-2 text-right font-medium">Al final</th>
+                      <th className="px-4 py-2 text-right font-medium">Cambio</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {modelosConDato.map((m) => {
+                      // El primer tramo del período con dato: un modelo puede no haber tenido stock al empezar.
+                      const a = curva.puntos.map((p) => p.porModelo[m.id]?.valor ?? null).find((v) => v != null) ?? null;
+                      const b = ultimo?.porModelo[m.id]?.valor ?? null;
+                      const pct = (v: number | null) => (v == null ? "—" : `${Math.round(v * 100)} %`);
+                      const cambio = a != null && b != null ? Math.round((b - a) * 100) : null;
+                      return (
+                        <tr key={m.id}>
+                          <td className="px-4 py-2">
+                            <Link href={linkCon({ modelo: String(m.id) })} scroll={false} className="font-semibold text-slate-900 hover:underline">
+                              {m.nombre}
+                            </Link>
+                            <span className="block text-xs text-slate-500">{m.linea}</span>
+                          </td>
+                          <td className="cifra px-2 py-2 text-right">{pct(a)}</td>
+                          <td className="cifra px-2 py-2 text-right">{pct(b)}</td>
+                          <td className="cifra px-4 py-2 text-right">
+                            {cambio == null ? "—" : cambio === 0 ? "=" : `${cambio > 0 ? "+" : "−"}${Math.abs(cambio)}`}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          <h3 className="mt-5 mb-1 text-sm font-bold text-slate-900">Por posición</h3>
+          <p className="mb-2 text-xs text-slate-500">
+            La de la posición: cuenta también los chequeos de cuando estaba vacía, y se borra cuando entra o sale algo.
+          </p>
+          <form action="/confiabilidad" className="mb-2 flex flex-wrap items-end gap-2">
+            {q.desde && q.hasta ? (
+              <>
+                <input type="hidden" name="desde" value={q.desde} />
+                <input type="hidden" name="hasta" value={q.hasta} />
+              </>
+            ) : (
+              <input type="hidden" name="p" value={rango.id} />
+            )}
+            {q.modelo && <input type="hidden" name="modelo" value={q.modelo} />}
+            <label className="text-xs text-slate-500">
+              Código de la posición
+              <input
+                name="posicion"
+                list="codigos-de-posicion"
+                defaultValue={q.posicion ?? ""}
+                placeholder="B-07-2-1"
+                className="campo mt-0.5 py-2 uppercase"
+                autoComplete="off"
+              />
+            </label>
+            <datalist id="codigos-de-posicion">
+              {curva.posiciones.map((p) => (
+                <option key={p.id} value={p.codigo} />
+              ))}
+            </datalist>
+            <button type="submit" className="boton-secundario h-11">
+              Ver curva
+            </button>
+          </form>
+          {q.posicion && !curva.posicionPedida && (
+            <p className="tarjeta p-4 text-sm text-amber-800">No hay ninguna posición «{q.posicion}».</p>
+          )}
+          {curva.posicionPedida && (
+            <GraficoConfianza
+              titulo={`Posición ${curva.posicionPedida.codigo}`}
+              serie={curva.puntos.map((p) => ({ clave: p.clave, etiqueta: p.etiqueta, valor: p.posicion }))}
+              detalle={`Confiabilidad de la posición ${POR[rango.granularidad]}.`}
+            />
+          )}
+
+          <p className="mt-3 text-xs text-slate-500">
+            Curvas rearmadas con la historia: cada chequeo verifica lo que había en la posición, cada movimiento lo
+            borra y la carga inicial deja el bulto verificado. El «Está» de la carga inicial sobre un palet que ya estaba
+            cargado no deja registro, así que en esos casos la curva del pasado queda un poco más baja que lo que fue.
+          </p>
+
+          <h2 className="mt-8 mb-1 text-base font-bold text-slate-900">
+            Hoy, por línea y modelo
           </h2>
           <p className="mb-2 text-sm text-slate-600">
             Para leerlos: un bulto chequeado hace {semivida} días que siempre dio
@@ -187,7 +393,7 @@ export default async function PantallaConfiabilidad() {
           </div>
 
           <h2 className="mt-6 mb-2 text-base font-bold text-slate-900">
-            Por rack
+            Hoy, por rack
           </h2>
           <div className="tarjeta divide-y divide-slate-100 p-5">
             {porRack.map((r) => (

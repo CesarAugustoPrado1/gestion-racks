@@ -703,6 +703,35 @@ que el hueco está tomado por el bulto de abajo y que si se lo ve así está bie
 Es la pantalla donde el operario viene a comparar con la realidad; mentirle ahí
 le hace reportar una diferencia que no existe.
 
+### 5.4.2 Las curvas: la confiabilidad en el tiempo
+
+`/confiabilidad` muestra cómo evolucionó el índice en cualquier período, con
+los mismos períodos que Estadísticas. Hay curvas para:
+
+- el índice general y la cobertura (cuánto se miró alguna vez);
+- cada grupo de racks;
+- cada altura (piso, medio, arriba);
+- cada tipo de mercadería;
+- cada modelo;
+- una posición que se elige por código.
+
+Todas van de 0 a 100 % con los cortes de 50 % y 25 % marcados, así se comparan
+a ojo.
+
+No se guarda nada nuevo: se **rearma la historia** (`lib/confianza-historia.ts`,
+puro y con tests), recorriendo chequeos y movimientos en orden, igual que pasó:
+
+- un chequeo verifica lo que había en la posición;
+- un movimiento le borra el chequeo al bulto y a las posiciones que toca, salvo
+  el ajuste de control que deja el bulto en su lugar;
+- la carga inicial deja el bulto verificado.
+
+Usa la misma `confianza()` e `indice()` sobre las mismas filas, así que en el
+presente da el número del índice de hoy (verificado contra datos reales).
+
+La única pérdida es el "Está" de la carga inicial sobre un bulto ya cargado,
+que no deja fila: para esos bultos la curva del pasado queda un poco más baja.
+
 ### 5.5 El índice es una cola de trabajo, no un adorno
 
 El uso más valioso del índice no es el número: es **ordenar la recorrida del
