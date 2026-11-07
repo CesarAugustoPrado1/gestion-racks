@@ -5,17 +5,20 @@ import { useState } from "react";
 import {
   confirmar,
   corregirCantidades,
+  corregirCategoria,
   marcarAusente,
   registrarEncontrado,
 } from "@/lib/acciones/control";
+import { TildeSegunda } from "@/components/calidad";
+import { ElegirModelo } from "@/components/elegir-modelo";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
 import { validarComposicion, validarDescripcion } from "@/lib/bultos";
-import { ETIQUETA_PACKAGING, PACKAGINGS, numero } from "@/lib/formato";
+import { ETIQUETA_CALIDAD, ETIQUETA_PACKAGING, PACKAGINGS, numero } from "@/lib/formato";
 import type { BultoEnPosicion, ModeloParaCargar } from "@/lib/consultas";
-import type { Packaging } from "@/lib/db/schema";
+import type { Calidad, Packaging } from "@/lib/db/schema";
 
-type Modo = "mirando" | "cantidades" | "ausente" | "encontrado";
+type Modo = "mirando" | "cantidades" | "categoria" | "ausente" | "encontrado";
 
 export function Chequeo({
   posicion,
@@ -73,6 +76,16 @@ export function Chequeo({
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-bold text-slate-900">
                     {ETIQUETA_PACKAGING[b.packaging]}
+                    {/* La categoría también se verifica: se dice siempre, no solo cuando es de segunda. */}
+                    {b.packaging !== "objeto" && (
+                      <span
+                        className={`ml-2 chip align-middle ${
+                          b.calidad === "segunda" ? "bg-orange-100 text-orange-900" : "bg-slate-200 text-slate-700"
+                        }`}
+                      >
+                        de {ETIQUETA_CALIDAD[b.calidad].toLowerCase()}
+                      </span>
+                    )}
                     {b.profundidad != null && (
                       <span className="ml-2 font-normal text-slate-500">
                         {b.profundidad === 1 ? "al frente" : `${b.profundidad}º`}
@@ -156,6 +169,18 @@ export function Chequeo({
                       Otra cantidad
                     </button>
                   )}
+                  {b.packaging !== "objeto" && (
+                    <button
+                      type="button"
+                      className="boton-secundario text-sm"
+                      onClick={() => {
+                        setElegido(b);
+                        setModo("categoria");
+                      }}
+                    >
+                      Es de {b.calidad === "primera" ? "segunda" : "primera"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="boton-secundario text-sm"
@@ -182,6 +207,16 @@ export function Chequeo({
 
       {modo === "cantidades" && elegido && (
         <Cantidades
+          posicionId={posicion.id}
+          bulto={elegido}
+          motivos={motivos}
+          cancelar={() => setModo("mirando")}
+          listo={volverALaLista}
+        />
+      )}
+
+      {modo === "categoria" && elegido && (
+        <Categoria
           posicionId={posicion.id}
           bulto={elegido}
           motivos={motivos}
@@ -352,6 +387,80 @@ function Cantidades({
   );
 }
 
+/**
+ * El bulto está registrado con la otra categoría. Es un ajuste: el registro
+ * estaba mal. El motivo "Categoría equivocada" viene elegido, porque es el que
+ * corresponde casi siempre, pero se puede cambiar.
+ */
+function Categoria({
+  posicionId,
+  bulto,
+  motivos,
+  cancelar,
+  listo,
+}: {
+  posicionId: number;
+  bulto: BultoEnPosicion;
+  motivos: Array<{ id: number; nombre: string }>;
+  cancelar: () => void;
+  listo: () => void;
+}) {
+  const { ejecutar, enviando, error, limpiar } = useAccion();
+  const sugerido = motivos.find((m) => m.nombre.toLowerCase().startsWith("categoría"))?.id ?? null;
+  const [motivoId, setMotivoId] = useState<number | null>(sugerido);
+  const [nota, setNota] = useState("");
+  const nueva = bulto.calidad === "primera" ? "segunda" : "primera";
+
+  return (
+    <div className="tarjeta space-y-4 p-5">
+      <h2 className="text-base font-bold text-slate-900">
+        {bulto.codigo} es de {nueva}
+      </h2>
+      <Aviso tono="info">
+        Pasa de <strong>{bulto.calidad.toUpperCase()}</strong> a <strong>{nueva.toUpperCase()}</strong>. No cambia
+        la cantidad ni el lugar. Queda registrado como un ajuste a tu nombre: el bulto estaba cargado con la
+        categoría que no era.
+      </Aviso>
+      {error && <Aviso>{error}</Aviso>}
+
+      <SelectorMotivo motivos={motivos} elegido={motivoId} elegir={setMotivoId} />
+
+      <input
+        className="campo"
+        value={nota}
+        onChange={(e) => setNota(e.target.value)}
+        placeholder="Nota (opcional): qué tiene"
+      />
+
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" className="boton-secundario" onClick={cancelar}>
+          Cancelar
+        </button>
+        <button
+          type="button"
+          className="boton-primario"
+          disabled={enviando || motivoId == null}
+          onClick={() => {
+            limpiar();
+            void ejecutar(
+              () =>
+                corregirCategoria({
+                  posicionId,
+                  bultoId: bulto.id,
+                  motivoId: motivoId!,
+                  nota: nota.trim() || undefined,
+                }),
+              listo,
+            );
+          }}
+        >
+          {enviando ? "Corrigiendo…" : `Pasar a ${nueva}`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Ausente({
   posicionId,
   bulto,
@@ -434,6 +543,7 @@ function Encontrado({
 }) {
   const { ejecutar, enviando, error, limpiar } = useAccion();
   const [packaging, setPackaging] = useState<Packaging>("palet");
+  const [calidad, setCalidad] = useState<Calidad>("primera");
   const [lineas, setLineas] = useState<Array<{ modeloId: number; cantidad: string }>>([]);
   const [motivoId, setMotivoId] = useState<number | null>(null);
   const [nota, setNota] = useState("");
@@ -508,6 +618,9 @@ function Encontrado({
                 </button>
               ))}
             </div>
+            <div className="mt-3">
+              <TildeSegunda valor={calidad} onCambio={setCalidad} />
+            </div>
           </div>
 
           <ul className="space-y-2">
@@ -548,27 +661,16 @@ function Encontrado({
             })}
           </ul>
 
-          <div className="flex flex-wrap gap-1.5">
-            {modelos.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                disabled={lineas.some((l) => l.modeloId === m.id)}
-                onClick={() =>
-                  setLineas((l) => [
-                    ...l,
-                    {
-                      modeloId: m.id,
-                      cantidad: m.normas[packaging] != null ? String(m.normas[packaging]) : "",
-                    },
-                  ])
-                }
-                className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-40"
-              >
-                {m.nombre}
-              </button>
-            ))}
-          </div>
+          <ElegirModelo
+            modelos={modelos}
+            yaElegidos={lineas.map((l) => l.modeloId)}
+            alElegir={(m) =>
+              setLineas((l) => [
+                ...l,
+                { modeloId: m.id, cantidad: m.normas[packaging] != null ? String(m.normas[packaging]) : "" },
+              ])
+            }
+          />
 
           {problema && <Aviso tono="info">{problema}</Aviso>}
         </>
@@ -599,6 +701,7 @@ function Encontrado({
                   posicionId,
                   contenido: objeto ? [] : contenido,
                   packaging: objeto ? "objeto" : packaging,
+                  calidad: objeto ? "primera" : calidad,
                   descripcion: objeto ? descripcion.trim() : undefined,
                   motivoId: motivoId!,
                   nota: nota.trim() || undefined,

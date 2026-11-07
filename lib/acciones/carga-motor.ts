@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import type { Packaging } from "../db/schema";
+import type { Calidad, Packaging } from "../db/schema";
 import { validarDescripcion, type LineaContenido } from "../bultos";
 import { porQueNoSeUsa } from "../uso";
 import {
@@ -95,6 +95,8 @@ export async function abrirCarga(tx: Tx, grupoId: number): Promise<void> {
 export type Carga = {
   posicionId: number;
   packaging: Packaging;
+  /** Primera o segunda. Un objeto no tiene categoría: queda en primera. */
+  calidad: Calidad;
   contenido: LineaContenido[];
   descripcion?: string | null;
   /** Cuándo entró al rack, aunque sea aproximado. No puede ser futura. */
@@ -140,13 +142,15 @@ export async function cargarPosicion(
   }
 
   const ahora = new Date();
-  const nuevo = await crearBulto(tx, { packaging: c.packaging, estado: "ubicado", usuarioId: c.usuario.id });
+  const calidad: Calidad = objeto ? "primera" : c.calidad;
+  const nuevo = await crearBulto(tx, { packaging: c.packaging, calidad, estado: "ubicado", usuarioId: c.usuario.id });
   await aplicarMovimiento(tx, {
     tipo: "inicial",
     bulto: {
       id: nuevo.id,
       codigo: nuevo.codigo,
       packaging: c.packaging,
+      calidad,
       cantidad: 0,
       estado: "ubicado",
       posicionId: null,

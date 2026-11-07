@@ -70,6 +70,11 @@ export default async function PantallaStock() {
                           );
                         })}
                         {m.bultos === 0 && <span>Sin stock</span>}
+                        {m.segunda > 0 && (
+                          <span className="font-semibold text-orange-700">
+                            {numero(m.segunda)} de segunda
+                          </span>
+                        )}
                       </p>
                     </div>
 

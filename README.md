@@ -110,6 +110,12 @@ o calle 01 está a la derecha. Los códigos no cambian: el 3D, la grilla y los
 botones del selector de posición los muestran en ese orden. Los dibujos rotulan
 columnas (selectivo) y calles (penetrable), no módulos.
 
+**Primera y segunda** (migración `0012_calidad`): cada bulto es de primera o de
+segunda. Se marca al ingresar, en la carga inicial y en "hay algo que el sistema
+no tiene"; se cambia con un pasaje de categoría desde la ficha del bulto (con el
+porqué obligatorio) o, si estaba mal registrado, lo corrige control desde el
+chequeo. Todo queda en Movimientos y en Estadísticas. Ver DISENO.md §3.12.
+
 Pendiente antes de seguir con la fase 1:
 
 - [ ] Aplicar `drizzle/0000_inicial.sql` y crear el usuario admin. Con terminal,

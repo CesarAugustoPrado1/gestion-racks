@@ -178,6 +178,18 @@ export const ladoAccesoEnum = pgEnum("lado_acceso", ["izquierda", "derecha"]);
  * `salido` no dice por que salio: eso vive en el motivo del movimiento, que es
  * donde se puede medir.
  */
+/**
+ * PRIMERA o SEGUNDA. Es del bulto entero: un palet es de una categoría.
+ *
+ * Todo entra de primera salvo que el operario marque lo contrario. Si después
+ * se detecta que es de la otra, se hace un PASAJE de categoría -un movimiento
+ * `categoria`- o, si fue un error de registro que encuentra control, un
+ * `ajuste`. En los dos casos el movimiento guarda la categoría de antes y la de
+ * después: nunca se cambia en silencio.
+ */
+export const calidadEnum = pgEnum("calidad", ["primera", "segunda"]);
+export type Calidad = (typeof calidadEnum.enumValues)[number];
+
 export const estadoBultoEnum = pgEnum("estado_bulto", [
   "ubicado",
   "sin_ubicar",
@@ -222,6 +234,13 @@ export const tipoMovimientoEnum = pgEnum("tipo_movimiento", [
    * estadísticas lo dejan aparte. Solo lo escribe la carga inicial de un grupo.
    */
   "inicial",
+  /**
+   * PASAJE de categoría: se detectó después que el bulto es de segunda (o de
+   * primera). No mueve stock ni posición: cambia la categoría, con quién,
+   * cuándo y por qué. Si fue un error de registro que encontró control, no es
+   * esto: es un `ajuste`.
+   */
+  "categoria",
 ]);
 export type TipoMovimiento = (typeof tipoMovimientoEnum.enumValues)[number];
 
@@ -592,6 +611,8 @@ export const bultos = pgTable(
     codigo: text("codigo").notNull().unique(),
     etiqueta: text("etiqueta"),
     packaging: packagingEnum("packaging").notNull(),
+    /** Primera o segunda. Ver `calidadEnum`. En un objeto no significa nada. */
+    calidad: calidadEnum("calidad").notNull().default("primera"),
     /**
      * Total del bulto, en la unidad de la linea. Es la SUMA de las lineas de
      * contenido, guardada aca porque toda pantalla la muestra y ninguna quiere
@@ -741,6 +762,13 @@ export const movimientos = pgTable(
     cantidad: integer("cantidad").notNull(),
     packagingAntes: packagingEnum("packaging_antes"),
     packaging: packagingEnum("packaging").notNull(),
+    /**
+     * La categoría antes y después, con la misma convención. Son distintas
+     * solo en un pasaje (`categoria`) o en un `ajuste` de categoría: así se
+     * cuentan y se auditan con una comparación, sin leer notas.
+     */
+    calidadAntes: calidadEnum("calidad_antes").notNull().default("primera"),
+    calidad: calidadEnum("calidad").notNull().default("primera"),
     tipo: tipoMovimientoEnum("tipo").notNull(),
     posicionDesdeId: integer("posicion_desde_id").references(
       () => posiciones.id,

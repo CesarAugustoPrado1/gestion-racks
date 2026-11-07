@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChipSegunda } from "@/components/calidad";
 import { notFound } from "next/navigation";
 import { requerirRol } from "@/lib/auth";
 import { detalleDeModelo, type BultoDeModelo } from "@/lib/consultas";
@@ -67,6 +68,9 @@ export default async function PantallaModelo({
     );
   };
   const medida = medidaDe(solapa);
+
+  const deSegunda = visibles.filter((b) => b.calidad === "segunda");
+  const segunda = { unidades: totalDe(deSegunda), bultos: deSegunda.length };
 
   const confianzas = visibles.map((b) => confianza(b, semivida));
   const resumen = indice(confianzas);
@@ -150,6 +154,14 @@ export default async function PantallaModelo({
             <> · la norma es {numero(modelo.normas[solapa]!)} por palet</>
           )}
         </p>
+        {/* De segunda: incluido en el total, y dicho aparte para que nadie
+            venda como primera algo que no lo es. */}
+        {segunda.unidades > 0 && (
+          <p className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-sm text-orange-900">
+            De eso, <strong>{unidades(segunda.unidades, modelo.unidadSingular, modelo.unidadPlural)}</strong> son
+            de segunda, en {segunda.bultos} bulto{segunda.bultos === 1 ? "" : "s"}.
+          </p>
+        )}
         <div className="mt-3 border-t border-slate-100 pt-3">
           <Indice {...resumen} />
         </div>
@@ -222,6 +234,7 @@ function FilaBulto({
               {ETIQUETA_PACKAGING[bulto.packaging]}
             </span>
           )}
+          <ChipSegunda calidad={bulto.calidad} />
           {bulto.accesibilidad === "penetrable" && (
             /**
              * En un carril penetrable la profundidad NO es un detalle: dos

@@ -11,7 +11,8 @@ import { SelectorPosicion } from "@/components/selector-posicion";
 import { ElegirModelo } from "@/components/elegir-modelo";
 import { avisoAjeno, esAjeno } from "@/lib/uso";
 import type { ModeloParaCargar, PosicionLibre } from "@/lib/consultas";
-import type { Packaging } from "@/lib/db/schema";
+import type { Calidad, Packaging } from "@/lib/db/schema";
+import { TildeSegunda } from "@/components/calidad";
 
 export function FormularioMeter({
   modelos,
@@ -24,6 +25,7 @@ export function FormularioMeter({
   const { ejecutar, enviando, error, setError, limpiar } = useAccion();
 
   const [packaging, setPackaging] = useState<Packaging>("palet");
+  const [calidad, setCalidad] = useState<Calidad>("primera");
   const [lineas, setLineas] = useState<Array<{ modeloId: number; cantidad: string }>>(
     [],
   );
@@ -120,6 +122,7 @@ export function FormularioMeter({
           packaging: objeto ? "objeto" : packaging,
           descripcion: objeto ? descripcion.trim() : undefined,
           posicionId: sinUbicar ? null : posicionId,
+          calidad: objeto ? "primera" : calidad,
           nota: nota.trim() || undefined,
         }),
       (datos) => {
@@ -199,6 +202,9 @@ export function FormularioMeter({
                   {ETIQUETA_PACKAGING[p]}
                 </button>
               ))}
+            </div>
+            <div className="mt-3">
+              <TildeSegunda valor={calidad} onCambio={setCalidad} />
             </div>
           </div>
 
@@ -350,10 +356,11 @@ export function FormularioMeter({
        * fuera de norma o sin ubicar. El caso típico no pregunta, porque una
        * confirmación en cada movimiento se termina tocando sin leer.
        */}
-      {listo && !objeto && (fueraDeNorma || sinUbicar) && (
+      {listo && !objeto && (fueraDeNorma || sinUbicar || calidad === "segunda") && (
         <Aviso tono="info">
           Vas a ingresar <strong>{numero(total)} {unidad}</strong> en{" "}
           {ETIQUETA_PACKAGING[packaging].toLowerCase()}
+          {calidad === "segunda" && <> , <strong>de SEGUNDA</strong></>}
           {fueraDeNorma && <> , con una cantidad distinta a la norma</>}
           {sinUbicar && <> , sin ubicación asignada</>}.
         </Aviso>
@@ -370,7 +377,7 @@ export function FormularioMeter({
           : objeto
             ? "Registrar ingreso del objeto"
             : listo
-              ? `Ingresar ${numero(total)} ${unidad ?? ""}`.trim()
+              ? `Ingresar ${numero(total)} ${unidad ?? ""}${calidad === "segunda" ? " de segunda" : ""}`.replace(/\s+/g, " ").trim()
               : "Registrar ingreso"}
       </button>
     </div>

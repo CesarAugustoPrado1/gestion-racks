@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "./db";
-import type { Packaging } from "./db/schema";
+import type { Calidad, Packaging } from "./db/schema";
 import { alcanzable, empresasDelBulto, joinExclusion } from "./uso-sql";
 import { esAjeno, porQueNoSeUsa, type MotivoExclusion } from "./uso";
 import { ETIQUETA_MOVIMIENTO, ETIQUETA_PACKAGING } from "./formato";
@@ -53,6 +53,8 @@ export type ModeloConStock = {
   porPackaging: TotalPorPackaging;
   unidades: number;
   bultos: number;
+  /** De esas unidades, cuántas son de SEGUNDA. Están incluidas en `unidades`. */
+  segunda: number;
 };
 
 export type LineaConStock = {
@@ -95,7 +97,8 @@ export async function stockPorLinea(): Promise<LineaConStock[]> {
     db.execute(sql`
       select c.modelo_id, b.packaging,
              sum(c.cantidad)::int as unidades,
-             count(*)::int as bultos
+             count(*)::int as bultos,
+             coalesce(sum(c.cantidad) filter (where b.calidad = 'segunda'), 0)::int as segunda
       from bulto_contenido c
       join bultos b on b.id = c.bulto_id
       where ${EN_STOCK}
@@ -106,12 +109,15 @@ export async function stockPorLinea(): Promise<LineaConStock[]> {
         packaging: Packaging;
         unidades: number;
         bultos: number;
+        segunda: number;
       }>
     >,
   ]);
 
   const porModelo = new Map<number, TotalPorPackaging>();
+  const segundaPorModelo = new Map<number, number>();
   for (const t of totales) {
+    segundaPorModelo.set(t.modelo_id, (segundaPorModelo.get(t.modelo_id) ?? 0) + t.segunda);
     const actual = porModelo.get(t.modelo_id) ?? {};
     actual[t.packaging] = { unidades: t.unidades, bultos: t.bultos };
     porModelo.set(t.modelo_id, actual);
@@ -140,6 +146,7 @@ export async function stockPorLinea(): Promise<LineaConStock[]> {
       porPackaging,
       unidades: valores.reduce((s, v) => s + v.unidades, 0),
       bultos: valores.reduce((s, v) => s + v.bultos, 0),
+      segunda: segundaPorModelo.get(m.id) ?? 0,
     });
   }
 
@@ -150,6 +157,7 @@ export type BultoDeModelo = {
   id: number;
   codigo: string;
   packaging: Packaging;
+  calidad: Calidad;
   /** Unidades **de este modelo**. En un bulto mezclado no es el total. */
   unidades: number;
   /** Total del bulto, contando todos sus modelos. */
@@ -208,7 +216,7 @@ export async function detalleDeModelo(
       Array<{ packaging: Packaging; cantidad: number }>
     >,
     db.execute(sql`
-      select b.id, b.codigo, b.packaging, b.estado,
+      select b.id, b.codigo, b.packaging, b.calidad, b.estado,
              c.cantidad as unidades, b.cantidad as total_bulto,
              b.chequeado_en, b.chequeos_ok, b.chequeos_total,
              case when p.id is null then null
@@ -233,6 +241,7 @@ export async function detalleDeModelo(
         id: number;
         codigo: string;
         packaging: Packaging;
+        calidad: Calidad;
         estado: string;
         unidades: number;
         total_bulto: number;
@@ -266,6 +275,7 @@ export async function detalleDeModelo(
       id: b.id,
       codigo: b.codigo,
       packaging: b.packaging,
+      calidad: b.calidad,
       unidades: b.unidades,
       totalBulto: b.total_bulto,
       otrosModelos: b.otros_modelos,
@@ -428,6 +438,7 @@ export type BultoEnLista = {
   id: number;
   codigo: string;
   packaging: Packaging;
+  calidad: Calidad;
   cantidad: number;
   ubicacion: string | null;
   contenido: string;
@@ -447,7 +458,7 @@ export type BultoEnLista = {
 };
 
 const SELECT_BULTO = sql`
-  select b.id, b.codigo, b.packaging, b.cantidad,
+  select b.id, b.codigo, b.packaging, b.calidad, b.cantidad,
          b.chequeado_en, b.chequeos_ok, b.chequeos_total,
          case when p.id is null then null
               else g.codigo || '-' || p.codigo end as ubicacion,
@@ -474,6 +485,7 @@ type FilaBulto = {
   id: number;
   codigo: string;
   packaging: Packaging;
+  calidad: Calidad;
   cantidad: number;
   ubicacion: string | null;
   contenido: string | null;
@@ -492,6 +504,7 @@ const aBulto = (f: FilaBulto): BultoEnLista => ({
   id: f.id,
   codigo: f.codigo,
   packaging: f.packaging,
+  calidad: f.calidad,
   cantidad: f.cantidad,
   ubicacion: f.ubicacion,
   contenido: f.contenido ?? "Vacío",
@@ -783,6 +796,7 @@ export type BultoEnPosicion = {
   id: number;
   codigo: string;
   packaging: Packaging;
+  calidad: Calidad;
   /** Qué hay, si es un objeto. */
   descripcion: string | null;
   cantidad: number;
@@ -800,7 +814,7 @@ export async function posicionConBultos(id: number): Promise<{
   if (!posicion) return null;
 
   const filas = (await db.execute(sql`
-    select b.id, b.codigo, b.packaging, b.cantidad, b.descripcion, pos.profundidad,
+    select b.id, b.codigo, b.packaging, b.calidad, b.cantidad, b.descripcion, pos.profundidad,
            c.modelo_id, m.nombre as modelo_nombre, c.cantidad as cantidad_modelo,
            l.unidad_plural
       from bultos b
@@ -815,6 +829,7 @@ export async function posicionConBultos(id: number): Promise<{
     id: number;
     codigo: string;
     packaging: Packaging;
+    calidad: Calidad;
     cantidad: number;
     descripcion: string | null;
     profundidad: number | null;
@@ -831,6 +846,7 @@ export async function posicionConBultos(id: number): Promise<{
         id: f.id,
         codigo: f.codigo,
         packaging: f.packaging,
+        calidad: f.calidad,
         descripcion: f.descripcion,
         cantidad: f.cantidad,
         profundidad: f.profundidad,
@@ -882,6 +898,7 @@ export type CeldaDelMapa = {
     id: number;
     codigo: string;
     packaging: Packaging;
+    calidad: Calidad;
     cantidad: number;
     /** De quién es lo que lleva, y si es de otra empresa que la del grupo. */
     empresas: string | null;
@@ -944,7 +961,7 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
            ex.motivo as exclusion_motivo, ex.nota as exclusion_nota,
            ${EMPRESAS_B.ids} as empresas_ids,
            ${EMPRESAS_B.nombres} as empresas,
-           b.id as bulto_id, b.codigo as bulto_codigo, b.packaging, b.cantidad,
+           b.id as bulto_id, b.codigo as bulto_codigo, b.packaging, b.calidad, b.cantidad,
            b.chequeado_en, b.chequeos_ok, b.chequeos_total,
            l.nombre as linea_nombre, l.orden as linea_orden, l.unidad_plural,
            coalesce(
@@ -996,6 +1013,7 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
     bulto_id: number | null;
     bulto_codigo: string | null;
     packaging: Packaging | null;
+    calidad: Calidad | null;
     cantidad: number | null;
     chequeado_en: Date | string | null;
     chequeos_ok: number | null;
@@ -1047,6 +1065,7 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
               id: f.bulto_id,
               codigo: f.bulto_codigo!,
               packaging: f.packaging!,
+              calidad: f.calidad ?? "primera",
               cantidad: f.cantidad!,
               empresas: f.empresas,
               ajeno: esAjeno(f.empresa_id, f.empresas_ids ?? []),
@@ -1154,7 +1173,10 @@ function dondeHistorial(f: FiltrosHistorial) {
   // `< hasta + 1 día` y no `<= hasta`: con timestamps, `<=` deja afuera todo lo
   // que pasó ese día después de medianoche, que es el día entero.
   if (f.hasta) partes.push(sql`m.creado_en < (${f.hasta}::date + interval '1 day')`);
-  if (f.tipo) partes.push(sql`m.tipo = ${f.tipo}`);
+  // "Todo cambio de categoría" no es un tipo: son los pasajes Y los ajustes de
+  // control que cambiaron la categoría. Se reconocen por el antes y el después.
+  if (f.tipo === "cambio_categoria") partes.push(sql`m.calidad_antes <> m.calidad`);
+  else if (f.tipo) partes.push(sql`m.tipo = ${f.tipo}`);
   if (f.usuarioId) partes.push(sql`m.usuario_id = ${f.usuarioId}`);
   if (f.modeloId) {
     partes.push(sql`exists (select 1 from movimiento_lineas l
@@ -1177,6 +1199,8 @@ export type MovimientoDelHistorial = {
   lineaCodigo: string;
   packaging: Packaging;
   packagingAntes: Packaging | null;
+  calidad: Calidad;
+  calidadAntes: Calidad;
   cantidadAntes: number;
   cantidad: number;
   desde: string | null;
@@ -1204,6 +1228,7 @@ export async function historial(
     db.execute(sql`
       select m.id, m.tipo, m.bulto_codigo, m.linea_codigo, m.packaging,
              m.packaging_antes, m.cantidad_antes, m.cantidad,
+             m.calidad, m.calidad_antes,
              m.posicion_desde_codigo, m.posicion_hasta_codigo,
              m.motivo_nombre, m.usuario_nombre, m.nota, m.creado_en,
              m.anulado_en, m.motivo_anulacion, m.descripcion,
@@ -1225,6 +1250,8 @@ export async function historial(
         packaging_antes: Packaging | null;
         cantidad_antes: number;
         cantidad: number;
+        calidad: Calidad;
+        calidad_antes: Calidad;
         posicion_desde_codigo: string | null;
         posicion_hasta_codigo: string | null;
         motivo_nombre: string | null;
@@ -1251,6 +1278,8 @@ export async function historial(
       lineaCodigo: f2.linea_codigo,
       packaging: f2.packaging,
       packagingAntes: f2.packaging_antes,
+      calidad: f2.calidad,
+      calidadAntes: f2.calidad_antes,
       cantidadAntes: f2.cantidad_antes,
       cantidad: f2.cantidad,
       desde: f2.posicion_desde_codigo,
@@ -1279,7 +1308,7 @@ export async function historialPlano(f: FiltrosHistorial): Promise<
 > {
   const filas = (await db.execute(sql`
     select m.creado_en, m.tipo, m.bulto_codigo, m.linea_codigo,
-           m.packaging_antes, m.packaging,
+           m.packaging_antes, m.packaging, m.calidad_antes, m.calidad,
            -- Un objeto no tiene líneas: sale una fila con su descripción en
            -- vez del modelo y diferencia cero, para que el CSV lo muestre sin
            -- que sume en ninguna tabla dinámica.
@@ -1301,6 +1330,8 @@ export async function historialPlano(f: FiltrosHistorial): Promise<
     linea_codigo: string;
     packaging_antes: string | null;
     packaging: string;
+    calidad_antes: string;
+    calidad: string;
     modelo_nombre: string;
     cantidad_antes: number;
     cantidad: number;
@@ -1327,6 +1358,8 @@ export async function historialPlano(f: FiltrosHistorial): Promise<
       Modelo: f2.modelo_nombre,
       "Packaging antes": f2.packaging_antes ?? "",
       Packaging: f2.packaging,
+      "Categoría antes": f2.calidad_antes,
+      Categoría: f2.calidad,
       "Cantidad antes": f2.cantidad_antes,
       "Cantidad despues": f2.cantidad,
       // La columna que se suma. El signo lo pone la resta, no el tipo.

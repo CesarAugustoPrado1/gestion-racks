@@ -2,19 +2,20 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { mover, sacar } from "@/lib/acciones/flujo";
+import { mover, pasarCategoria, sacar } from "@/lib/acciones/flujo";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
 import { ETIQUETA_PACKAGING, numero } from "@/lib/formato";
 import { SelectorPosicion } from "@/components/selector-posicion";
 import { avisoAjeno, esAjeno } from "@/lib/uso";
 import type { PosicionLibre } from "@/lib/consultas";
-import type { Packaging } from "@/lib/db/schema";
+import type { Calidad, Packaging } from "@/lib/db/schema";
 
 type Bulto = {
   id: number;
   codigo: string;
   packaging: Packaging;
+  calidad: Calidad;
   cantidad: number;
   ubicacion: string | null;
   unidadPlural: string;
@@ -34,7 +35,7 @@ export function AccionesBulto({
   motivos: Array<{ id: number; nombre: string; esEgreso: boolean }>;
   posiciones: PosicionLibre[];
 }) {
-  const [modo, setModo] = useState<"nada" | "sacar" | "mover">("nada");
+  const [modo, setModo] = useState<"nada" | "sacar" | "mover" | "categoria">("nada");
 
   return (
     <div className="space-y-3">
@@ -54,6 +55,15 @@ export function AccionesBulto({
           >
             Reubicar
           </button>
+          {!bulto.esObjeto && (
+            <button
+              type="button"
+              className="boton-secundario col-span-2"
+              onClick={() => setModo("categoria")}
+            >
+              Cambiar a {bulto.calidad === "primera" ? "segunda" : "primera"}
+            </button>
+          )}
         </div>
       )}
 
@@ -73,6 +83,77 @@ export function AccionesBulto({
           cancelar={() => setModo("nada")}
         />
       )}
+
+      {modo === "categoria" && <CambiarCategoria bulto={bulto} cancelar={() => setModo("nada")} />}
+    </div>
+  );
+}
+
+/**
+ * PASAJE de categoría: se detectó después que el bulto es de la otra.
+ *
+ * El porqué es obligatorio y la pantalla dice en grande de qué a qué pasa:
+ * es un cambio que después se audita, y tiene que quedar hecho a conciencia.
+ */
+function CambiarCategoria({ bulto, cancelar }: { bulto: Bulto; cancelar: () => void }) {
+  const router = useRouter();
+  const { ejecutar, enviando, error, limpiar } = useAccion();
+  const [nota, setNota] = useState("");
+  const nueva: Calidad = bulto.calidad === "primera" ? "segunda" : "primera";
+  const notaValida = nota.trim().length >= 5;
+
+  return (
+    <div className="tarjeta space-y-4 p-5">
+      <h2 className="text-base font-bold text-slate-900">Pasaje de categoría</h2>
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-center">
+        <span className="rounded-xl bg-slate-100 py-3 text-sm font-bold uppercase text-slate-700">
+          {bulto.calidad}
+        </span>
+        <span className="text-xl text-slate-400">→</span>
+        <span
+          className={`rounded-xl py-3 text-sm font-bold uppercase ${
+            nueva === "segunda" ? "bg-orange-100 text-orange-900" : "bg-confiable-suave text-confiable"
+          }`}
+        >
+          {nueva}
+        </span>
+      </div>
+      <p className="text-sm text-slate-500">
+        No cambia la cantidad ni el lugar. Queda en el historial con tu nombre, la hora y el porqué.
+      </p>
+      {error && <Aviso>{error}</Aviso>}
+      <label className="block">
+        <span className="etiqueta">Por qué (obligatorio)</span>
+        <input
+          className="campo"
+          value={nota}
+          onChange={(e) => setNota(e.target.value)}
+          placeholder={nueva === "segunda" ? "Placas con manchas en una esquina" : "Revisado: está bien"}
+          maxLength={300}
+        />
+      </label>
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" className="boton-secundario" onClick={cancelar}>
+          Cancelar
+        </button>
+        <button
+          type="button"
+          className="boton-primario"
+          disabled={enviando || !notaValida}
+          onClick={() => {
+            limpiar();
+            void ejecutar(
+              () => pasarCategoria({ bultoId: bulto.id, calidad: nueva, nota: nota.trim() }),
+              () => {
+                router.push(`/mover?q=${encodeURIComponent(bulto.codigo)}`);
+                router.refresh();
+              },
+            );
+          }}
+        >
+          {enviando ? "Guardando…" : `Pasar a ${nueva}`}
+        </button>
+      </div>
     </div>
   );
 }
