@@ -58,6 +58,7 @@ const DIARIO: Array<{ tag: string; when: number }> = [
   { tag: "0010_carga_inicial", when: 1790700000000 },
   { tag: "0011_numeracion_invertida", when: 1790800000000 },
   { tag: "0012_calidad", when: 1790900000000 },
+  { tag: "0013_m2_y_fotos", when: 1791000000000 },
 ];
 
 /**
@@ -123,6 +124,8 @@ const HUELLAS: Huella[] = [
   { migracion: "0011_numeracion_invertida", que: "los grupos numerados de derecha a izquierda", objeto: "grupos.numeracion_invertida" },
   { migracion: "0012_calidad", que: "si cada bulto es de primera o de segunda", objeto: "bultos.calidad" },
   { migracion: "0012_calidad", que: "la categoría antes y después de cada movimiento", objeto: "movimientos.calidad_antes" },
+  { migracion: "0013_m2_y_fotos", que: "los m² por unidad de cada modelo", objeto: "modelos.m2_por_unidad" },
+  { migracion: "0013_m2_y_fotos", que: "las fotos diarias del stock", objeto: "fotos_diarias" },
   { migracion: "0004_grupos", que: "el rack viejo de la posición, que pasó a llamarse grupo_id", objeto: "posiciones.rack_id", debeEstar: false },
   { migracion: "0004_grupos", que: "la capacidad por posición, que ya no se usa: una posición lleva un bulto", objeto: "posiciones.capacidad_bultos", debeEstar: false },
   { migracion: "0004_grupos", que: "la profundidad en el bulto, que es de la posición y no del bulto", objeto: "bultos.profundidad", debeEstar: false },

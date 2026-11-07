@@ -1236,3 +1236,40 @@ describe("la foto del resumen", { skip: !hay && "sin base local" }, () => {
     assert.equal(ahora.antiguedad.masViejos.some((v) => v.id === id), false);
   });
 });
+
+describe("fotos diarias y m²", { skip: !hay && "sin base local" }, () => {
+  test("una foto guardada no se puede modificar ni borrar", async () => {
+    await base.db.execute(sql`
+      insert into fotos_diarias (dia, origen, version, datos) values ('2020-02-01', 'al_cierre', 1, '{}'::jsonb)
+    `);
+    await assert.rejects(
+      () => base.db.execute(sql`update fotos_diarias set datos = '{"x":1}'::jsonb where dia = '2020-02-01'`),
+      /no se modifican ni se borran/,
+    );
+    await assert.rejects(
+      () => base.db.execute(sql`delete from fotos_diarias where dia = '2020-02-01'`),
+      /no se modifican ni se borran/,
+    );
+    // Y no hay dos del mismo día.
+    await assert.rejects(() =>
+      base.db.execute(sql`
+        insert into fotos_diarias (dia, origen, version, datos) values ('2020-02-01', 'reconstruida', 1, '{}'::jsonb)
+      `),
+    );
+  });
+
+  test("los m² de la foto son unidades × m² por unidad, y lo sin medir se cuenta aparte", async () => {
+    await base.db.execute(sql`update modelos set m2_por_unidad = null`);
+    await base.db.execute(sql`update modelos set m2_por_unidad = 2.5 where id = ${datos.laja.id}`);
+    const foto = await fotoEn(new Date(Date.now() + 1000), true, base.db);
+    const laja = foto.modelos.find((m) => m.id === datos.laja.id)!;
+    assert.equal(laja.m2, laja.unidades * 2.5);
+    const otros = foto.modelos.filter((m) => m.id !== datos.laja.id);
+    for (const o of otros) assert.equal(o.m2, null, `${o.nombre} no tiene m²`);
+    assert.equal(foto.m2.total, laja.unidades * 2.5, "el total suma solo lo medido");
+    assert.deepEqual(
+      [...foto.m2.modelosSinMedir].sort(),
+      otros.map((o) => o.nombre).sort(),
+    );
+  });
+});

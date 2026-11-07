@@ -472,6 +472,9 @@ export type Totales = {
   bultosSalieron: number;
   chequeos: number;
   chequeosBien: number;
+  /** En m², todas las líneas juntas (solo los modelos con m² por unidad). */
+  m2Entraron: number;
+  m2Salieron: number;
   /** Por línea, en su unidad: lo que entró y lo que salió. */
   porLinea: Record<string, { unidadPlural: string; entraron: number; salieron: number }>;
 };
@@ -494,14 +497,18 @@ export async function totales(inicio: Date, fin: Date): Promise<Totales> {
     db.execute(sql`
       select l.nombre as linea, l.unidad_plural,
              coalesce(sum(ml.cantidad - ml.cantidad_antes) filter (where m.tipo = 'meter'), 0)::int as entraron,
-             coalesce(-sum(ml.cantidad - ml.cantidad_antes) filter (where m.tipo = 'sacar'), 0)::int as salieron
+             coalesce(-sum(ml.cantidad - ml.cantidad_antes) filter (where m.tipo = 'sacar'), 0)::int as salieron,
+             coalesce(sum((ml.cantidad - ml.cantidad_antes) * mo.m2_por_unidad) filter (where m.tipo = 'meter'), 0)::float8 as m2_entraron,
+             coalesce(-sum((ml.cantidad - ml.cantidad_antes) * mo.m2_por_unidad) filter (where m.tipo = 'sacar'), 0)::float8 as m2_salieron
         from movimientos m
         join movimiento_lineas ml on ml.movimiento_id = m.id
         join modelos mo on mo.id = ml.modelo_id
         join lineas l on l.id = mo.linea_id
        where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}
        group by l.id
-    `) as unknown as Promise<Array<{ linea: string; unidad_plural: string; entraron: number; salieron: number }>>,
+    `) as unknown as Promise<
+      Array<{ linea: string; unidad_plural: string; entraron: number; salieron: number; m2_entraron: number; m2_salieron: number }>
+    >,
   ]);
   return {
     movimientos: Object.fromEntries(movs.map((m) => [m.tipo, m.n])),
@@ -509,6 +516,8 @@ export async function totales(inicio: Date, fin: Date): Promise<Totales> {
     bultosSalieron: movs.reduce((s, m) => s + m.salieron, 0),
     chequeos: chequeos[0]?.n ?? 0,
     chequeosBien: chequeos[0]?.bien ?? 0,
+    m2Entraron: lineas.reduce((s2, l) => s2 + l.m2_entraron, 0),
+    m2Salieron: lineas.reduce((s2, l) => s2 + l.m2_salieron, 0),
     porLinea: Object.fromEntries(
       lineas.map((l) => [l.linea, { unidadPlural: l.unidad_plural, entraron: l.entraron, salieron: l.salieron }]),
     ),
@@ -518,6 +527,8 @@ export async function totales(inicio: Date, fin: Date): Promise<Totales> {
 export type Evolucion = {
   /** Bultos de producto en stock al cierre de cada tramo. */
   bultos: Serie;
+  /** m² en stock al cierre de cada tramo, todas las líneas (modelos con m² por unidad). */
+  m2: Serie;
   /** Por línea, unidades en stock al cierre de cada tramo. */
   lineas: Array<{ linea: string; unidadPlural: string; serie: Serie; alInicio: number }>;
   bultosAlInicio: number;
@@ -538,7 +549,8 @@ export async function evolucion(r: Rango): Promise<Evolucion> {
   const { desde, hasta } = puntas(r.inicio, r.fin);
   const efectoBulto = sql`case when m.cantidad_antes = 0 and m.cantidad > 0 then 1
                                when m.cantidad_antes > 0 and m.cantidad = 0 then -1 else 0 end`;
-  const [lineas, inicialLineas, netoLineas, inicialBultos, netoBultos] = await Promise.all([
+  const efectoM2 = sql`(ml.cantidad - ml.cantidad_antes) * mo.m2_por_unidad`;
+  const [lineas, inicialLineas, netoLineas, inicialBultos, netoBultos, inicialM2, netoM2] = await Promise.all([
     db.execute(sql`select nombre, unidad_plural from lineas where activa order by orden`) as unknown as Promise<
       Array<{ nombre: string; unidad_plural: string }>
     >,
@@ -572,6 +584,21 @@ export async function evolucion(r: Rango): Promise<Evolucion> {
          and m.packaging <> 'objeto'
        group by 1
     `) as unknown as Promise<Array<{ clave: string; valor: number }>>,
+    db.execute(sql`
+      select coalesce(sum(${efectoM2}), 0)::float8 as q
+        from movimientos m
+        join movimiento_lineas ml on ml.movimiento_id = m.id
+        join modelos mo on mo.id = ml.modelo_id
+       where m.anulado_en is null and m.creado_en < ${desde}
+    `) as unknown as Promise<Array<{ q: number }>>,
+    db.execute(sql`
+      select ${claveDe(sql.raw("m.creado_en"), r)} as clave, coalesce(sum(${efectoM2}), 0)::float8 as valor
+        from movimientos m
+        join movimiento_lineas ml on ml.movimiento_id = m.id
+        join modelos mo on mo.id = ml.modelo_id
+       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}
+       group by 1
+    `) as unknown as Promise<Array<{ clave: string; valor: number }>>,
   ]);
 
   const acumular = (inicial: number, netos: Array<{ clave: string; valor: number }>): Serie => {
@@ -582,6 +609,7 @@ export async function evolucion(r: Rango): Promise<Evolucion> {
   return {
     bultosAlInicio: inicialBultos[0]?.q ?? 0,
     bultos: acumular(inicialBultos[0]?.q ?? 0, netoBultos),
+    m2: acumular(inicialM2[0]?.q ?? 0, netoM2).map((t) => ({ ...t, valor: Math.round(t.valor) })),
     lineas: lineas.map((l) => {
       const alInicio = inicialLineas.find((x) => x.linea === l.nombre)?.q ?? 0;
       return {

@@ -5,7 +5,7 @@ import { dias as textoDias, porcentaje } from "@/lib/estadisticas-calculo";
 import { Barras, Columnas, Seccion, Tile } from "@/components/graficos";
 import { GraficoEvolucion } from "@/components/evolucion";
 import { Delta, SelectorPeriodo } from "@/components/periodo";
-import { ETIQUETA_MOVIMIENTO, numero } from "@/lib/formato";
+import { ETIQUETA_MOVIMIENTO, m2, numero } from "@/lib/formato";
 import { POR, fechaLarga, diaDe, leerRango, rangoAnterior } from "@/lib/periodos";
 import { Titulo } from "@/components/ui";
 
@@ -85,6 +85,16 @@ export default async function PantallaEstadisticas({
           detalle={<Delta actual={tot.bultosSalieron} anterior={ant.bultosSalieron} contra={contra} />}
         />
         <Tile
+          etiqueta="m² que entraron"
+          valor={m2(tot.m2Entraron)}
+          detalle={<Delta actual={Math.round(tot.m2Entraron)} anterior={Math.round(ant.m2Entraron)} contra={contra} unidad="m²" />}
+        />
+        <Tile
+          etiqueta="m² que salieron"
+          valor={m2(tot.m2Salieron)}
+          detalle={<Delta actual={Math.round(tot.m2Salieron)} anterior={Math.round(ant.m2Salieron)} contra={contra} unidad="m²" />}
+        />
+        <Tile
           etiqueta="Egresos (enteros y parciales)"
           valor={numero(tot.movimientos.sacar ?? 0)}
           detalle={<Delta actual={tot.movimientos.sacar ?? 0} anterior={ant.movimientos.sacar ?? 0} contra={contra} />}
@@ -122,9 +132,10 @@ export default async function PantallaEstadisticas({
 
       <Seccion
         titulo="Cómo evolucionó el stock"
-        detalle={`Lo que había al cierre de cada ${rango.granularidad === "hora" ? "hora" : rango.granularidad === "dia" ? "día" : rango.granularidad}. Un gráfico por línea, cada uno en su unidad: no se suman entre sí.`}
+        detalle={`Lo que había al cierre de cada ${rango.granularidad === "hora" ? "hora" : rango.granularidad === "dia" ? "día" : rango.granularidad}. Los m² y los bultos suman todas las líneas; después, un gráfico por línea en su unidad, que no se suman entre sí.`}
       >
         <div className="grid gap-2 sm:grid-cols-2">
+          <GraficoEvolucion titulo="Stock en m² (todas las líneas)" unidad="m²" serie={evo.m2} />
           <GraficoEvolucion titulo="Bultos en stock" unidad="bultos" serie={evo.bultos} />
           {evo.lineas.map((l) => (
             <GraficoEvolucion key={l.linea} titulo={l.linea} unidad={l.unidadPlural} serie={l.serie} />

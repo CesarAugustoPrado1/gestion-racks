@@ -47,6 +47,9 @@ import { ejecutar, fallar, type Resultado } from "./comun";
  * lleva los usuarios te deja afuera de tu propia app.
  */
 const TABLAS_EN_ORDEN = [
+  // Las fotos diarias de la etapa de prueba son de datos de prueba. TRUNCATE no pasa
+  // por el trigger que las protege, así que se pueden vaciar acá y solo acá.
+  "fotos_diarias",
   "exclusiones",
   "chequeos",
   "movimiento_lineas",

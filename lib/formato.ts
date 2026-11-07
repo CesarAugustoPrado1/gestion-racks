@@ -137,3 +137,19 @@ export function abreviaturas(nombres: string[]): Record<string, string> {
   }
   return salida;
 }
+
+/**
+ * Metros cuadrados para pantalla: "1.240 m²", "2,9 m²". Con un decimal solo
+ * cuando son pocos; en miles el decimal es ruido.
+ */
+export function m2(n: number): string {
+  return `${n.toLocaleString("es-AR", { maximumFractionDigits: Math.abs(n) < 100 ? 1 : 0 })} m²`;
+}
+
+/** "2,88" o "2.88" -> 2.88. Vacío o inválido -> null. */
+export function leerDecimal(texto: string): number | null {
+  const limpio = texto.trim().replace(",", ".");
+  if (limpio === "") return null;
+  const n = Number(limpio);
+  return Number.isFinite(n) ? n : null;
+}

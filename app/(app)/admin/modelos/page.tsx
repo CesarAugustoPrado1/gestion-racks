@@ -16,7 +16,7 @@ export default async function PantallaModelos() {
     db.execute(sql`
       select m.id, m.nombre, m.activo, m.linea_id, l.nombre as linea_nombre,
              m.empresa_id, e.nombre as empresa_nombre,
-             l.unidad_plural,
+             l.unidad_plural, l.unidad_singular, m.m2_por_unidad::float8 as m2,
              max(case when n.packaging = 'palet' then n.cantidad end)::int as palet,
              max(case when n.packaging = 'optimizado' then n.cantidad end)::int as optimizado,
              max(case when n.packaging = 'palet' then n.altura_cm end)::int as alto_palet,
@@ -37,6 +37,8 @@ export default async function PantallaModelos() {
         empresa_id: number | null;
         empresa_nombre: string | null;
         unidad_plural: string;
+        unidad_singular: string;
+        m2: number | null;
         palet: number | null;
         optimizado: number | null;
         alto_palet: number | null;
@@ -76,6 +78,8 @@ export default async function PantallaModelos() {
             empresaId: m.empresa_id,
             empresaNombre: m.empresa_nombre,
             unidadPlural: m.unidad_plural,
+            unidadSingular: m.unidad_singular,
+            m2: m.m2,
             palet: m.palet,
             optimizado: m.optimizado,
             altoPalet: m.alto_palet,

@@ -39,7 +39,10 @@ export const config = {
     /**
      * `/api/version` queda afuera a proposito: sirve para saber que commit esta
      * desplegado, y tiene que contestar sin sesion.
+     *
+     * `/api/cron/` tambien: lo llama Vercel de noche, sin usuario. Cada ruta de
+     * ahi se protege sola con CRON_SECRET.
      */
-    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|api/version).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|api/version|api/cron/).*)",
   ],
 };
