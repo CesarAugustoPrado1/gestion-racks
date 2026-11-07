@@ -1459,7 +1459,15 @@ export async function gruposEnCarga(): Promise<GrupoEnCarga[]> {
 export type PosicionDeCarga = {
   id: number;
   codigo: string;
+  /** Lo que pide el selector de posición (ver components/selector-posicion.tsx). */
+  rack: string;
+  empresa: string | null;
+  penetrable: boolean;
+  calle: number;
   nivel: number;
+  niveles: number;
+  profundidad: number | null;
+  profundidadMax: number | null;
   relevada: boolean;
   /** Lo que se cargó, si se cargó algo. */
   ocupante: { codigo: string; contenido: string; creadoEn: Date; deLaCarga: boolean } | null;
@@ -1503,6 +1511,8 @@ export async function cargaDelGrupo(grupoId: number): Promise<CargaDelGrupo | nu
 
   const filas = (await db.execute(sql`
     select p.id, g.codigo || '-' || p.codigo as codigo, p.nivel,
+           g.codigo as rack, e.nombre as empresa, g.accesibilidad, g.niveles,
+           g.profundidad as profundidad_max, p.unidad, p.columna, p.profundidad,
            (${desde ? sql`p.chequeado_en >= ${desde.toISOString()}` : sql`false`}) as relevada,
            b.codigo as bulto_codigo, b.creado_en as bulto_creado_en, b.packaging, b.descripcion,
            exists (select 1 from movimientos m
@@ -1515,6 +1525,7 @@ export async function cargaDelGrupo(grupoId: number): Promise<CargaDelGrupo | nu
            ex.motivo as exclusion_motivo, ex.nota as exclusion_nota
       from posiciones p
       join grupos g on g.id = p.grupo_id
+      left join empresas e on e.id = g.empresa_id
       left join bultos b on b.posicion_id = p.id and b.estado = 'ubicado'
       ${joinExclusion("p", "ex")}
      where p.grupo_id = ${grupoId} and p.activa
@@ -1523,6 +1534,14 @@ export async function cargaDelGrupo(grupoId: number): Promise<CargaDelGrupo | nu
     id: number;
     codigo: string;
     nivel: number;
+    rack: string;
+    empresa: string | null;
+    accesibilidad: string;
+    niveles: number;
+    profundidad_max: number | null;
+    unidad: number;
+    columna: number | null;
+    profundidad: number | null;
     relevada: boolean;
     bulto_codigo: string | null;
     bulto_creado_en: Date | string | null;
@@ -1550,7 +1569,14 @@ export async function cargaDelGrupo(grupoId: number): Promise<CargaDelGrupo | nu
     posiciones: filas.map((f) => ({
       id: f.id,
       codigo: f.codigo,
+      rack: f.rack,
+      empresa: f.empresa,
+      penetrable: f.accesibilidad === "penetrable",
+      calle: f.accesibilidad === "penetrable" ? f.unidad : (f.columna ?? f.unidad),
       nivel: f.nivel,
+      niveles: f.niveles,
+      profundidad: f.profundidad,
+      profundidadMax: f.profundidad_max,
       relevada: f.relevada,
       ocupante: f.bulto_codigo
         ? {
