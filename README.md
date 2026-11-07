@@ -178,9 +178,12 @@ serializando del otro lado (no se arregla con `max`; ahí la salida es
 ## Manual del operario
 
 Está en `public/manual.pdf` y se abre desde el botón **Manual** del encabezado,
-en todas las pantallas. Para actualizarlo, se reemplaza ese archivo con el
-mismo nombre: sale con el próximo despliegue, y el celular no lo guarda en
-caché (ver `next.config.ts`), así que siempre abre la última versión.
+en todas las pantallas. El celular no lo guarda en caché (ver `next.config.ts`),
+así que siempre abre la última versión desplegada.
+
+El original editable (HTML, capturas y el script que arma el PDF) está en
+`docs/manual/`, con los pasos para sacar una versión nueva. Las versiones
+anteriores se guardan en `public/manuales/` y no se borran.
 
 ## Tests
 
