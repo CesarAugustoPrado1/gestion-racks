@@ -862,6 +862,25 @@ tramos vacíos en cero. Las secciones son:
 - primera y segunda;
 - quién hace qué y a qué hora.
 
+**La foto diaria guardada** (`fotos_diarias`, `lib/fotos-diarias.ts`). Todas
+las noches, a las 00:05, un proceso programado guarda la foto del cierre del
+día. Guarda lo que la reconstrucción no puede dar:
+
+- la confiabilidad de esa noche;
+- la configuración de racks de ese día;
+- los m² por unidad que tenía cada modelo.
+
+Además queda como registro de cómo se informó el stock. No se modifica ni se
+borra, y lo impide un trigger en la base. El Resumen usa la foto guardada cuando
+el día pedido tiene una. Si una noche el proceso no corre, la próxima corrida
+rellena los días que faltan con la foto reconstruida, marcada como tal.
+
+**m²** (`modelos.m2_por_unidad`). Es lo único que se suma entre líneas además
+de los bultos. Lo de modelos sin medir queda afuera del total y la pantalla los
+nombra, para que un total incompleto no se lea como completo. Las Estadísticas
+calculan los m² con los m² por unidad actuales; la foto guardada, con los de esa
+noche.
+
 Dos reglas que atraviesan las dos pantallas:
 
 - **Las unidades no se suman entre líneas.** Placas, paquetes y cajas van

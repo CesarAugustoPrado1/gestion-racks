@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requerirSesion } from "@/lib/auth";
 import { fotoEn, type Foto } from "@/lib/foto";
+import { estadoDeFotos, fotoGuardada, tomarFoto, type FotoGuardada } from "@/lib/fotos-diarias";
 import { tablero } from "@/lib/tablero";
 import { bultosConChequeo } from "@/lib/consultas";
 import { semividaDias } from "@/lib/configuracion";
@@ -9,8 +10,8 @@ import { Indice } from "@/components/confiabilidad";
 import { BarraPosiciones, Barras, LeyendaPosiciones, Seccion, Tile } from "@/components/graficos";
 import { Delta, SelectorMomento } from "@/components/periodo";
 import { dias, porcentaje } from "@/lib/estadisticas-calculo";
-import { ETIQUETA_PACKAGING, PACKAGINGS, numero } from "@/lib/formato";
-import { leerMomento } from "@/lib/periodos";
+import { ETIQUETA_PACKAGING, PACKAGINGS, m2, numero } from "@/lib/formato";
+import { diaDe, fechaLarga, leerMomento, sumarDias, type Momento } from "@/lib/periodos";
 import { puedeVer } from "@/lib/permisos";
 import { Aviso, Titulo } from "@/components/ui";
 
@@ -29,6 +30,19 @@ function lugar(f: Foto) {
   );
   const utiles = t.ocupadas + t.libres;
   return { ...t, utiles, ocupacion: porcentaje(t.ocupadas, utiles) };
+}
+
+/**
+ * La foto de un momento: la GUARDADA si ese día tiene una (es el registro, con
+ * la confiabilidad y la configuración de ese día), si no, reconstruida del
+ * historial. La de ahora siempre es la viva.
+ */
+async function fotoDe(m: Momento): Promise<{ foto: Foto; guardada: FotoGuardada | null }> {
+  if (m.dia) {
+    const g = await fotoGuardada(m.dia);
+    if (g) return { foto: g.foto, guardada: g };
+  }
+  return { foto: await fotoEn(m.instante, m.esAhora), guardada: null };
 }
 
 /**
@@ -51,13 +65,19 @@ export default async function PantallaResumen({
   const vs = q.vs ? leerMomento(q.vs, ahora) : null;
   const comparacion = vs && vs.instante.getTime() !== momento.instante.getTime() ? vs : null;
 
-  const [foto, otra, vivo, conChequeo, semivida] = await Promise.all([
-    fotoEn(momento.instante, momento.esAhora),
-    comparacion ? fotoEn(comparacion.instante, comparacion.esAhora) : Promise.resolve(null),
+  // Si la foto de ayer todavía no se guardó (el proceso de la noche no corrió),
+  // se guarda ahora. Es idempotente: si ya está, no hace nada.
+  await tomarFoto(sumarDias(diaDe(ahora), -1), ahora);
+
+  const [{ foto, guardada }, otraF, vivo, conChequeo, semivida, fotos] = await Promise.all([
+    fotoDe(momento),
+    comparacion ? fotoDe(comparacion) : Promise.resolve(null),
     momento.esAhora ? tablero() : Promise.resolve(null),
     momento.esAhora ? bultosConChequeo() : Promise.resolve(null),
     semividaDias(),
+    estadoDeFotos(),
   ]);
+  const otra = otraF?.foto ?? null;
 
   const l = lugar(foto);
   const lo = otra ? lugar(otra) : null;
@@ -125,17 +145,38 @@ export default async function PantallaResumen({
         .
       </p>
 
-      {!momento.esAhora && (
+      {!momento.esAhora && guardada?.origen === "al_cierre" && (
+        <div className="mt-2">
+          <Aviso tono="exito">
+            Foto guardada al cierre de ese día ({guardada.tomadaEn.toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}):
+            es el registro de cómo estaba, con la confiabilidad y la configuración de racks de esa noche. No se puede
+            modificar.
+          </Aviso>
+        </div>
+      )}
+      {!momento.esAhora && guardada?.origen !== "al_cierre" && (
         <div className="mt-2">
           <Aviso tono="info">
-            Foto reconstruida con el historial de movimientos: lo registrado hasta el cierre de ese día. El lugar
-            se calcula con los racks como están configurados hoy, y la confiabilidad solo existe para ahora.
+            {guardada
+              ? "Foto guardada después, reconstruida con el historial: esa noche el proceso automático no corrió. "
+              : "Foto reconstruida con el historial de movimientos: lo registrado hasta el cierre de ese día. "}
+            El lugar se calcula con los racks como están configurados hoy, y la confiabilidad no está disponible.
             {!foto.hayHistoria && " No hay ningún movimiento registrado antes de esa fecha."}
           </Aviso>
         </div>
       )}
 
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Tile
+          etiqueta="Stock en m²"
+          valor={m2(foto.m2.total)}
+          detalle={
+            d(Math.round(foto.m2.total), otra ? Math.round(otra.m2.total) : undefined, "m²") ??
+            (foto.m2.modelosSinMedir.length > 0
+              ? `sin contar ${foto.m2.modelosSinMedir.length} modelo${foto.m2.modelosSinMedir.length === 1 ? "" : "s"} sin medir`
+              : "todas las líneas sumadas")
+          }
+        />
         <Tile
           etiqueta="Bultos en stock"
           valor={numero(foto.bultos.enStock)}
@@ -183,11 +224,29 @@ export default async function PantallaResumen({
         />
       </div>
 
-      {conChequeo && (
+      {(conChequeo || guardada?.confiabilidad) && (
         <div className="tarjeta mt-2 p-4">
-          <p className="mb-1 text-xs font-medium text-slate-500">Confiabilidad del stock</p>
-          <Indice {...indice(conChequeo.map((b) => confianza(b, semivida)))} />
+          <p className="mb-1 text-xs font-medium text-slate-500">
+            Confiabilidad del stock{guardada?.confiabilidad ? " esa noche" : ""}
+          </p>
+          <Indice {...(guardada?.confiabilidad ?? indice(conChequeo!.map((b) => confianza(b, semivida))))} />
         </div>
+      )}
+
+      {foto.m2.modelosSinMedir.length > 0 && (
+        <p className="mt-2 px-1 text-xs text-amber-800">
+          Sin m² por unidad, no entran en el total de m²: {foto.m2.modelosSinMedir.join(", ")}.
+          {puedeAdmin && (
+            <>
+              {" "}
+              Se cargan en{" "}
+              <Link href="/admin/modelos" className="font-semibold underline">
+                Administración → Modelos
+              </Link>
+              .
+            </>
+          )}
+        </p>
       )}
 
       {pendientes.length > 0 && (
@@ -235,6 +294,14 @@ export default async function PantallaResumen({
                     <Delta actual={ln.unidades} anterior={o.unidades} contra={contra} />
                   </p>
                 )}
+                {ln.m2 > 0 && (
+                  <p className="text-sm text-slate-600">
+                    {m2(ln.m2)}
+                    {ln.unidadesSinM2 > 0 && (
+                      <span className="text-xs text-amber-800"> (sin contar {numero(ln.unidadesSinM2)} sin medir)</span>
+                    )}
+                  </p>
+                )}
                 <p className="text-xs text-slate-500">
                   en {numero(ln.bultos)} bulto{ln.bultos === 1 ? "" : "s"} · {numero(ln.modelosConStock)} modelo
                   {ln.modelosConStock === 1 ? "" : "s"} con stock
@@ -277,6 +344,7 @@ export default async function PantallaResumen({
                   <th className="px-4 py-2 font-medium">Modelo</th>
                   <th className="px-2 py-2 text-right font-medium">Bultos</th>
                   <th className="px-2 py-2 text-right font-medium">Unidades</th>
+                  <th className="px-2 py-2 text-right font-medium">m²</th>
                   <th className="px-2 py-2 text-right font-medium">2da</th>
                   {otra && <th className="px-4 py-2 text-right font-medium">Diferencia</th>}
                 </tr>
@@ -303,6 +371,9 @@ export default async function PantallaResumen({
                       <td className="cifra px-2 py-2 text-right">{numero(m.bultos)}</td>
                       <td className="cifra px-2 py-2 text-right">
                         {numero(m.unidades)} <span className="text-xs text-slate-400">{m.unidadPlural}</span>
+                      </td>
+                      <td className={`cifra px-2 py-2 text-right ${m.m2 == null ? "text-slate-300" : ""}`}>
+                        {m.m2 == null ? "—" : m2(m.m2)}
                       </td>
                       <td className={`cifra px-2 py-2 text-right ${m.segunda > 0 ? "text-orange-800" : "text-slate-300"}`}>
                         {m.segunda > 0 ? numero(m.segunda) : "—"}
@@ -474,8 +545,14 @@ export default async function PantallaResumen({
         </Seccion>
       )}
 
+      <p className="mt-6 text-xs text-slate-500">
+        {fotos.cantidad === 0
+          ? "Todavía no hay fotos diarias guardadas. Se guarda una cada noche, al cierre del día."
+          : `Fotos diarias guardadas: ${numero(fotos.cantidad)}, desde el ${fechaLarga(fotos.primera!, diaDe(ahora))}. La última es del ${fechaLarga(fotos.ultima!, diaDe(ahora))}${fotos.ultimaOrigen === "al_cierre" ? ", tomada al cierre" : ", reconstruida"}.`}
+      </p>
+
       {puedeVer(sesion.rol, "/estadisticas") && (
-        <p className="mt-6 text-sm text-slate-500">
+        <p className="mt-2 text-sm text-slate-500">
           Lo que pasó en un período —ingresos, egresos, cómo evolucionó el stock— está en{" "}
           <Link href="/estadisticas" className="font-semibold underline">
             Estadísticas

@@ -111,6 +111,8 @@ const esquemaModelo = z.object({
   empresaId: z.number({ invalid_type_error: "Elegí de qué empresa es." }).int().positive("Elegí de qué empresa es."),
   nombre,
   activo: z.boolean(),
+  /** Cuántos m² cubre una unidad. Null = sin medir. */
+  m2PorUnidad: z.number().positive("Los m² por unidad tienen que ser mayores a cero.").max(1000).nullable().default(null),
   /**
    * Las normas van JUNTO con el modelo y no en otra pantalla: un modelo sin
    * norma es un modelo que no sirve para cargar un palet, y separarlas garantiza
@@ -149,6 +151,7 @@ export async function guardarModelo(
             empresaId: d.empresaId,
             nombre: d.nombre,
             activo: d.activo,
+            m2PorUnidad: d.m2PorUnidad == null ? null : String(d.m2PorUnidad),
           })
           .where(eq(modelos.id, modeloId));
       } else {
@@ -170,6 +173,7 @@ export async function guardarModelo(
             empresaId: d.empresaId,
             nombre: d.nombre,
             activo: d.activo,
+            m2PorUnidad: d.m2PorUnidad == null ? null : String(d.m2PorUnidad),
             orden: max,
           })
           .returning({ id: modelos.id });

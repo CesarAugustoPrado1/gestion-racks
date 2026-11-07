@@ -1,6 +1,8 @@
 import {
   type AnyPgColumn,
   boolean,
+  date,
+  numeric,
   jsonb,
   index,
   integer,
@@ -284,6 +286,12 @@ export const modelos = pgTable(
     nombre: text("nombre").notNull(),
     /** De quién es el producto. El bulto la hereda de acá. Ver `empresas`. */
     empresaId: integer("empresa_id").references(() => empresas.id),
+    /**
+     * Cuántos m² cubre UNA unidad (una placa de 1,20 × 2,40 son 2,88). Con esto
+     * el stock se dice en m², que sí se suman entre líneas. Null = sin medir:
+     * el modelo queda fuera de las cuentas de m² y la pantalla lo dice.
+     */
+    m2PorUnidad: numeric("m2_por_unidad", { precision: 10, scale: 4 }),
     activo: boolean("activo").notNull().default(true),
     orden: integer("orden").notNull().default(0),
   },
@@ -883,3 +891,25 @@ export type Posicion = typeof posiciones.$inferSelect;
 export type Bulto = typeof bultos.$inferSelect;
 export type Movimiento = typeof movimientos.$inferSelect;
 export type Chequeo = typeof chequeos.$inferSelect;
+
+/**
+ * La foto del stock al cierre de cada día, GUARDADA. La toma un proceso
+ * programado apenas pasada la medianoche (ver lib/fotos-diarias.ts).
+ *
+ * Existe porque hay cosas que el historial no puede reconstruir después -la
+ * confiabilidad, la configuración de racks de ese día- y porque el stock es un
+ * tema sensible: la foto queda como registro de cómo se informó, aunque mañana
+ * se corrija un movimiento.
+ *
+ * NO se modifica ni se borra: lo impide un trigger en la base (migración 0013).
+ * `origen` dice si se tomó al cierre o si se reconstruyó después, un día en que
+ * el proceso no corrió. `datos` es la foto entera (ver `FotoGuardada`).
+ */
+export const fotosDiarias = pgTable("fotos_diarias", {
+  id: serial("id").primaryKey(),
+  dia: date("dia", { mode: "string" }).notNull().unique(),
+  tomadaEn: timestamp("tomada_en", { withTimezone: true }).notNull().defaultNow(),
+  origen: text("origen").$type<"al_cierre" | "reconstruida">().notNull(),
+  version: integer("version").notNull(),
+  datos: jsonb("datos").notNull(),
+});

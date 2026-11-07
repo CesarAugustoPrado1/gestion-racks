@@ -9,7 +9,7 @@ import {
   Interruptor,
   SelectorEmpresa,
 } from "@/components/admin";
-import { numero } from "@/lib/formato";
+import { leerDecimal, numero } from "@/lib/formato";
 import { HOLGURA_CM } from "@/lib/posiciones";
 
 type Modelo = {
@@ -21,6 +21,8 @@ type Modelo = {
   empresaId: number | null;
   empresaNombre: string | null;
   unidadPlural: string;
+  unidadSingular: string;
+  m2: number | null;
   palet: number | null;
   optimizado: number | null;
   altoPalet: number | null;
@@ -33,6 +35,7 @@ type Edicion = {
   empresaId: number | null;
   nombre: string;
   activo: boolean;
+  m2: string;
   palet: string;
   optimizado: string;
   altoPalet: string;
@@ -61,7 +64,9 @@ export function Modelos({
         <Formulario
           titulo={editando.id ? "Editar modelo" : "Modelo nuevo"}
           puedeGuardar={
-            editando.nombre.trim().length > 0 && editando.empresaId != null
+            editando.nombre.trim().length > 0 &&
+            editando.empresaId != null &&
+            (editando.m2.trim() === "" || (leerDecimal(editando.m2) ?? 0) > 0)
           }
           alGuardar={() =>
             guardarModelo({
@@ -70,6 +75,7 @@ export function Modelos({
               empresaId: editando.empresaId ?? 0,
               nombre: editando.nombre,
               activo: editando.activo,
+              m2PorUnidad: leerDecimal(editando.m2),
               normas: {
                 palet: {
                   cantidad: editando.palet ? Number(editando.palet) : null,
@@ -116,6 +122,20 @@ export function Modelos({
               onChange={(e) => setEditando({ ...editando, nombre: e.target.value })}
               placeholder="Laja"
             />
+          </Campo>
+
+          <Campo etiqueta="m² por unidad">
+            <input
+              className="campo"
+              inputMode="decimal"
+              value={editando.m2}
+              onChange={(e) => setEditando({ ...editando, m2: e.target.value.replace(/[^\d.,]/g, "") })}
+              placeholder="2,88"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Cuántos m² cubre una unidad: una placa de 1,20 × 2,40 son 2,88. Con esto el stock se ve también en m²,
+              que sí se suman entre líneas. Vacío = sin medir: el modelo queda afuera de las cuentas de m².
+            </p>
           </Campo>
 
           <div>
@@ -216,6 +236,7 @@ export function Modelos({
               empresaId: empresas.length === 1 ? empresas[0].id : null,
               nombre: "",
               activo: true,
+              m2: "",
               palet: "",
               optimizado: "",
               altoPalet: "",
@@ -250,6 +271,15 @@ export function Modelos({
                         <span className="ml-2 chip bg-slate-100 text-slate-500">
                           suspendido
                         </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {m.m2 != null ? (
+                        <>
+                          {String(m.m2).replace(".", ",")} m² por {m.unidadSingular}
+                        </>
+                      ) : (
+                        <span className="text-amber-700">sin m² por unidad: no entra en las cuentas de m²</span>
                       )}
                     </p>
                     <p className="text-xs text-slate-500">
@@ -292,6 +322,7 @@ export function Modelos({
                           empresaId: m.empresaId,
                           nombre: m.nombre,
                           activo: m.activo,
+                          m2: m.m2 != null ? String(m.m2).replace(".", ",") : "",
                           palet: m.palet != null ? String(m.palet) : "",
                           optimizado:
                             m.optimizado != null ? String(m.optimizado) : "",

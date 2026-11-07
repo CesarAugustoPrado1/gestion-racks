@@ -116,6 +116,11 @@ no tiene"; se cambia con un pasaje de categoría desde la ficha del bulto (con e
 porqué obligatorio) o, si estaba mal registrado, lo corrige control desde el
 chequeo. Todo queda en Movimientos y en Estadísticas. Ver DISENO.md §3.12.
 
+**m² y foto diaria** (migración `0013_m2_y_fotos`): cada modelo puede tener
+sus m² por unidad, y el stock se ve también en m², sumando todas las líneas.
+Todas las noches se guarda la foto del cierre del día, inmodificable (ver
+*Despliegue en Vercel* para `CRON_SECRET`).
+
 **Resumen y estadísticas**: `/resumen` es la foto del stock en un momento
 (ahora o el cierre de cualquier día, reconstruido del historial, comparable con
 otra foto) y reemplaza al Tablero. `/estadisticas` es la evolución en un período
@@ -343,6 +348,14 @@ Región `gru1` (São Paulo), fijada en `vercel.json`: la base está en
 Variables a cargar en Settings → Environment Variables, marcando Production:
 `DATABASE_URL`, `SESSION_SECRET` y `DIRECT_URL`. Las variables nuevas **no se
 aplican al deploy que ya estaba hecho**: hay que volver a desplegar.
+
+**La foto diaria del stock** la toma un proceso programado de Vercel
+(`crons` en `vercel.json`), todas las noches a las 00:05 de Argentina, que llama
+a `/api/cron/foto-diaria`. Para que corra hay que cargar **`CRON_SECRET`** (una
+clave larga cualquiera) en las mismas variables. Vercel la manda sola en cada
+llamada, y sin ella la ruta no corre para nadie. Para comprobarlo, el pie del
+Resumen dice cuántas fotos hay y si la última se tomó al cierre. Si una noche no
+corre, la próxima rellena los días que faltan, marcados como reconstruidos.
 
 Para saber qué commit está arriba: `curl https://<la-app>/api/version`. Pedir una
 pantalla hasta que dé 200 no distingue el deploy nuevo del viejo, porque el viejo

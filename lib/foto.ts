@@ -39,6 +39,9 @@ export type StockDeLinea = {
   modelosConStock: number;
   porPackaging: Partial<Record<Packaging, { bultos: number; unidades: number }>>;
   segunda: { bultos: number; unidades: number };
+  /** m² de lo que tiene medida, y cuántas unidades quedaron sin medir. */
+  m2: number;
+  unidadesSinM2: number;
 };
 
 export type StockDeModelo = {
@@ -51,6 +54,8 @@ export type StockDeModelo = {
   bultos: number;
   unidades: number;
   segunda: number;
+  /** Null si el modelo no tiene m² por unidad. */
+  m2: number | null;
 };
 
 export type GrupoEnFoto = {
@@ -72,6 +77,12 @@ export type Foto = {
   esAhora: boolean;
   /** Si hay movimientos antes de este instante: antes del primero, la foto está vacía. */
   hayHistoria: boolean;
+  /**
+   * El stock en m², sumando todas las líneas: lo único que se puede sumar entre
+   * líneas además de los bultos. Lo de modelos sin medir queda afuera y se
+   * cuenta aparte, para que nadie lea un total incompleto como completo.
+   */
+  m2: { total: number; modelosSinMedir: string[] };
   lineas: StockDeLinea[];
   modelos: StockDeModelo[];
   grupos: GrupoEnFoto[];
@@ -174,10 +185,19 @@ export async function fotoEn(
     >,
 
     conexion.execute(sql`
-      select m.id, m.nombre, m.linea_id, m.empresa_id, e.nombre as empresa, m.orden
+      select m.id, m.nombre, m.linea_id, m.empresa_id, e.nombre as empresa, m.orden,
+             m.m2_por_unidad::float8 as m2
         from modelos m left join empresas e on e.id = m.empresa_id
     `) as unknown as Promise<
-      Array<{ id: number; nombre: string; linea_id: number; empresa_id: number | null; empresa: string | null; orden: number }>
+      Array<{
+        id: number;
+        nombre: string;
+        linea_id: number;
+        empresa_id: number | null;
+        empresa: string | null;
+        orden: number;
+        m2: number | null;
+      }>
     >,
 
     conexion.execute(sql`
@@ -215,6 +235,8 @@ export async function fotoEn(
       modelosConStock: 0,
       porPackaging: {},
       segunda: { bultos: 0, unidades: 0 },
+      m2: 0,
+      unidadesSinM2: 0,
     });
   }
   const porModelo = new Map<number, StockDeModelo>();
@@ -289,6 +311,8 @@ export async function fotoEn(
       const pk = (l.porPackaging[b.packaging] ??= { bultos: 0, unidades: 0 });
       pk.unidades += c.cantidad;
       if (b.calidad === "segunda") l.segunda.unidades += c.cantidad;
+      if (m.m2 != null) l.m2 += c.cantidad * m.m2;
+      else l.unidadesSinM2 += c.cantidad;
       if (!lineasTocadas.has(l.id)) {
         lineasTocadas.add(l.id);
         l.bultos++;
@@ -308,9 +332,11 @@ export async function fotoEn(
         bultos: 0,
         unidades: 0,
         segunda: 0,
+        m2: m.m2 == null ? null : 0,
       };
       pm.bultos++;
       pm.unidades += c.cantidad;
+      if (pm.m2 != null && m.m2 != null) pm.m2 += c.cantidad * m.m2;
       if (b.calidad === "segunda") pm.segunda += c.cantidad;
       porModelo.set(m.id, pm);
     }
@@ -399,6 +425,10 @@ export async function fotoEn(
       bultosPropios: propiosPorEmpresa.get(e.id) ?? 0,
       afuera: afueraPorEmpresa.get(e.id) ?? 0,
     })),
+    m2: {
+      total: [...porLinea.values()].reduce((s2, l) => s2 + l.m2, 0),
+      modelosSinMedir: [...porModelo.values()].filter((m) => m.m2 == null).map((m) => m.nombre),
+    },
     bultos: {
       enStock: cuenta.ubicados + cuenta.sinUbicar,
       ...cuenta,
