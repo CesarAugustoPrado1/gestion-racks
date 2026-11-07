@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   cargarEnPosicion,
   cerrarCargaInicial,
@@ -12,12 +12,11 @@ import {
 import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
 import { SelectorPosicion } from "@/components/selector-posicion";
+import { ElegirModelo } from "@/components/elegir-modelo";
 import { validarComposicion, validarDescripcion } from "@/lib/bultos";
 import { ETIQUETA_PACKAGING, PACKAGINGS } from "@/lib/formato";
 import type { ModeloParaCargar, PosicionDeCarga } from "@/lib/consultas";
 import type { Packaging } from "@/lib/db/schema";
-
-const CLAVE_FECHA = "carga-inicial-fecha";
 
 const hoy = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
 
@@ -244,18 +243,11 @@ function Posicion({
   return <Formulario p={p} modelos={modelos} alCargar={alCargar} alVaciar={alVaciar} />;
 }
 
-/** Para buscar sin que importen mayúsculas ni tildes: "Patagónica" empieza con "pata". */
-const normalizar = (t: string) =>
-  t
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .trim();
-
 /**
  * Lo que hay en una posición. Arranca SIEMPRE en blanco: producto, palet, sin
- * modelos. Lo único que se recuerda entre posiciones es la fecha de ingreso,
- * que se ve arriba del botón.
+ * modelos y SIN FECHA. Nada se arrastra de la posición anterior: lo que viene
+ * puesto se termina cargando sin mirar, y la fecha de ingreso de un palet no
+ * dice nada de la del de al lado.
  */
 function Formulario({
   p,
@@ -272,32 +264,12 @@ function Formulario({
   const [objeto, setObjeto] = useState(false);
   const [packaging, setPackaging] = useState<Packaging>("palet");
   const [lineas, setLineas] = useState<Array<{ modeloId: number; cantidad: string }>>([]);
-  /** El tipo de producto -la línea: placas, piedras…-. `null` = todos. */
-  const [lineaId, setLineaId] = useState<number | null>(null);
-  const [busqueda, setBusqueda] = useState("");
   /** El modelo recién tocado: ahí salta el cursor si hay que escribir la cantidad. */
   const [recienTocado, setRecienTocado] = useState<number | null>(null);
   const [descripcion, setDescripcion] = useState("");
   const [nota, setNota] = useState("");
-  const [fecha, setFecha] = useState(hoy());
-
-  useEffect(() => {
-    try {
-      const guardada = localStorage.getItem(CLAVE_FECHA);
-      if (guardada && guardada <= hoy()) setFecha(guardada);
-    } catch {
-      // Sin almacenamiento: arranca en hoy.
-    }
-  }, []);
-
-  function cambiarFecha(v: string) {
-    setFecha(v);
-    try {
-      localStorage.setItem(CLAVE_FECHA, v);
-    } catch {
-      // No pasa nada: solo no se recuerda.
-    }
-  }
+  /** Vacía a propósito: ni la de la posición anterior ni "hoy", que en una carga inicial nunca es. */
+  const [fecha, setFecha] = useState("");
 
   /**
    * Al cambiar el packaging la cantidad sale de la norma del nuevo. El suelto
@@ -320,16 +292,7 @@ function Formulario({
       ...ls,
       { modeloId: m.id, cantidad: m.normas[packaging] != null ? String(m.normas[packaging]) : "" },
     ]);
-    // Elegido el modelo, el buscador vuelve a vacío para el siguiente, si lo hay.
-    setBusqueda("");
   }
-
-  // Los tipos de producto, en el orden en que vienen los modelos.
-  const tipos = [...new Map(modelos.map((m) => [m.lineaId, m.lineaNombre])).entries()];
-  const texto = normalizar(busqueda);
-  const visibles = modelos.filter(
-    (m) => (lineaId == null || m.lineaId === lineaId) && (texto === "" || normalizar(m.nombre).startsWith(texto)),
-  );
 
   const contenido = lineas
     .map((l) => ({ modeloId: l.modeloId, cantidad: Number(l.cantidad) }))
@@ -409,53 +372,7 @@ function Formulario({
             </div>
           </div>
 
-          <div>
-            <span className="etiqueta">Tipo de producto</span>
-            <div className="flex flex-wrap gap-1.5">
-              {[[null, "Todos"] as const, ...tipos].map(([id, nombre]) => (
-                <button
-                  key={id ?? "todos"}
-                  type="button"
-                  onClick={() => setLineaId(id)}
-                  className={`min-h-11 rounded-xl px-4 text-sm font-semibold ${
-                    lineaId === id ? "bg-slate-900 text-white" : "bg-white text-slate-700 ring-1 ring-slate-300"
-                  }`}
-                >
-                  {nombre}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="etiqueta" htmlFor={`buscar-${p.id}`}>
-              Modelo
-            </label>
-            <input
-              id={`buscar-${p.id}`}
-              className="campo"
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Escribí el principio del nombre"
-              autoComplete="off"
-            />
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {visibles.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  disabled={lineas.some((l) => l.modeloId === m.id)}
-                  onClick={() => agregar(m)}
-                  className="min-h-11 rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-40"
-                >
-                  {m.nombre}
-                </button>
-              ))}
-              {visibles.length === 0 && (
-                <p className="text-sm text-slate-500">Ningún modelo empieza con «{busqueda.trim()}».</p>
-              )}
-            </div>
-          </div>
+          <ElegirModelo modelos={modelos} yaElegidos={lineas.map((l) => l.modeloId)} alElegir={agregar} />
 
           {lineas.length > 0 && (
             <div>
@@ -515,8 +432,9 @@ function Formulario({
           className="campo"
           value={fecha}
           max={hoy()}
-          onChange={(e) => cambiarFecha(e.target.value)}
+          onChange={(e) => setFecha(e.target.value)}
         />
+        {!fechaValida && <span className="mt-1 block text-xs text-amber-700">Poné la fecha: con el mes alcanza.</span>}
       </label>
 
       <input className="campo" value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Nota (opcional)" />

@@ -471,7 +471,7 @@ Cómo se hace:
    por posición: *Está vacía*, o qué hay y desde cuándo. La posición se elige
    por partes (grupo, calle o columna, altura, profundidad) y cada una arranca
    **en blanco**: no se arrastra lo cargado en la anterior, porque un formulario
-   que viene lleno se termina cargando sin mirar. Solo se recuerda la fecha.
+   que viene lleno se termina cargando sin mirar. Tampoco la fecha: arranca vacía.
 3. El bulto **nace verificado** —quien lo carga lo está contando parado
    enfrente— y con **su fecha de ingreso real** en `creado_en`, así la
    antigüedad del stock es verdad desde el primer día.
