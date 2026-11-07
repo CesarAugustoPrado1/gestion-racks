@@ -19,6 +19,7 @@ import { codigoDePosicion, posicionesDe, type Geometria } from "../lib/posicione
 import { cubre, type ReglaExclusion } from "../lib/uso";
 import { joinExclusion } from "../lib/uso-sql";
 import { guardarVersion } from "../lib/plano-db";
+import { fotoEn } from "../lib/foto";
 import {
   abrirCarga,
   cargarPosicion,
@@ -1178,5 +1179,60 @@ describe("primera y segunda", { skip: !hay && "sin base local" }, () => {
     const salida = movs[movs.length - 1];
     assert.equal(salida.calidad_antes, "segunda");
     assert.equal(salida.calidad, "segunda");
+  });
+});
+
+describe("la foto del resumen", { skip: !hay && "sin base local" }, () => {
+  test("la foto de AHORA es igual al stock vivo, modelo por modelo y bulto por bulto", async () => {
+    const foto = await fotoEn(new Date(Date.now() + 1000), true, base.db);
+    const vivo = await stockVivo();
+    const enFoto = new Map(foto.modelos.map((m) => [m.id, m.unidades]));
+    for (const [id, q] of vivo) assert.equal(enFoto.get(id) ?? 0, q, `modelo ${id}`);
+    for (const [id, q] of enFoto) assert.equal(vivo.get(id) ?? 0, q, `modelo ${id} sobra en la foto`);
+
+    const [b] = (await base.db.execute(sql`
+      select count(*) filter (where estado = 'ubicado' and packaging <> 'objeto')::int as ubicados,
+             count(*) filter (where estado = 'sin_ubicar' and packaging <> 'objeto')::int as sin_ubicar,
+             count(*) filter (where calidad = 'segunda' and packaging <> 'objeto')::int as segunda
+        from bultos where estado in ('ubicado', 'sin_ubicar')
+    `)) as unknown as Array<{ ubicados: number; sin_ubicar: number; segunda: number }>;
+    assert.equal(foto.bultos.ubicados, b.ubicados);
+    assert.equal(foto.bultos.sinUbicar, b.sin_ubicar);
+    assert.equal(foto.bultos.segunda, b.segunda);
+  });
+
+  test("una foto del pasado no tiene lo que pasó después, y sí lo que salió después", async () => {
+    let id = 0;
+    await base.db.transaction(async (tx) => {
+      id = (await meter(tx as Tx, null, "suelto", [{ modeloId: datos.laja.id, cantidad: 9 }])).id;
+    });
+    // Se corre el ingreso a un momento conocido del pasado.
+    await base.db.execute(sql`update movimientos set creado_en = '2020-01-10T12:00:00Z' where bulto_id = ${id}`);
+
+    const antes = await fotoEn(new Date("2020-01-10T00:00:00Z"), false, base.db);
+    const despues = await fotoEn(new Date("2020-01-11T00:00:00Z"), false, base.db);
+    assert.equal(despues.modelos.find((m) => m.id === datos.laja.id)?.unidades, 9);
+    assert.equal(antes.modelos.find((m) => m.id === datos.laja.id), undefined);
+    assert.equal(antes.hayHistoria, false);
+
+    // Sale entero hoy: la foto de 2020 lo sigue teniendo, la de ahora no.
+    await base.db.transaction(async (tx) => {
+      const t = tx as Tx;
+      const b = await bloquearBulto(t, id);
+      await aplicarMovimiento(t, {
+        tipo: "sacar",
+        bulto: b,
+        contenidoDespues: [],
+        packagingDespues: b.packaging,
+        estadoDespues: "salido",
+        posicionDestino: null,
+        motivo: { id: datos.motivo.id, nombre: datos.motivo.nombre },
+        usuario: { id: datos.usuario.id, nombre: datos.usuario.nombre },
+      });
+    });
+    const otraVez = await fotoEn(new Date("2020-01-11T00:00:00Z"), false, base.db);
+    assert.equal(otraVez.modelos.find((m) => m.id === datos.laja.id)?.unidades, 9);
+    const ahora = await fotoEn(new Date(Date.now() + 1000), true, base.db);
+    assert.equal(ahora.antiguedad.masViejos.some((v) => v.id === id), false);
   });
 });

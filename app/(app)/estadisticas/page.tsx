@@ -1,29 +1,17 @@
 import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
-import { estadisticas, estadisticasDeCategoria } from "@/lib/estadisticas";
-import {
-  dias as textoDias,
-  etiquetaPeriodo,
-  leerPeriodo,
-  porcentaje,
-  PERIODOS,
-} from "@/lib/estadisticas-calculo";
+import { estadisticas, estadisticasDeCategoria, evolucion, totales } from "@/lib/estadisticas";
+import { dias as textoDias, porcentaje } from "@/lib/estadisticas-calculo";
 import { Barras, Columnas, Seccion, Tile } from "@/components/graficos";
+import { GraficoEvolucion } from "@/components/evolucion";
+import { Delta, SelectorPeriodo } from "@/components/periodo";
 import { ETIQUETA_MOVIMIENTO, numero } from "@/lib/formato";
+import { POR, fechaLarga, diaDe, leerRango, rangoAnterior } from "@/lib/periodos";
 import { Titulo } from "@/components/ui";
 
 export const metadata = { title: "Estadísticas · Racks" };
 export const dynamic = "force-dynamic";
 
-const PLURAL: Record<string, string> = {
-  meter: "Ingresos",
-  sacar: "Egresos",
-  mover: "Reubicaciones",
-  ajuste: "Ajustes",
-  categoria: "Pasajes de categoría",
-};
-
-const corto = (dia: string) => `${dia.slice(8, 10)}/${dia.slice(5, 7)}`;
 
 /**
  * Lo que pasó en un período, para analizar y decidir.
@@ -42,48 +30,86 @@ const corto = (dia: string) => `${dia.slice(8, 10)}/${dia.slice(5, 7)}`;
 export default async function PantallaEstadisticas({
   searchParams,
 }: {
-  searchParams: Promise<{ dias?: string }>;
+  searchParams: Promise<{ p?: string; desde?: string; hasta?: string }>;
 }) {
   await requerirRol("admin", "auditor", "comercial", "control");
-  const periodo = leerPeriodo((await searchParams).dias);
-  const [e, cat] = await Promise.all([estadisticas(periodo), estadisticasDeCategoria(periodo)]);
+  const ahora = new Date();
+  const rango = leerRango(await searchParams, ahora);
+  const anterior = rangoAnterior(rango);
+  const [e, cat, tot, ant, evo] = await Promise.all([
+    estadisticas(rango),
+    estadisticasDeCategoria(rango),
+    totales(rango.inicio, rango.fin),
+    totales(anterior.inicio, anterior.fin),
+    evolucion(rango),
+  ]);
 
   const tipos = ["meter", "sacar", "mover", "ajuste"] as const;
-  // Una sola escala para las cuatro series de días: así se comparan a ojo.
-  const maximoDia = Math.max(1, ...tipos.flatMap((t) => e.porDia[t].map((d) => d.valor)));
+  // Una sola escala para las cuatro series: así se comparan a ojo.
+  const maximo = Math.max(1, ...tipos.flatMap((t) => e.porTramo[t].map((d) => d.valor)));
   const ingresos = e.totales.meter ?? 0;
   const precision = porcentaje(e.control.ok + e.control.vacioOk, e.control.chequeos);
+  const precisionAnt = porcentaje(ant.chequeosBien, ant.chequeos);
   const lineasDeModelos = [...new Set(e.modelos.map((m) => m.linea))];
+  const contra = anterior.etiqueta;
+  const hoy = diaDe(ahora);
+  // Un período en curso se muestra hasta hoy, no hasta su último día.
+  const hastaVisto = rango.enCurso ? hoy : rango.hastaDia;
+  const marcasHora = (i: number) => (rango.granularidad === "hora" && i % 3 === 0 ? `${String(i).padStart(2, "0")} h` : null);
 
   return (
     <>
-      <Titulo detalle={`Lo que pasó en los ${etiquetaPeriodo(periodo)}, para analizar y decidir.`}>
+      <Titulo detalle="Lo que pasó en un período: cuánto entró y salió, cómo evolucionó el stock y cómo se compara.">
         Estadísticas
       </Titulo>
 
-      <nav className="mb-4 flex flex-wrap gap-2">
-        {PERIODOS.map((p) => (
-          <Link
-            key={p}
-            href={`/estadisticas?dias=${p}`}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold ${
-              p === periodo ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"
-            }`}
-          >
-            {p === 365 ? "1 año" : `${p} días`}
-          </Link>
-        ))}
-      </nav>
+      <SelectorPeriodo rango={rango} ruta="/estadisticas" />
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {tipos.map((t) => (
-          <Tile
-            key={t}
-            etiqueta={PLURAL[t]}
-            valor={numero(e.totales[t] ?? 0)}
-            detalle="movimientos"
-          />
-        ))}
+      <p className="mt-3 text-sm text-slate-600">
+        <strong className="text-slate-900">{rango.etiqueta}</strong>
+        {rango.desdeDia === hastaVisto
+          ? ` · ${fechaLarga(rango.desdeDia, hoy)}`
+          : ` · del ${fechaLarga(rango.desdeDia, hoy)} al ${fechaLarga(hastaVisto, hoy)}`}
+        {rango.enCurso && " (en curso, hasta ahora)"}. Cada número se compara con <strong>{contra}</strong>.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <Tile
+          etiqueta="Bultos que entraron"
+          valor={numero(tot.bultosEntraron)}
+          detalle={<Delta actual={tot.bultosEntraron} anterior={ant.bultosEntraron} contra={contra} />}
+        />
+        <Tile
+          etiqueta="Bultos que salieron enteros"
+          valor={numero(tot.bultosSalieron)}
+          detalle={<Delta actual={tot.bultosSalieron} anterior={ant.bultosSalieron} contra={contra} />}
+        />
+        <Tile
+          etiqueta="Egresos (enteros y parciales)"
+          valor={numero(tot.movimientos.sacar ?? 0)}
+          detalle={<Delta actual={tot.movimientos.sacar ?? 0} anterior={ant.movimientos.sacar ?? 0} contra={contra} />}
+        />
+        <Tile
+          etiqueta="Reubicaciones"
+          valor={numero(tot.movimientos.mover ?? 0)}
+          detalle={<Delta actual={tot.movimientos.mover ?? 0} anterior={ant.movimientos.mover ?? 0} contra={contra} />}
+        />
+        <Tile
+          etiqueta="Chequeos de control"
+          valor={numero(tot.chequeos)}
+          detalle={<Delta actual={tot.chequeos} anterior={ant.chequeos} contra={contra} />}
+        />
+        <Tile
+          etiqueta="Coincidían al chequear"
+          valor={tot.chequeos > 0 ? `${precision}%` : "—"}
+          detalle={
+            tot.chequeos > 0 && ant.chequeos > 0 ? (
+              <Delta actual={precision} anterior={precisionAnt} contra={contra} unidad="puntos" />
+            ) : (
+              `${numero(tot.movimientos.ajuste ?? 0)} ajuste${(tot.movimientos.ajuste ?? 0) === 1 ? "" : "s"}`
+            )
+          }
+        />
       </div>
 
       {ingresos > 0 && (
@@ -95,7 +121,19 @@ export default async function PantallaEstadisticas({
       )}
 
       <Seccion
-        titulo="Movimientos por día"
+        titulo="Cómo evolucionó el stock"
+        detalle={`Lo que había al cierre de cada ${rango.granularidad === "hora" ? "hora" : rango.granularidad === "dia" ? "día" : rango.granularidad}. Un gráfico por línea, cada uno en su unidad: no se suman entre sí.`}
+      >
+        <div className="grid gap-2 sm:grid-cols-2">
+          <GraficoEvolucion titulo="Bultos en stock" unidad="bultos" serie={evo.bultos} />
+          {evo.lineas.map((l) => (
+            <GraficoEvolucion key={l.linea} titulo={l.linea} unidad={l.unidadPlural} serie={l.serie} />
+          ))}
+        </div>
+      </Seccion>
+
+      <Seccion
+        titulo={`Movimientos ${POR[rango.granularidad]}`}
         detalle="Las cuatro con la misma escala, para poder compararlas entre sí."
       >
         <div className="grid gap-2 sm:grid-cols-2">
@@ -104,8 +142,9 @@ export default async function PantallaEstadisticas({
               key={t}
               titulo={ETIQUETA_MOVIMIENTO[t]}
               unidad="movimientos"
-              maximo={maximoDia}
-              serie={e.porDia[t].map((d) => ({ clave: d.dia, valor: d.valor, etiqueta: corto(d.dia) }))}
+              maximo={maximo}
+              serie={e.porTramo[t]}
+              etiquetaX={rango.granularidad === "hora" ? marcasHora : undefined}
             />
           ))}
         </div>
@@ -113,7 +152,7 @@ export default async function PantallaEstadisticas({
 
       <Seccion
         titulo="Entró y salió, por línea"
-        detalle="En la unidad de cada línea. El ajuste es lo que control corrigió: el neto con signo, y el bruto es el tamaño del error."
+        detalle={`En la unidad de cada línea. Debajo, en gris, lo de ${contra}. El ajuste es lo que control corrigió: el neto con signo, y el bruto es el tamaño del error.`}
       >
         {e.flujoPorLinea.length === 0 ? (
           <p className="tarjeta p-4 text-sm text-slate-500">Sin movimientos de producto en este período.</p>
@@ -138,8 +177,18 @@ export default async function PantallaEstadisticas({
                         <span className="font-semibold text-slate-900">{f.linea}</span>
                         <span className="block text-xs text-slate-400">{f.unidadPlural}</span>
                       </td>
-                      <td className="cifra px-2 py-2 text-right">{numero(f.ingresaron)}</td>
-                      <td className="cifra px-2 py-2 text-right">{numero(f.egresaron)}</td>
+                      <td className="cifra px-2 py-2 text-right">
+                        {numero(f.ingresaron)}
+                        <span className="block text-[11px] font-normal text-slate-400">
+                          antes {numero(ant.porLinea[f.linea]?.entraron ?? 0)}
+                        </span>
+                      </td>
+                      <td className="cifra px-2 py-2 text-right">
+                        {numero(f.egresaron)}
+                        <span className="block text-[11px] font-normal text-slate-400">
+                          antes {numero(ant.porLinea[f.linea]?.salieron ?? 0)}
+                        </span>
+                      </td>
                       <td className="cifra px-2 py-2 text-right">
                         {neto > 0 ? "+" : ""}
                         {numero(neto)}
@@ -237,37 +286,6 @@ export default async function PantallaEstadisticas({
       </Seccion>
 
       <Seccion
-        titulo="Antigüedad del stock de hoy"
-        detalle="Cuánto hace que entró cada bulto que está en stock. No depende del período elegido."
-      >
-        <Barras
-          vacio="No hay stock."
-          filas={e.antiguedad.tramos.map((t) => ({
-            clave: t.tramo,
-            etiqueta: t.tramo,
-            valor: t.bultos,
-            texto: `${numero(t.bultos)} bultos`,
-          }))}
-        />
-        {e.antiguedad.masViejos.length > 0 && (
-          <>
-            <p className="mt-3 mb-1 text-xs font-semibold text-slate-500">Los diez que hace más que están</p>
-            <ul className="tarjeta divide-y divide-slate-100">
-              {e.antiguedad.masViejos.map((b) => (
-                <li key={b.id} className="flex items-baseline justify-between gap-3 px-4 py-2 text-sm">
-                  <span className="min-w-0 truncate">
-                    <span className="codigo text-slate-900">{b.ubicacion ?? "sin ubicar"}</span>{" "}
-                    <span className="text-slate-600">{b.contenido}</span>
-                  </span>
-                  <span className="shrink-0 text-xs text-slate-500">{textoDias(b.dias)}</span>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
-      </Seccion>
-
-      <Seccion
         titulo="Control"
         detalle="Cuánto coincide lo registrado con lo que hay. Cada corrección es un error que alguien cometió antes."
       >
@@ -286,9 +304,10 @@ export default async function PantallaEstadisticas({
         </div>
         <div className="mt-2">
           <Columnas
-            titulo="Chequeos por día"
+            titulo={`Chequeos ${POR[rango.granularidad]}`}
             unidad="chequeos"
-            serie={e.control.porDia.map((d) => ({ clave: d.dia, valor: d.valor, etiqueta: corto(d.dia) }))}
+            serie={e.control.porTramo}
+            etiquetaX={rango.granularidad === "hora" ? marcasHora : undefined}
           />
         </div>
         {e.control.motivosAjuste.length > 0 && (
@@ -457,7 +476,11 @@ export default async function PantallaEstadisticas({
       </Seccion>
 
       <p className="mt-6 text-sm text-slate-500">
-        Para el detalle de cada movimiento, o para llevarlo a Excel:{" "}
+        La antigüedad del stock y la foto de cualquier día están en{" "}
+        <Link href="/resumen" className="font-semibold underline">
+          Resumen
+        </Link>
+        . Para el detalle de cada movimiento, o para llevarlo a Excel:{" "}
         <Link href="/movimientos" className="font-semibold underline">
           Movimientos
         </Link>

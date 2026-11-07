@@ -804,23 +804,63 @@ la lista de los bultos que lo componen, con su posición.
 - **Admin**: ABM de empresas, líneas, modelos, normas, racks, posiciones y
   usuarios, el alcance del clark por nivel y la lista de exclusión.
 
-### 6.2.1 Tablero y estadísticas
+### 6.2.1 Resumen y estadísticas
 
-**Tablero** (`/tablero`, lo ven todos los roles y es donde entran admin y
-auditor): la foto de ahora, sacada del estado vivo. Ocupación sobre las
-posiciones **útiles** (lo fuera de uso no es lugar), libres, bultos en stock,
-sin ubicar, ajenos, confiabilidad, lo pendiente con link a donde se resuelve,
-el lugar por grupo como barra de estados, la ocupación por nivel (si arriba
-sobra lugar y el piso está lleno, el problema no es de espacio), por empresa
-con cuántos bultos propios están "afuera", el stock por línea y los modelos con
-más bultos.
+Son dos cosas distintas y viven en dos pantallas:
 
-**Estadísticas** (`/estadisticas`, todos menos el autoelevador): lo que pasó en
-7, 30, 90 días o un año, con el período en la URL. Movimientos por día (las
-cuatro series con la misma escala, en gráficos separados), lo que entró y salió
-por línea, lo que más sale, por qué sale, cuánto tarda en salir (mediana y
-promedio de días en el rack), la antigüedad del stock de hoy y los diez bultos
-más viejos, la precisión de control, la actividad por hora y por persona.
+- **Resumen = una FOTO.** Cómo estaba el stock en un momento: ahora, o al
+  cierre de cualquier día pasado.
+- **Estadísticas = una EVOLUCIÓN.** Qué pasó en un período y cómo cambió.
+
+**Resumen** (`/resumen`, lo ven todos los roles y es donde entran admin y
+auditor; reemplaza al Tablero, y `/tablero` redirige). Muestra bultos en stock,
+ocupación sobre las posiciones **útiles** (lo fuera de uso no es lugar), libres,
+sin ubicar, ajenos, de segunda, stock por línea y por modelo, el lugar por
+grupo, por nivel y por empresa, y la antigüedad del stock con los diez bultos
+más viejos. Para ahora suma la confiabilidad, lo pendiente y la configuración.
+
+- **El momento** va en la URL: `?fecha=2026-10-31` es ese día al cierre.
+- **La comparación** con otra foto (`&vs=…`) es opcional y muestra la diferencia
+  en cada número.
+
+La foto del pasado se **reconstruye del historial** (`lib/foto.ts`). Cada
+movimiento guarda cómo quedó el bulto después, así que el estado de un bulto en
+T es su último movimiento vigente antes de T. Un test comprueba que la foto de
+ahora es igual al stock vivo.
+
+Lo que no tiene historia se toma como está hoy, y la pantalla lo avisa:
+
+- racks, posiciones, alcance del clark, exclusiones y empresas;
+- la confiabilidad, que se muestra solo para ahora, porque la carga inicial
+  verifica sin dejar fila de chequeo.
+
+**Estadísticas** (`/estadisticas`, todos menos el autoelevador). Los períodos
+(`lib/periodos.ts`) son:
+
+- hoy, ayer, anteayer;
+- esta semana y la anterior (de lunes a domingo);
+- el mes en curso y el anterior;
+- los últimos 30 y 90 días, y el año en curso;
+- o un desde–hasta a elección.
+
+Todo va en hora de Argentina. Cada número de cabecera se compara con el
+**período anterior equivalente**, y un período en curso se compara con el mismo
+tramo del anterior: del 1 al 7 de noviembre contra del 1 al 7 de octubre, hoy
+hasta esta hora contra ayer hasta esta hora. Así un período a medio terminar no
+"pierde" siempre.
+
+Los gráficos van por hora, día, semana o mes según el largo del período, con los
+tramos vacíos en cero. Las secciones son:
+
+- **la evolución del stock**: lo que había al cierre de cada tramo, un gráfico
+  por línea y otro de bultos;
+- **los movimientos por tramo**;
+- lo que entró y salió por línea, con lo del período anterior;
+- lo que más sale y por qué sale;
+- cuánto tarda en salir;
+- control;
+- primera y segunda;
+- quién hace qué y a qué hora.
 
 Dos reglas que atraviesan las dos pantallas:
 
@@ -828,8 +868,11 @@ Dos reglas que atraviesan las dos pantallas:
   siempre abiertos por línea. Entre líneas se comparan bultos y movimientos.
 - **Los anulados no cuentan** y las fechas se agrupan en hora de Argentina.
 
-Los gráficos son barras hechas con divs, sin librerías, una serie por gráfico
-y en el azul de `--color-medida`. Nunca dos escalas en el mismo gráfico.
+Los gráficos van sin librerías, una serie por gráfico y en el azul de
+`--color-medida`: barras hechas con divs, y la evolución como una línea en SVG
+con tooltip al tocar. Nunca dos escalas en el mismo gráfico. Las diferencias van
+en gris con flecha, sin verde ni rojo: que entre más o salga más no es bueno ni
+malo por sí solo.
 
 ### 6.2.2 Racks en perspectiva
 

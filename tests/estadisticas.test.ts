@@ -1,9 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
-  completarDias,
   dias,
-  leerPeriodo,
   mediana,
   porcentaje,
   tramoDeAntiguedad,
@@ -11,28 +9,6 @@ import {
 import { puedeVer, rutaInicial } from "../lib/permisos";
 
 describe("estadísticas: las cuentas", () => {
-  test("el período de la URL: lo raro vuelve a 30", () => {
-    assert.equal(leerPeriodo("90"), 90);
-    assert.equal(leerPeriodo("365"), 365);
-    assert.equal(leerPeriodo("12"), 30);
-    assert.equal(leerPeriodo(undefined), 30);
-    assert.equal(leerPeriodo("abc"), 30);
-  });
-
-  test("los días sin movimientos aparecen en cero, y en orden", () => {
-    const serie = completarDias([{ dia: "2026-10-20", valor: 4 }], 3, "2026-10-22");
-    assert.deepEqual(serie, [
-      { dia: "2026-10-20", valor: 4 },
-      { dia: "2026-10-21", valor: 0 },
-      { dia: "2026-10-22", valor: 0 },
-    ]);
-  });
-
-  test("completarDias cruza bien el fin de mes", () => {
-    const serie = completarDias([], 3, "2026-11-01");
-    assert.deepEqual(serie.map((s) => s.dia), ["2026-10-30", "2026-10-31", "2026-11-01"]);
-  });
-
   test("porcentaje no divide por cero", () => {
     assert.equal(porcentaje(1, 0), 0);
     assert.equal(porcentaje(1, 3), 33);
@@ -59,10 +35,10 @@ describe("estadísticas: las cuentas", () => {
   });
 });
 
-describe("quién ve el tablero y las estadísticas", () => {
-  test("el tablero lo ven todos", () => {
+describe("quién ve el resumen y las estadísticas", () => {
+  test("el resumen lo ven todos", () => {
     for (const rol of ["admin", "auditor", "autoelevador", "control", "comercial"] as const) {
-      assert.ok(puedeVer(rol, "/tablero"), rol);
+      assert.ok(puedeVer(rol, "/resumen"), rol);
     }
   });
 
@@ -71,9 +47,9 @@ describe("quién ve el tablero y las estadísticas", () => {
     assert.ok(puedeVer("comercial", "/estadisticas"));
   });
 
-  test("admin y auditor entran al tablero; el resto, a su puesto", () => {
-    assert.equal(rutaInicial("admin"), "/tablero");
-    assert.equal(rutaInicial("auditor"), "/tablero");
+  test("admin y auditor entran al resumen; el resto, a su puesto", () => {
+    assert.equal(rutaInicial("admin"), "/resumen");
+    assert.equal(rutaInicial("auditor"), "/resumen");
     assert.equal(rutaInicial("autoelevador"), "/mover");
   });
 });
