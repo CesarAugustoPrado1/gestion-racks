@@ -16,7 +16,9 @@ export type Curvas = {
   grupos: string[];
   niveles: string[];
   lineas: string[];
-  modelos: Array<{ id: number; nombre: string; linea: string }>;
+  empresas: string[];
+  modelos: Array<{ id: number; nombre: string; linea: string; empresa: string | null }>;
+  semivida: number;
   posiciones: Array<{ id: number; codigo: string }>;
   posicionPedida: { id: number; codigo: string } | null;
 };
@@ -61,16 +63,18 @@ export async function curvas(r: Rango, codigoPosicion: string | null = null): Pr
       Array<{ id: number; codigo: string; grupo: string; nivel: number; niveles: number; orden: number; porden: number }>
     >,
     db.execute(sql`
-      select m.id, m.nombre, l.nombre as linea
+      select m.id, m.nombre, l.nombre as linea, e.nombre as empresa
         from modelos m join lineas l on l.id = m.linea_id
+        left join empresas e on e.id = m.empresa_id
        order by l.orden, m.orden, m.nombre
-    `) as unknown as Promise<Array<{ id: number; nombre: string; linea: string }>>,
+    `) as unknown as Promise<Array<{ id: number; nombre: string; linea: string; empresa: string | null }>>,
     db.execute(sql`select nombre from lineas where activa order by orden`) as unknown as Promise<Array<{ nombre: string }>>,
     semividaDias(),
   ]);
 
   const posPorId = new Map(posiciones.map((p) => [p.id, p]));
   const lineaDe = new Map(modelos.map((m) => [m.id, m.linea]));
+  const empresaDe = new Map(modelos.map((m) => [m.id, m.empresa]));
   const pedida = codigoPosicion
     ? posiciones.find((p) => p.codigo.toUpperCase() === codigoPosicion.trim().toUpperCase()) ?? null
     : null;
@@ -101,6 +105,7 @@ export async function curvas(r: Rango, codigoPosicion: string | null = null): Pr
         return x ? nombreDeNivel(x.nivel, x.niveles) : null;
       },
       lineaDe: (m) => lineaDe.get(m) ?? null,
+      empresaDe: (m) => empresaDe.get(m) ?? null,
     },
     pedida?.id ?? null,
   ).map((p, i) => ({ ...p, etiqueta: tramos[i].etiqueta, clave: tramos[i].clave }));
@@ -118,7 +123,9 @@ export async function curvas(r: Rango, codigoPosicion: string | null = null): Pr
     grupos: [...new Set(posiciones.map((p) => p.grupo))],
     niveles,
     lineas: lineas.map((l) => l.nombre),
+    empresas: [...new Set(modelos.map((m) => m.empresa).filter((e): e is string => e != null))],
     modelos,
+    semivida,
     posiciones: posiciones.map((p) => ({ id: p.id, codigo: p.codigo })),
     posicionPedida: pedida ? { id: pedida.id, codigo: pedida.codigo } : null,
   };

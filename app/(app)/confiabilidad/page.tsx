@@ -14,9 +14,11 @@ import { numero } from "@/lib/formato";
 import { describirPosicion } from "@/lib/posiciones";
 import { Titulo } from "@/components/ui";
 import { curvas } from "@/lib/curvas";
-import { leerRango, POR } from "@/lib/periodos";
+import { leerRango, lunesDe, POR } from "@/lib/periodos";
 import { SelectorPeriodo } from "@/components/periodo";
 import { GraficoConfianza } from "@/components/evolucion";
+import { Columnas } from "@/components/graficos";
+import { ETIQUETA_PACKAGING, PACKAGINGS } from "@/lib/formato";
 import type { Indice, PuntoDeCurva } from "@/lib/confianza-historia";
 
 export const metadata = { title: "Confiabilidad · Racks" };
@@ -67,6 +69,32 @@ export default async function PantallaConfiabilidad({
   const modelosConDato = curva.modelos.filter((m) => tiene((p) => p.porModelo[m.id]));
   const modeloElegido = modelosConDato.find((m) => String(m.id) === q.modelo) ?? modelosConDato[0] ?? null;
   const ultimo = curva.puntos[curva.puntos.length - 1];
+  /**
+   * Qué parte de los chequeos encontró una diferencia. Día por día es ruido
+   * (un día con un solo chequeo corregido da 100 %), así que con tramos diarios
+   * se mira la ventana de los últimos 7 días; por hora, lo acumulado del día; y
+   * por semana o mes, el tramo mismo.
+   */
+  const ventana = rango.granularidad === "dia" ? 7 : rango.granularidad === "hora" ? Infinity : 1;
+  const tasaDeCorreccion = curva.puntos.map((p, i) => {
+    const desde = ventana === Infinity ? 0 : Math.max(0, i - ventana + 1);
+    const tramo = curva.puntos.slice(desde, i + 1);
+    const chequeos = tramo.reduce((s2, x) => s2 + x.chequeosEnTramo, 0);
+    const corregidos = tramo.reduce((s2, x) => s2 + x.corregidosEnTramo, 0);
+    return { clave: p.clave, etiqueta: p.etiqueta, valor: chequeos > 0 ? corregidos / chequeos : null };
+  });
+  // Las correcciones, por semana cuando los tramos son días y son muchos.
+  const porSemana = rango.granularidad === "dia" && curva.puntos.length > 14;
+  const correcciones = porSemana
+    ? [...curva.puntos
+        .reduce((m, p) => {
+          const lunes = lunesDe(p.clave);
+          const actual = m.get(lunes) ?? { clave: lunes, etiqueta: `sem. ${Number(lunes.slice(8, 10))}/${Number(lunes.slice(5, 7))}`, valor: 0 };
+          actual.valor += p.corregidosEnTramo;
+          return m.set(lunes, actual);
+        }, new Map<string, { clave: string; etiqueta: string; valor: number }>())
+        .values()]
+    : curva.puntos.map((p) => ({ clave: p.clave, etiqueta: p.etiqueta, valor: p.corregidosEnTramo }));
   const linkCon = (extra: Record<string, string>) => {
     const u = new URLSearchParams();
     if (q.desde && q.hasta) {
@@ -213,6 +241,36 @@ export default async function PantallaConfiabilidad({
             />
           </div>
 
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <GraficoConfianza
+              titulo="Días desde el último chequeo"
+              unidad="días"
+              maximo={curva.semivida * 1.5}
+              serie={curva.puntos.map((p) => ({ clave: p.clave, etiqueta: p.etiqueta, valor: p.diasDesdeChequeo }))}
+              detalle="En promedio, de los bultos que se chequearon alguna vez. Más bajo es mejor."
+              cortes={[{ valor: curva.semivida, etiqueta: `${curva.semivida} días: el chequeo vale la mitad` }]}
+            />
+            <GraficoConfianza
+              titulo="Chequeos que hubo que corregir"
+              serie={tasaDeCorreccion}
+              detalle={`${
+                rango.granularidad === "dia"
+                  ? "De los chequeos de los últimos 7 días"
+                  : rango.granularidad === "hora"
+                    ? "De los chequeos del día hasta esa hora"
+                    : `De los chequeos de cada ${rango.granularidad}`
+              }, qué parte encontró una diferencia. Si baja, se registra mejor.`}
+              cortes={[]}
+            />
+          </div>
+          <div className="mt-2">
+            <Columnas
+              titulo={`Correcciones de control ${porSemana ? "por semana" : POR[rango.granularidad]}`}
+              unidad="correcciones"
+              serie={correcciones}
+            />
+          </div>
+
           <h3 className="mt-5 mb-1 text-sm font-bold text-slate-900">Por grupo de racks</h3>
           <div className="grid gap-2 sm:grid-cols-2">
             {curva.grupos
@@ -241,6 +299,27 @@ export default async function PantallaConfiabilidad({
               .map((l) => (
                 <GraficoConfianza key={l} titulo={l} serie={serie((p) => p.porLinea[l])} />
               ))}
+          </div>
+
+          {curva.empresas.length > 0 && (
+            <>
+              <h3 className="mt-5 mb-1 text-sm font-bold text-slate-900">Por empresa</h3>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {curva.empresas
+                  .filter((e) => tiene((p) => p.porEmpresa[e]))
+                  .map((e) => (
+                    <GraficoConfianza key={e} titulo={e} serie={serie((p) => p.porEmpresa[e])} />
+                  ))}
+              </div>
+            </>
+          )}
+
+          <h3 className="mt-5 mb-1 text-sm font-bold text-slate-900">Por packaging</h3>
+          <p className="mb-2 text-xs text-slate-500">Si los sueltos son menos confiables que los palets, acá se ve.</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {PACKAGINGS.filter((k) => tiene((p) => p.porPackaging[k])).map((k) => (
+              <GraficoConfianza key={k} titulo={ETIQUETA_PACKAGING[k]} serie={serie((p) => p.porPackaging[k])} />
+            ))}
           </div>
 
           <h3 className="mt-5 mb-1 text-sm font-bold text-slate-900">Por modelo</h3>
