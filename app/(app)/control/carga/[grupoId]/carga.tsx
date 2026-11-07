@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   cargarEnPosicion,
   cerrarCargaInicial,
@@ -11,29 +11,31 @@ import {
 } from "@/lib/acciones/carga";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
+import { SelectorPosicion } from "@/components/selector-posicion";
+import { ElegirModelo } from "@/components/elegir-modelo";
 import { validarComposicion, validarDescripcion } from "@/lib/bultos";
 import { ETIQUETA_PACKAGING, PACKAGINGS } from "@/lib/formato";
 import type { ModeloParaCargar, PosicionDeCarga } from "@/lib/consultas";
 import type { Packaging } from "@/lib/db/schema";
 
-const CLAVE_FECHA = "carga-inicial-fecha";
-
 const hoy = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
 
 /**
- * La carga inicial en el celular. Arriba la posición en la que está parado,
- * abajo la lista para saltar a otra.
+ * La carga inicial en el celular. Arriba el avance, después DÓNDE está parado
+ * -grupo, calle o columna, altura, profundidad- y abajo QUÉ hay ahí.
  *
- * Lo cargado se RECUERDA entre posiciones -packaging, modelos, cantidades y
- * fecha-: en un rack, el palet de al lado suele ser igual al de recién, y
- * volver a elegir todo en cada hueco es lo que hace abandonar una carga.
+ * Cada posición arranca en blanco: no se arrastra lo cargado en la anterior.
+ * Un formulario que viene lleno invita a tocar "Cargar" sin mirar, y en una
+ * carga inicial eso es un bulto inventado en el lugar equivocado.
  */
 export function Carga({
   grupo,
+  grupos,
   posiciones,
   modelos,
 }: {
   grupo: { id: number; codigo: string };
+  grupos: Array<{ codigo: string; href: string; actual: boolean; detalle?: string }>;
   posiciones: PosicionDeCarga[];
   modelos: ModeloParaCargar[];
 }) {
@@ -63,7 +65,7 @@ export function Carga({
 
   return (
     <div className="space-y-4">
-      <div className="tarjeta p-4">
+      <div ref={arriba} className="tarjeta scroll-mt-20 p-4">
         <div className="flex items-baseline justify-between text-sm">
           <span className="font-semibold text-slate-800">
             {relevadas} de {posiciones.length} relevadas
@@ -80,75 +82,53 @@ export function Carga({
         </div>
       </div>
 
-      <div ref={arriba} className="scroll-mt-20">
-        {hecho && (
-          <div className="mb-3">
-            <Aviso tono="exito">{hecho}</Aviso>
-          </div>
-        )}
-        {avisos && (
-          <div className="mb-3">
-            <Aviso tono="advertencia">
-              <strong>{avisos.codigo}</strong> se cargó, pero hay algo para revisar:{" "}
-              {avisos.textos.join(" ")}
-            </Aviso>
-          </div>
-        )}
-        {elegida && (
-          <Posicion
-            key={elegida.id}
-            p={elegida}
-            modelos={modelos}
-            alCargar={(codigo, textos) => {
-              setAvisos(textos.length ? { codigo, textos } : null);
-              avanzar(elegida.id, `${elegida.codigo}: cargado ${codigo}.`);
-            }}
-            alVaciar={() => {
-              setAvisos(null);
-              avanzar(elegida.id, `${elegida.codigo}: ${elegida.ocupante ? "confirmada" : "vacía"}.`);
-            }}
-            alDeshacer={() => {
-              setAvisos(null);
-              setHecho(`${elegida.codigo} volvió a pendiente.`);
-              router.refresh();
-            }}
-          />
-        )}
+      {hecho && <Aviso tono="exito">{hecho}</Aviso>}
+      {avisos && (
+        <Aviso tono="advertencia">
+          <strong>{avisos.codigo}</strong> se cargó, pero hay algo para revisar: {avisos.textos.join(" ")}
+        </Aviso>
+      )}
+
+      <div className="tarjeta p-5">
+        <span className="etiqueta">Dónde estás</span>
+        <SelectorPosicion
+          posiciones={posiciones}
+          valor={elegidaId}
+          onCambio={(id) => {
+            setElegidaId(id);
+            setHecho(null);
+            setAvisos(null);
+          }}
+          hecha={(p) => p.relevada}
+          grupos={grupos}
+        />
+        <p className="mt-3 text-xs text-slate-500">
+          En verde, lo ya relevado. Al cargar, pasa sola a la siguiente pendiente.
+        </p>
       </div>
 
-      <ul className="space-y-1.5">
-        {posiciones.map((p) => (
-          <li key={p.id}>
-            <button
-              type="button"
-              onClick={() => {
-                setElegidaId(p.id);
-                setHecho(null);
-                setAvisos(null);
-                arriba.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-              className={`tarjeta flex w-full items-center gap-3 px-4 py-3 text-left ${
-                p.id === elegidaId ? "ring-2 ring-slate-900" : ""
-              }`}
-            >
-              <span
-                className={`h-8 w-1.5 shrink-0 rounded-full ${p.relevada ? "bg-confiable" : "bg-sin-datos"}`}
-              />
-              <span className="codigo w-20 shrink-0 text-sm text-slate-900">{p.codigo}</span>
-              <span className="min-w-0 flex-1 truncate text-sm text-slate-600">
-                {p.ocupante
-                  ? p.ocupante.contenido
-                  : p.invasor
-                    ? `La tapa ${p.invasor} desde abajo`
-                    : p.relevada
-                      ? "Vacía"
-                      : "Pendiente"}
-              </span>
-              {p.fueraDeUso && <span className="chip bg-slate-100 text-slate-500">fuera de uso</span>}
-            </button>
-          </li>
-        ))}
-      </ul>
+      {elegida ? (
+        <Posicion
+          key={elegida.id}
+          p={elegida}
+          modelos={modelos}
+          alCargar={(codigo, textos) => {
+            setAvisos(textos.length ? { codigo, textos } : null);
+            avanzar(elegida.id, `${elegida.codigo}: cargado ${codigo}.`);
+          }}
+          alVaciar={() => {
+            setAvisos(null);
+            avanzar(elegida.id, `${elegida.codigo}: ${elegida.ocupante ? "confirmada" : "vacía"}.`);
+          }}
+          alDeshacer={() => {
+            setAvisos(null);
+            setHecho(`${elegida.codigo} volvió a pendiente.`);
+            router.refresh();
+          }}
+        />
+      ) : (
+        <p className="text-center text-sm text-slate-500">Terminá de elegir la posición.</p>
+      )}
 
       <Cerrar grupo={grupo} pendientes={posiciones.length - relevadas} />
     </div>
@@ -264,16 +244,11 @@ function Posicion({
 }
 
 /**
- * Lo que se cargó la última vez: el punto de partida del siguiente hueco.
- * Vive a nivel de módulo para sobrevivir al cambio de posición (cada posición
- * monta su propio formulario) sin depender del almacenamiento del navegador.
+ * Lo que hay en una posición. Arranca SIEMPRE en blanco: producto, palet, sin
+ * modelos y SIN FECHA. Nada se arrastra de la posición anterior: lo que viene
+ * puesto se termina cargando sin mirar, y la fecha de ingreso de un palet no
+ * dice nada de la del de al lado.
  */
-let recuerdo: {
-  objeto: boolean;
-  packaging: Packaging;
-  lineas: Array<{ modeloId: number; cantidad: string }>;
-} = { objeto: false, packaging: "palet", lineas: [] };
-
 function Formulario({
   p,
   modelos,
@@ -286,32 +261,15 @@ function Formulario({
   alVaciar: () => void;
 }) {
   const { ejecutar, enviando, error, limpiar } = useAccion();
-  const [objeto, setObjeto] = useState(recuerdo.objeto);
-  const [packaging, setPackaging] = useState<Packaging>(recuerdo.packaging);
-  const [lineas, setLineas] = useState(recuerdo.lineas);
-  /** El modelo recién tocado: solo ahí salta el cursor, no al llegar a cada posición. */
+  const [objeto, setObjeto] = useState(false);
+  const [packaging, setPackaging] = useState<Packaging>("palet");
+  const [lineas, setLineas] = useState<Array<{ modeloId: number; cantidad: string }>>([]);
+  /** El modelo recién tocado: ahí salta el cursor si hay que escribir la cantidad. */
   const [recienTocado, setRecienTocado] = useState<number | null>(null);
   const [descripcion, setDescripcion] = useState("");
   const [nota, setNota] = useState("");
-  const [fecha, setFecha] = useState(hoy());
-
-  useEffect(() => {
-    try {
-      const guardada = localStorage.getItem(CLAVE_FECHA);
-      if (guardada && guardada <= hoy()) setFecha(guardada);
-    } catch {
-      // Sin almacenamiento: arranca en hoy.
-    }
-  }, []);
-
-  function cambiarFecha(v: string) {
-    setFecha(v);
-    try {
-      localStorage.setItem(CLAVE_FECHA, v);
-    } catch {
-      // No pasa nada: solo no se recuerda.
-    }
-  }
+  /** Vacía a propósito: ni la de la posición anterior ni "hoy", que en una carga inicial nunca es. */
+  const [fecha, setFecha] = useState("");
 
   /**
    * Al cambiar el packaging la cantidad sale de la norma del nuevo. El suelto
@@ -326,6 +284,14 @@ function Formulario({
         return { ...l, cantidad: norma != null ? String(norma) : "" };
       }),
     );
+  }
+
+  function agregar(m: ModeloParaCargar) {
+    setRecienTocado(m.id);
+    setLineas((ls) => [
+      ...ls,
+      { modeloId: m.id, cantidad: m.normas[packaging] != null ? String(m.normas[packaging]) : "" },
+    ]);
   }
 
   const contenido = lineas
@@ -406,65 +372,47 @@ function Formulario({
             </div>
           </div>
 
-          {lineas.length > 0 && (
-            <ul className="space-y-2">
-              {lineas.map((l) => {
-                const m = modelos.find((x) => x.id === l.modeloId);
-                if (!m) return null;
-                return (
-                  <li key={l.modeloId} className="flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{m.nombre}</span>
-                    <input
-                      className={`campo w-24 text-right ${
-                        Number(l.cantidad) > 0 ? "" : "ring-2 ring-amber-400"
-                      }`}
-                      inputMode="numeric"
-                      placeholder="Cant."
-                      // Sin norma (suelto) la cantidad se escribe: el cursor va directo ahí.
-                      autoFocus={recienTocado === l.modeloId && l.cantidad === ""}
-                      value={l.cantidad}
-                      onChange={(e) =>
-                        setLineas((ls) =>
-                          ls.map((x) =>
-                            x.modeloId === l.modeloId ? { ...x, cantidad: e.target.value.replace(/\D/g, "") } : x,
-                          ),
-                        )
-                      }
-                      aria-label={`Cantidad de ${m.nombre}`}
-                    />
-                    <button
-                      type="button"
-                      className="px-2 text-lg text-slate-400"
-                      onClick={() => setLineas((ls) => ls.filter((x) => x.modeloId !== l.modeloId))}
-                      aria-label={`Quitar ${m.nombre}`}
-                    >
-                      ✕
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <ElegirModelo modelos={modelos} yaElegidos={lineas.map((l) => l.modeloId)} alElegir={agregar} />
 
-          <div className="flex flex-wrap gap-1.5">
-            {modelos.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                disabled={lineas.some((l) => l.modeloId === m.id)}
-                onClick={() => {
-                  setRecienTocado(m.id);
-                  setLineas((ls) => [
-                    ...ls,
-                    { modeloId: m.id, cantidad: m.normas[packaging] != null ? String(m.normas[packaging]) : "" },
-                  ]);
-                }}
-                className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-40"
-              >
-                {m.nombre}
-              </button>
-            ))}
-          </div>
+          {lineas.length > 0 && (
+            <div>
+              <span className="etiqueta">Qué lleva</span>
+              <ul className="space-y-2">
+                {lineas.map((l) => {
+                  const m = modelos.find((x) => x.id === l.modeloId);
+                  if (!m) return null;
+                  return (
+                    <li key={l.modeloId} className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{m.nombre}</span>
+                      <input
+                        className={`campo w-24 text-right ${Number(l.cantidad) > 0 ? "" : "ring-2 ring-amber-400"}`}
+                        inputMode="numeric"
+                        placeholder="Cant."
+                        autoFocus={recienTocado === l.modeloId && l.cantidad === ""}
+                        value={l.cantidad}
+                        onChange={(e) =>
+                          setLineas((ls) =>
+                            ls.map((x) =>
+                              x.modeloId === l.modeloId ? { ...x, cantidad: e.target.value.replace(/\D/g, "") } : x,
+                            ),
+                          )
+                        }
+                        aria-label={`Cantidad de ${m.nombre}`}
+                      />
+                      <button
+                        type="button"
+                        className="px-2 text-lg text-slate-400"
+                        onClick={() => setLineas((ls) => ls.filter((x) => x.modeloId !== l.modeloId))}
+                        aria-label={`Quitar ${m.nombre}`}
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
 
           {faltaCantidad && (
             <Aviso tono="info">
@@ -484,8 +432,9 @@ function Formulario({
           className="campo"
           value={fecha}
           max={hoy()}
-          onChange={(e) => cambiarFecha(e.target.value)}
+          onChange={(e) => setFecha(e.target.value)}
         />
+        {!fechaValida && <span className="mt-1 block text-xs text-amber-700">Poné la fecha: con el mes alcanza.</span>}
       </label>
 
       <input className="campo" value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Nota (opcional)" />
@@ -496,12 +445,6 @@ function Formulario({
         disabled={enviando || !completo}
         onClick={() => {
           limpiar();
-          // No hay dos sueltos iguales: del suelto se recuerdan los modelos, no la cantidad.
-          recuerdo = {
-            objeto,
-            packaging,
-            lineas: packaging === "suelto" ? lineas.map((l) => ({ ...l, cantidad: "" })) : lineas,
-          };
           void ejecutar(
             () =>
               cargarEnPosicion({

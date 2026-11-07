@@ -8,6 +8,7 @@ import { Aviso } from "@/components/ui";
 import { validarComposicion, validarDescripcion } from "@/lib/bultos";
 import { ETIQUETA_PACKAGING, PACKAGINGS, numero } from "@/lib/formato";
 import { SelectorPosicion } from "@/components/selector-posicion";
+import { ElegirModelo } from "@/components/elegir-modelo";
 import { avisoAjeno, esAjeno } from "@/lib/uso";
 import type { ModeloParaCargar, PosicionLibre } from "@/lib/consultas";
 import type { Packaging } from "@/lib/db/schema";
@@ -130,11 +131,6 @@ export function FormularioMeter({
     );
   }
 
-  const porLinea = new Map<string, ModeloParaCargar[]>();
-  for (const m of modelos) {
-    porLinea.set(m.lineaNombre, [...(porLinea.get(m.lineaNombre) ?? []), m]);
-  }
-
   return (
     <div className="space-y-4">
       {error && <Aviso>{error}</Aviso>}
@@ -211,7 +207,7 @@ export function FormularioMeter({
 
             {lineas.length === 0 && (
               <p className="mb-3 text-sm text-slate-500">
-                Tocá un modelo. La cantidad viene con la norma puesta.
+                Elegí el tipo o escribí el modelo, y tocalo. La cantidad viene con la norma puesta.
               </p>
             )}
 
@@ -264,26 +260,11 @@ export function FormularioMeter({
               })}
             </ul>
 
-            <div className="space-y-2">
-              {[...porLinea.entries()].map(([linea, suyos]) => (
-                <div key={linea}>
-                  <p className="mb-1 text-xs font-medium text-slate-400">{linea}</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {suyos.map((m) => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => agregar(m.id)}
-                        disabled={lineas.some((l) => l.modeloId === m.id)}
-                        className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-40"
-                      >
-                        {m.nombre}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ElegirModelo
+              modelos={modelos}
+              yaElegidos={lineas.map((l) => l.modeloId)}
+              alElegir={(m) => agregar(m.id)}
+            />
 
             {faltaCantidad && (
               <div className="mt-3">

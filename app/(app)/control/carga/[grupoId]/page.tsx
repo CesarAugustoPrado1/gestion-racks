@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requerirRol } from "@/lib/auth";
-import { cargaDelGrupo, modelosParaCargar } from "@/lib/consultas";
+import { cargaDelGrupo, gruposEnCarga, modelosParaCargar } from "@/lib/consultas";
 import { Titulo } from "@/components/ui";
 import { Carga } from "./carga";
 
@@ -11,7 +11,11 @@ export const dynamic = "force-dynamic";
 export default async function PantallaCarga({ params }: { params: Promise<{ grupoId: string }> }) {
   await requerirRol("control", "admin");
   const { grupoId } = await params;
-  const [datos, modelos] = await Promise.all([cargaDelGrupo(Number(grupoId)), modelosParaCargar()]);
+  const [datos, modelos, enCarga] = await Promise.all([
+    cargaDelGrupo(Number(grupoId)),
+    modelosParaCargar(),
+    gruposEnCarga(),
+  ]);
   if (!datos) notFound();
   const { grupo } = datos;
   const relevadas = datos.posiciones.filter((p) => p.relevada).length;
@@ -56,7 +60,17 @@ export default async function PantallaCarga({ params }: { params: Promise<{ grup
           </Link>
         </div>
       ) : (
-        <Carga grupo={{ id: grupo.id, codigo: grupo.codigo }} posiciones={datos.posiciones} modelos={modelos} />
+        <Carga
+          grupo={{ id: grupo.id, codigo: grupo.codigo }}
+          grupos={enCarga.map((g) => ({
+            codigo: g.codigo,
+            href: `/control/carga/${g.id}`,
+            actual: g.id === grupo.id,
+            detalle: `${g.relevadas}/${g.total}`,
+          }))}
+          posiciones={datos.posiciones}
+          modelos={modelos}
+        />
       )}
     </>
   );
