@@ -11,6 +11,8 @@ export type PosicionElegible = {
   rack: string;
   empresa: string | null;
   penetrable: boolean;
+  /** La 01 está a la derecha: las calles o columnas se ofrecen en ese orden. */
+  numeracionInvertida?: boolean;
   /** Calle (penetrable) o columna corrida (selectivo). */
   calle: number;
   nivel: number;
@@ -77,7 +79,9 @@ export function SelectorPosicion<P extends PosicionElegible>({
 
   const delRack = posiciones.filter((p) => p.rack === rack);
   const penetrable = delRack[0]?.penetrable ?? false;
+  // En el orden en que están en el galpón: numerado al revés, la 01 a la derecha.
   const calles = unicos(delRack.map((p) => p.calle));
+  if (delRack[0]?.numeracionInvertida) calles.reverse();
   const deLaCalle = delRack.filter((p) => p.calle === calle);
   const niveles = unicos(deLaCalle.map((p) => p.nivel));
   const delNivel = deLaCalle.filter((p) => p.nivel === nivel);

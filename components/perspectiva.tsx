@@ -153,7 +153,8 @@ export function PerspectivaDeGrupo({
         {grupo.nombre ? `${grupo.nombre} · ` : ""}
         {grupo.penetrable
           ? `${grupo.unidades} calles de ${grupo.niveles} × ${grupo.profundidad} · se entra por la ${grupo.acceso}`
-          : `${grupo.unidades} módulos de ${grupo.ancho} × ${grupo.niveles}`}
+          : `${grupo.unidades * (grupo.ancho ?? 1)} columnas de ${grupo.niveles} niveles`}
+        {grupo.numeracionInvertida ? " · numerado de derecha a izquierda" : ""}
       </p>
     </header>
   );
@@ -215,9 +216,12 @@ function Penetrable({ grupo, vista, semivida, abrev, rayas, patron }: PropsDibuj
     <svg width={ancho} height={alto} viewBox={`0 0 ${ancho} ${alto}`} role="img" aria-label={`Grupo ${grupo.codigo} en perspectiva`} className="font-sans">
       {patron}
       {Array.from({ length: g.calles }, (_, c) => {
+        // `c` es el lugar en el dibujo, de izquierda a derecha. Numerado al
+        // revés, en el lugar de más a la izquierda va la última calle.
+        const calle = grupo.numeracionInvertida ? g.calles - c : c + 1;
         const piso = [p(c, 0, 0), p(c, 0, g.profundidad)];
         const pared = [p(c, 0, g.profundidad), p(c, g.niveles, g.profundidad)];
-        const celdas = grupo.celdas.filter((x) => x.unidad === c + 1);
+        const celdas = grupo.celdas.filter((x) => x.unidad === calle);
         // Del fondo hacia el pasillo: lo de adelante se dibuja encima.
         const orden = [...celdas].sort((a, b) => (b.profundidad ?? 1) - (a.profundidad ?? 1));
         return (
@@ -243,7 +247,7 @@ function Penetrable({ grupo, vista, semivida, abrev, rayas, patron }: PropsDibuj
               fontWeight={700}
               fill="var(--color-slate-700)"
             >
-              {c + 1}
+              {String(calle).padStart(2, "0")}
             </text>
           </g>
         );
@@ -295,6 +299,14 @@ function Selectivo({ grupo, vista, semivida, abrev, rayas, patron }: PropsDibujo
     <svg width={ancho} height={alto} viewBox={`0 0 ${ancho} ${alto}`} role="img" aria-label={`Grupo ${grupo.codigo} en perspectiva`} className="font-sans">
       {patron}
       {Array.from({ length: g.modulos }, (_, m) => {
+        // `m` es el lugar en el dibujo, de izquierda a derecha. Numerado al
+        // revés, se dan vuelta los módulos y las columnas de cada uno.
+        const inv = grupo.numeracionInvertida;
+        const modulo = inv ? g.modulos - 1 - m : m;
+        const lugar = (columna: number) => {
+          const enModulo = (columna - 1) % g.ancho;
+          return inv ? g.ancho - 1 - enModulo : enModulo;
+        };
         const x0 = origen[0] + xDeModulo(g, m);
         const x1 = x0 + g.ancho * w;
         const yPiso = origen[1];
@@ -303,7 +315,8 @@ function Selectivo({ grupo, vista, semivida, abrev, rayas, patron }: PropsDibujo
         // dos con bordes paralelos al frente o al fondo, nunca inclinados al azar.
         const arriba: Punto[] = [[x0, yTecho], [x1, yTecho], [x1 + fx, yTecho - fy], [x0 + fx, yTecho - fy]];
         const costado: Punto[] = [[x1, yPiso], [x1 + fx, yPiso - fy], [x1 + fx, yTecho - fy], [x1, yTecho]];
-        const celdas = grupo.celdas.filter((x) => x.unidad === m + 1);
+        const celdas = grupo.celdas.filter((x) => x.unidad === modulo + 1);
+        const columnas = Array.from({ length: g.ancho }, (_, i) => modulo * g.ancho + i + 1);
         return (
           <g key={m}>
             <polygon points={comoPuntos(arriba)} fill="var(--color-slate-100)" stroke="var(--color-slate-300)" strokeWidth={1} />
@@ -313,16 +326,27 @@ function Selectivo({ grupo, vista, semivida, abrev, rayas, patron }: PropsDibujo
               <Hueco
                 key={celda.posicionId}
                 celda={celda}
-                esquinas={huecoSelectivo(g, m, ((celda.columna ?? 1) - 1) % g.ancho, celda.nivel - 1, origen)}
+                esquinas={huecoSelectivo(g, m, lugar(celda.columna ?? 1), celda.nivel - 1, origen)}
                 vista={vista}
                 semivida={semivida}
                 abrev={abrev}
                 rayas={rayas}
               />
             ))}
-            <text x={(x0 + x1) / 2} y={yPiso + 18} textAnchor="middle" fontSize={12} fontWeight={700} fill="var(--color-slate-700)">
-              {m + 1}
-            </text>
+            {/* El número de cada columna, el que se lee en el fierro. El módulo no se numera. */}
+            {columnas.map((col) => (
+              <text
+                key={col}
+                x={x0 + (lugar(col) + 0.5) * w}
+                y={yPiso + 18}
+                textAnchor="middle"
+                fontSize={11}
+                fontWeight={700}
+                fill="var(--color-slate-700)"
+              >
+                {String(col).padStart(2, "0")}
+              </text>
+            ))}
           </g>
         );
       })}

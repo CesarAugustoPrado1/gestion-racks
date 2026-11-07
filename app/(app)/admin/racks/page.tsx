@@ -18,7 +18,7 @@ export default async function PantallaGrupos() {
       select g.id, g.codigo, g.nombre, g.accesibilidad, g.ancho, g.niveles,
              g.profundidad, g.unidades, g.activo,
              g.carga_inicial_desde, g.carga_inicial_cerrada_en,
-             g.empresa_id, e.nombre as empresa_nombre, g.acceso,
+             g.empresa_id, e.nombre as empresa_nombre, g.acceso, g.numeracion_invertida,
              count(p.id)::int as posiciones,
              count(b.id)::int as ocupadas
         from grupos g
@@ -42,6 +42,7 @@ export default async function PantallaGrupos() {
         empresa_id: number | null;
         empresa_nombre: string | null;
         acceso: "izquierda" | "derecha";
+        numeracion_invertida: boolean;
         posiciones: number;
         ocupadas: number;
       }>
@@ -77,6 +78,7 @@ export default async function PantallaGrupos() {
           ...g,
           empresaId: g.empresa_id,
           empresaNombre: g.empresa_nombre,
+          numeracionInvertida: g.numeracion_invertida,
           carga: estadoDeCarga({
             cargaInicialDesde: g.carga_inicial_desde,
             cargaInicialCerradaEn: g.carga_inicial_cerrada_en,

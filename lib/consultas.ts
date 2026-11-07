@@ -295,6 +295,7 @@ export type PosicionLibre = {
   empresaId: number | null;
   empresa: string | null;
   penetrable: boolean;
+  numeracionInvertida: boolean;
   /** Calle (penetrable) o columna corrida (selectivo): lo que se elige después del grupo. */
   calle: number;
   nivel: number;
@@ -317,7 +318,7 @@ export async function posicionesLibres(): Promise<PosicionLibre[]> {
            g.codigo || '-' || p.codigo as codigo,
            g.codigo as rack,
            g.empresa_id, e.nombre as empresa,
-           g.accesibilidad, g.niveles, g.profundidad as profundidad_max,
+           g.accesibilidad, g.niveles, g.profundidad as profundidad_max, g.numeracion_invertida,
            p.unidad, p.columna, p.nivel, p.profundidad
       from posiciones p
       join grupos g on g.id = p.grupo_id
@@ -342,6 +343,7 @@ export async function posicionesLibres(): Promise<PosicionLibre[]> {
     accesibilidad: string;
     niveles: number;
     profundidad_max: number | null;
+    numeracion_invertida: boolean;
     unidad: number;
     columna: number | null;
     nivel: number;
@@ -355,6 +357,7 @@ export async function posicionesLibres(): Promise<PosicionLibre[]> {
     empresaId: f.empresa_id,
     empresa: f.empresa,
     penetrable: f.accesibilidad === "penetrable",
+    numeracionInvertida: f.numeracion_invertida,
     calle: f.accesibilidad === "penetrable" ? f.unidad : (f.columna ?? f.unidad),
     nivel: f.nivel,
     niveles: f.niveles,
@@ -909,6 +912,8 @@ export type GrupoDelMapa = {
   empresa: string | null;
   /** De qué lado entra el clark. Solo penetrables. */
   acceso: "izquierda" | "derecha";
+  /** La 01 está a la derecha: el dibujo va de derecha a izquierda. */
+  numeracionInvertida: boolean;
   penetrable: boolean;
   ancho: number | null;
   niveles: number;
@@ -931,7 +936,7 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
   const filas = (await db.execute(sql`
     select g.id as grupo_id, g.codigo as grupo_codigo, g.nombre as grupo_nombre,
            g.accesibilidad, g.ancho, g.niveles, g.profundidad as profundidad_max,
-           g.unidades, g.empresa_id, ge.nombre as grupo_empresa, g.acceso,
+           g.unidades, g.empresa_id, ge.nombre as grupo_empresa, g.acceso, g.numeracion_invertida,
            (g.carga_inicial_desde is not null and g.carga_inicial_cerrada_en is null) as en_carga,
            p.id as posicion_id, p.codigo, p.unidad, p.columna, p.nivel,
            p.profundidad, p.activa,
@@ -975,6 +980,7 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
     grupo_empresa: string | null;
     en_carga: boolean;
     acceso: "izquierda" | "derecha";
+    numeracion_invertida: boolean;
     alcanzable: boolean;
     exclusion_motivo: MotivoExclusion | null;
     exclusion_nota: string | null;
@@ -1011,6 +1017,7 @@ export async function mapaDeRacks(): Promise<GrupoDelMapa[]> {
         empresaId: f.empresa_id,
         empresa: f.grupo_empresa,
         acceso: f.acceso,
+        numeracionInvertida: f.numeracion_invertida,
         enCarga: f.en_carga,
         penetrable: f.accesibilidad === "penetrable",
         ancho: f.ancho,
@@ -1463,6 +1470,7 @@ export type PosicionDeCarga = {
   rack: string;
   empresa: string | null;
   penetrable: boolean;
+  numeracionInvertida: boolean;
   calle: number;
   nivel: number;
   niveles: number;
@@ -1512,7 +1520,7 @@ export async function cargaDelGrupo(grupoId: number): Promise<CargaDelGrupo | nu
   const filas = (await db.execute(sql`
     select p.id, g.codigo || '-' || p.codigo as codigo, p.nivel,
            g.codigo as rack, e.nombre as empresa, g.accesibilidad, g.niveles,
-           g.profundidad as profundidad_max, p.unidad, p.columna, p.profundidad,
+           g.profundidad as profundidad_max, g.numeracion_invertida, p.unidad, p.columna, p.profundidad,
            (${desde ? sql`p.chequeado_en >= ${desde.toISOString()}` : sql`false`}) as relevada,
            b.codigo as bulto_codigo, b.creado_en as bulto_creado_en, b.packaging, b.descripcion,
            exists (select 1 from movimientos m
@@ -1539,6 +1547,7 @@ export async function cargaDelGrupo(grupoId: number): Promise<CargaDelGrupo | nu
     accesibilidad: string;
     niveles: number;
     profundidad_max: number | null;
+    numeracion_invertida: boolean;
     unidad: number;
     columna: number | null;
     profundidad: number | null;
@@ -1572,6 +1581,7 @@ export async function cargaDelGrupo(grupoId: number): Promise<CargaDelGrupo | nu
       rack: f.rack,
       empresa: f.empresa,
       penetrable: f.accesibilidad === "penetrable",
+      numeracionInvertida: f.numeracion_invertida,
       calle: f.accesibilidad === "penetrable" ? f.unidad : (f.columna ?? f.unidad),
       nivel: f.nivel,
       niveles: f.niveles,

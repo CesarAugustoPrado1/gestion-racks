@@ -104,6 +104,12 @@ de referencia que se pueden correr), sumando rectángulos para armar figuras que
 no lo son, o con dibujo libre; con estilos por tipo o por elemento (relleno, trazo) y
 tipografía del plano. Cada guardado es una versión nueva. Ver DISENO.md §6.2.3.
 
+**Numeración de derecha a izquierda** (migración `0011_numeracion_invertida`):
+en Administración → Grupos de racks, un tilde marca los grupos donde la columna
+o calle 01 está a la derecha. Los códigos no cambian: el 3D, la grilla y los
+botones del selector de posición los muestran en ese orden. Los dibujos rotulan
+columnas (selectivo) y calles (penetrable), no módulos.
+
 Pendiente antes de seguir con la fase 1:
 
 - [ ] Aplicar `drizzle/0000_inicial.sql` y crear el usuario admin. Con terminal,
