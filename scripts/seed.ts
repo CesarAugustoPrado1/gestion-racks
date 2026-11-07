@@ -63,6 +63,7 @@ const MOTIVOS: Array<{
   { nombre: "Bulto en otra posición", ambito: "ajuste" },
   { nombre: "Modelo equivocado", ambito: "ajuste" },
   { nombre: "Posición vacía en el sistema", ambito: "ajuste" },
+  { nombre: "Categoría equivocada", ambito: "ajuste", esEgreso: false },
 ];
 
 const EJEMPLOS: Array<{ usuario: string; nombre: string; rol: Rol }> = [

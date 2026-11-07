@@ -78,6 +78,9 @@ export default async function FichaDePosicion({
             </p>
             <p className="mt-1 text-sm text-slate-600">
               {ETIQUETA_PACKAGING[celda.bulto.packaging]} ·{" "}
+              {!celda.bulto.esObjeto && celda.bulto.calidad === "segunda" && (
+                <strong className="text-orange-700">de segunda · </strong>
+              )}
               {celda.bulto.esObjeto
                 ? "no es producto · "
                 : `${numero(celda.bulto.cantidad)} ${celda.bulto.unidadPlural} · `}

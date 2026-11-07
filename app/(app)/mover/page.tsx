@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChipSegunda } from "@/components/calidad";
 import { requerirRol } from "@/lib/auth";
 import {
   actividadDeHoy,
@@ -152,6 +153,7 @@ function FilaBulto({ bulto }: { bulto: BultoEnLista }) {
             <span className="chip bg-slate-100 text-slate-600">
               {ETIQUETA_PACKAGING[bulto.packaging]}
             </span>
+            <ChipSegunda calidad={bulto.calidad} />
             {bulto.ajeno && (
               <span
                 className="chip bg-amber-100 text-amber-900"

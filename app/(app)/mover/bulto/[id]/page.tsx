@@ -44,6 +44,14 @@ export default async function PantallaBulto({
         detalle={
           <>
             {ETIQUETA_PACKAGING[bulto.packaging]} ·{" "}
+            {!bulto.esObjeto && (
+              <>
+                <span className={bulto.calidad === "segunda" ? "font-bold text-orange-700" : ""}>
+                  de {bulto.calidad}
+                </span>{" "}
+                ·{" "}
+              </>
+            )}
             <span className="codigo">{bulto.codigo}</span>
           </>
         }
@@ -91,6 +99,7 @@ export default async function PantallaBulto({
           id: bulto.id,
           codigo: bulto.codigo,
           packaging: bulto.packaging,
+          calidad: bulto.calidad,
           cantidad: bulto.cantidad,
           ubicacion: bulto.ubicacion,
           unidadPlural: bulto.unidadPlural,

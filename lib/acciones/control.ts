@@ -10,6 +10,7 @@ import {
   aplicarMovimiento,
   bloquearBulto,
   bloquearPosicion,
+  cambiarCategoria,
   crearBulto,
   exigirComposicion,
   exigirLibre,
@@ -206,6 +207,71 @@ export async function corregirCantidades(
   });
 }
 
+const esquemaCategoriaControl = z.object({
+  posicionId: z.number().int().positive(),
+  bultoId: z.number().int().positive(),
+  motivoId: z.number().int().positive("Elegí un motivo."),
+  nota: esquemaNota,
+});
+
+/**
+ * El bulto está registrado con la categoría que no es: dice primera y es de
+ * segunda, o al revés. Control lo corrige.
+ *
+ * Es un AJUSTE, como una cantidad mal cargada: el registro estaba mal, no
+ * cambió nada en el galpón. Por eso cuenta como diferencia en el chequeo y en
+ * la precisión del sistema. El movimiento guarda la categoría de antes y la de
+ * después.
+ *
+ * Distinto del PASAJE de categoría (`pasarCategoria`), que es cuando el
+ * producto se registró bien y después se decidió que es de la otra.
+ */
+export async function corregirCategoria(
+  entrada: z.input<typeof esquemaCategoriaControl>,
+): Promise<Resultado<{ codigo: string; calidad: "primera" | "segunda" }>> {
+  return ejecutar(async () => {
+    const sesion = await autorizar("control", "admin");
+    const datos = esquemaCategoriaControl.parse(entrada);
+
+    return db.transaction(async (tx) => {
+      const pos = await bloquearPosicion(tx, datos.posicionId);
+      const bulto = await bloquearBulto(tx, datos.bultoId);
+      if (bulto.posicionId !== pos.id) {
+        fallar(`${bulto.codigo} ya no está en ${pos.codigo}. Actualizá la pantalla.`);
+      }
+      const motivo = await exigirMotivo(tx, datos.motivoId, "ajuste");
+      const calidad = bulto.calidad === "primera" ? "segunda" : "primera";
+      const ahora = new Date();
+
+      await cambiarCategoria(tx, {
+        tipo: "ajuste",
+        bulto,
+        calidad,
+        usuario: { id: sesion.uid, nombre: sesion.nombre },
+        motivo,
+        nota: datos.nota,
+        // El ajuste trae su propio chequeo: es control el que acaba de mirar.
+        conservarChequeo: true,
+      });
+
+      await tx.insert(chequeos).values({
+        posicionId: pos.id,
+        posicionCodigo: pos.codigo,
+        bultoId: bulto.id,
+        resultado: "corregido",
+        usuarioId: sesion.uid,
+        usuarioNombre: sesion.nombre,
+        nota: datos.nota,
+        creadoEn: ahora,
+      });
+
+      await asentarChequeo(tx, pos.id, false, ahora);
+      revalidatePath("/", "layout");
+      return { codigo: bulto.codigo, calidad };
+    });
+  });
+}
+
 const esquemaAusente = z.object({
   posicionId: z.number().int().positive(),
   bultoId: z.number().int().positive(),
@@ -286,6 +352,7 @@ const esquemaEncontrado = z.object({
   packaging: z.enum(["suelto", "palet", "optimizado", "objeto"]),
   /** Qué hay, si es un objeto. */
   descripcion: z.string().trim().max(200).optional(),
+  calidad: z.enum(["primera", "segunda"]).default("primera"),
   motivoId: z.number().int().positive("Elegí un motivo."),
   nota: esquemaNota,
 });
@@ -303,6 +370,7 @@ export async function registrarEncontrado(
     const sesion = await autorizar("control", "admin");
     const datos = esquemaEncontrado.parse(entrada);
     const objeto = datos.packaging === "objeto";
+    const calidad = objeto ? "primera" : datos.calidad;
     if (!objeto && datos.contenido.length === 0) fallar("Elegí al menos un modelo.");
     exigirComposicion(datos.packaging as Packaging, datos.contenido);
     if (objeto) {
@@ -318,6 +386,7 @@ export async function registrarEncontrado(
 
       const nuevo = await crearBulto(tx, {
         packaging: datos.packaging as Packaging,
+        calidad,
         estado: "ubicado",
         usuarioId: sesion.uid,
       });
@@ -328,6 +397,7 @@ export async function registrarEncontrado(
           id: nuevo.id,
           codigo: nuevo.codigo,
           packaging: datos.packaging as Packaging,
+          calidad,
           cantidad: 0,
           estado: "ubicado",
           posicionId: null,

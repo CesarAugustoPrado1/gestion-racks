@@ -373,3 +373,130 @@ export async function estadisticas(dias: Periodo): Promise<Estadisticas> {
     },
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Primera y segunda                                                          */
+/* -------------------------------------------------------------------------- */
+
+export type CambioDeCategoria = {
+  creadoEn: Date;
+  bultoId: number;
+  bultoCodigo: string;
+  /** `categoria` = pasaje; `ajuste` = corrección de control. */
+  tipo: "categoria" | "ajuste";
+  desde: string;
+  hasta: string;
+  contenido: string;
+  usuario: string;
+  /** El porqué: la nota del pasaje, o el motivo y la nota de la corrección. */
+  porQue: string | null;
+};
+
+export type EstadisticasDeCategoria = {
+  /** Pasajes de categoría en el período, por sentido. */
+  pasajes: { aSegunda: number; aPrimera: number };
+  /** Correcciones de control que cambiaron la categoría: errores de registro. */
+  correcciones: { aSegunda: number; aPrimera: number };
+  /** Lo que pasó a segunda en el período, por línea y en su unidad. */
+  aSegundaPorLinea: Array<{ linea: string; unidadPlural: string; unidades: number; bultos: number }>;
+  porUsuario: Array<{ usuario: string; pasajes: number; correcciones: number }>;
+  /** Los últimos cambios del período, uno por uno: para auditar. */
+  ultimos: CambioDeCategoria[];
+  /** Lo que hay HOY de segunda, por línea. No depende del período. */
+  stockSegunda: Array<{ linea: string; unidadPlural: string; unidades: number; bultos: number }>;
+};
+
+/**
+ * Los cambios de categoría: pasajes (`categoria`) y correcciones de control
+ * (`ajuste` con la categoría distinta antes y después). Se reconocen por el
+ * antes y el después del movimiento, no por notas.
+ */
+export async function estadisticasDeCategoria(dias: Periodo): Promise<EstadisticasDeCategoria> {
+  const desde = sql`now() - (${dias}::int * interval '1 day')`;
+  const cambio = sql`m.anulado_en is null and m.creado_en >= ${desde} and m.calidad_antes <> m.calidad`;
+
+  const [conteos, porLinea, porUsuario, ultimos, stock] = await Promise.all([
+    db.execute(sql`
+      select m.tipo, m.calidad, count(*)::int as n
+        from movimientos m where ${cambio}
+       group by 1, 2
+    `) as unknown as Promise<Array<{ tipo: string; calidad: string; n: number }>>,
+
+    db.execute(sql`
+      select l.nombre as linea, l.unidad_plural, sum(ml.cantidad)::int as unidades,
+             count(distinct m.id)::int as bultos
+        from movimientos m
+        join movimiento_lineas ml on ml.movimiento_id = m.id
+        join modelos mo on mo.id = ml.modelo_id
+        join lineas l on l.id = mo.linea_id
+       where ${cambio} and m.calidad = 'segunda'
+       group by l.id, l.nombre, l.unidad_plural, l.orden
+       order by l.orden
+    `) as unknown as Promise<Array<{ linea: string; unidad_plural: string; unidades: number; bultos: number }>>,
+
+    db.execute(sql`
+      select m.usuario_nombre as usuario,
+             count(*) filter (where m.tipo = 'categoria')::int as pasajes,
+             count(*) filter (where m.tipo = 'ajuste')::int as correcciones
+        from movimientos m where ${cambio}
+       group by 1 order by count(*) desc
+    `) as unknown as Promise<Array<{ usuario: string; pasajes: number; correcciones: number }>>,
+
+    db.execute(sql`
+      select m.creado_en, m.bulto_id, m.bulto_codigo, m.tipo, m.calidad_antes, m.calidad,
+             m.usuario_nombre, m.nota, m.motivo_nombre,
+             (select string_agg(ml.modelo_nombre || ' ' || ml.cantidad, ' + ' order by ml.modelo_nombre)
+                from movimiento_lineas ml where ml.movimiento_id = m.id) as contenido
+        from movimientos m where ${cambio}
+       order by m.creado_en desc, m.id desc
+       limit 50
+    `) as unknown as Promise<
+      Array<{
+        creado_en: Date | string;
+        bulto_id: number;
+        bulto_codigo: string;
+        tipo: "categoria" | "ajuste";
+        calidad_antes: string;
+        calidad: string;
+        usuario_nombre: string;
+        nota: string | null;
+        motivo_nombre: string | null;
+        contenido: string | null;
+      }>
+    >,
+
+    db.execute(sql`
+      select l.nombre as linea, l.unidad_plural, sum(c.cantidad)::int as unidades,
+             count(distinct b.id)::int as bultos
+        from bultos b
+        join bulto_contenido c on c.bulto_id = b.id
+        join modelos mo on mo.id = c.modelo_id
+        join lineas l on l.id = mo.linea_id
+       where b.estado in ('ubicado', 'sin_ubicar') and b.calidad = 'segunda'
+       group by l.id, l.nombre, l.unidad_plural, l.orden
+       order by l.orden
+    `) as unknown as Promise<Array<{ linea: string; unidad_plural: string; unidades: number; bultos: number }>>,
+  ]);
+
+  const contar = (tipo: string, calidad: string) =>
+    conteos.find((c) => c.tipo === tipo && c.calidad === calidad)?.n ?? 0;
+
+  return {
+    pasajes: { aSegunda: contar("categoria", "segunda"), aPrimera: contar("categoria", "primera") },
+    correcciones: { aSegunda: contar("ajuste", "segunda"), aPrimera: contar("ajuste", "primera") },
+    aSegundaPorLinea: porLinea.map((f) => ({ linea: f.linea, unidadPlural: f.unidad_plural, unidades: f.unidades, bultos: f.bultos })),
+    porUsuario,
+    ultimos: ultimos.map((f) => ({
+      creadoEn: new Date(f.creado_en),
+      bultoId: f.bulto_id,
+      bultoCodigo: f.bulto_codigo,
+      tipo: f.tipo,
+      desde: f.calidad_antes,
+      hasta: f.calidad,
+      contenido: f.contenido ?? "",
+      usuario: f.usuario_nombre,
+      porQue: [f.motivo_nombre, f.nota].filter(Boolean).join(" · ") || null,
+    })),
+    stockSegunda: stock.map((f) => ({ linea: f.linea, unidadPlural: f.unidad_plural, unidades: f.unidades, bultos: f.bultos })),
+  };
+}

@@ -6,6 +6,7 @@ import {
   aplicarMovimiento,
   bloquearBulto,
   bloquearPosicion,
+  cambiarCategoria,
   crearBulto,
   exigirAltura,
   exigirLibre,
@@ -120,6 +121,7 @@ async function meter(
   }
   const nuevo = await crearBulto(tx, {
     packaging,
+    calidad: "primera",
     estado: destino ? "ubicado" : "sin_ubicar",
     usuarioId: datos.usuario.id,
   });
@@ -129,6 +131,7 @@ async function meter(
       id: nuevo.id,
       codigo: nuevo.codigo,
       packaging,
+      calidad: "primera",
       cantidad: 0,
       estado: destino ? "ubicado" : "sin_ubicar",
       posicionId: null,
@@ -176,6 +179,7 @@ describe("la invariante del stock", { skip: !hay && "sin base local" }, () => {
           id: bultoId,
           codigo: "x",
           packaging: "palet",
+          calidad: "primera",
           cantidad: 40,
           estado: "ubicado",
           posicionId: datos.pos("P-01-3-1"),
@@ -223,6 +227,7 @@ describe("la invariante del stock", { skip: !hay && "sin base local" }, () => {
           id: bultoId,
           codigo: "y",
           packaging: "suelto",
+          calidad: "primera",
           cantidad: 7,
           estado: "sin_ubicar",
           posicionId: null,
@@ -384,6 +389,7 @@ describe("un bulto alto ocupa dos posiciones", { skip: !hay && "sin base local" 
           id: invasor!,
           codigo: "z",
           packaging: "optimizado",
+          calidad: "primera",
           cantidad: 60,
           estado: "ubicado",
           posicionId: datos.pos("P-01-2-2"),
@@ -606,6 +612,7 @@ describe("lugares que no se usan", { skip: !hay && "sin base local" }, () => {
           id: b.id,
           codigo: "q",
           packaging: "optimizado",
+          calidad: "primera",
           cantidad: 60,
           estado: "ubicado",
           posicionId: Q.pos("Q-01-2-1"),
@@ -696,6 +703,7 @@ describe("objetos: ocupan lugar y no son stock", { skip: !hay && "sin base local
       exigirLibre(destino);
       const nuevo = await crearBulto(t, {
         packaging: "objeto",
+        calidad: "primera",
         estado: "ubicado",
         usuarioId: datos.usuario.id,
       });
@@ -706,6 +714,7 @@ describe("objetos: ocupan lugar y no son stock", { skip: !hay && "sin base local
           id: nuevo.id,
           codigo: nuevo.codigo,
           packaging: "objeto",
+          calidad: "primera",
           cantidad: 0,
           estado: "ubicado",
           posicionId: null,
@@ -898,6 +907,7 @@ describe("carga inicial", { skip: !hay && "sin base local" }, () => {
           cargarPosicion(tx as Tx, {
             posicionId: pos[0],
             packaging: "suelto",
+            calidad: "primera",
             contenido: [{ modeloId: datos.laja.id, cantidad: 7 }],
             fechaIngreso: new Date("2025-03-10T12:00:00Z"),
             usuario: usuario(),
@@ -920,6 +930,7 @@ describe("carga inicial", { skip: !hay && "sin base local" }, () => {
       cargarPosicion(tx as Tx, {
         posicionId: pos[0],
         packaging: "suelto",
+        calidad: "primera",
         contenido: [{ modeloId: datos.laja.id, cantidad: 7 }],
         fechaIngreso: new Date("2025-03-10T15:00:00Z"),
         nota: "estaba de antes",
@@ -956,6 +967,7 @@ describe("carga inicial", { skip: !hay && "sin base local" }, () => {
           cargarPosicion(tx as Tx, {
             posicionId: pos[1],
             packaging: "suelto",
+            calidad: "primera",
             contenido: [{ modeloId: datos.laja.id, cantidad: 3 }],
             fechaIngreso: new Date(Date.now() + 3 * 86400000),
             usuario: usuario(),
@@ -983,6 +995,7 @@ describe("carga inicial", { skip: !hay && "sin base local" }, () => {
       cargarPosicion(tx as Tx, {
         posicionId: pos[0],
         packaging: "suelto",
+        calidad: "primera",
         contenido: [{ modeloId: datos.laja.id, cantidad: 4 }],
         fechaIngreso: new Date("2024-11-01T15:00:00Z"),
         usuario: usuario(),
@@ -1003,5 +1016,167 @@ describe("carga inicial", { skip: !hay && "sin base local" }, () => {
       /ya está cerrada/,
     );
     await exigirQueCuadre("después de cerrar la carga");
+  });
+});
+
+describe("primera y segunda", { skip: !hay && "sin base local" }, () => {
+  async function calidadDe(id: number) {
+    const [f] = (await base.db.execute(sql`select calidad from bultos where id = ${id}`)) as unknown as Array<{
+      calidad: string;
+    }>;
+    return f.calidad;
+  }
+  async function movimientosDe(id: number) {
+    return (await base.db.execute(sql`
+      select tipo, calidad_antes, calidad, usuario_nombre, nota, motivo_nombre,
+             cantidad - cantidad_antes as efecto
+        from movimientos where bulto_id = ${id} order by id
+    `)) as unknown as Array<{
+      tipo: string;
+      calidad_antes: string;
+      calidad: string;
+      usuario_nombre: string;
+      nota: string | null;
+      motivo_nombre: string | null;
+      efecto: number;
+    }>;
+  }
+
+  test("un bulto nuevo entra de primera, y el ingreso lo dice", async () => {
+    let id = 0;
+    await base.db.transaction(async (tx) => {
+      id = (await meter(tx as Tx, null, "palet", [{ modeloId: datos.laja.id, cantidad: 48 }])).id;
+    });
+    assert.equal(await calidadDe(id), "primera");
+    const [m] = await movimientosDe(id);
+    assert.equal(m.calidad_antes, "primera");
+    assert.equal(m.calidad, "primera");
+  });
+
+  test("el pasaje cambia la categoría, deja quién y por qué, y no toca el stock", async () => {
+    let id = 0;
+    await base.db.transaction(async (tx) => {
+      id = (await meter(tx as Tx, null, "palet", [{ modeloId: datos.laja.id, cantidad: 48 }])).id;
+    });
+    const antes = await segunElHistorial();
+
+    await base.db.transaction(async (tx) => {
+      const t = tx as Tx;
+      await cambiarCategoria(t, {
+        tipo: "categoria",
+        bulto: await bloquearBulto(t, id),
+        calidad: "segunda",
+        usuario: { id: datos.usuario.id, nombre: datos.usuario.nombre },
+        nota: "Tiene las placas con manchas",
+      });
+    });
+
+    assert.equal(await calidadDe(id), "segunda");
+    const movs = await movimientosDe(id);
+    const pasaje = movs[movs.length - 1];
+    assert.equal(pasaje.tipo, "categoria");
+    assert.equal(pasaje.calidad_antes, "primera");
+    assert.equal(pasaje.calidad, "segunda");
+    assert.equal(pasaje.usuario_nombre, datos.usuario.nombre);
+    assert.equal(pasaje.nota, "Tiene las placas con manchas");
+    assert.equal(pasaje.efecto, 0, "un pasaje no suma ni resta");
+    assert.deepEqual(await segunElHistorial(), antes, "el stock por modelo no cambia");
+    await exigirQueCuadre("después de un pasaje de categoría");
+
+    // Y se puede volver: de segunda a primera.
+    await base.db.transaction(async (tx) => {
+      const t = tx as Tx;
+      await cambiarCategoria(t, {
+        tipo: "categoria",
+        bulto: await bloquearBulto(t, id),
+        calidad: "primera",
+        usuario: { id: datos.usuario.id, nombre: datos.usuario.nombre },
+        nota: "Revisado: estaba bien",
+      });
+    });
+    assert.equal(await calidadDe(id), "primera");
+  });
+
+  test("no se pasa a la categoría que ya tiene", async () => {
+    let id = 0;
+    await base.db.transaction(async (tx) => {
+      id = (await meter(tx as Tx, null, "suelto", [{ modeloId: datos.laja.id, cantidad: 5 }])).id;
+    });
+    await assert.rejects(
+      () =>
+        base.db.transaction(async (tx) => {
+          const t = tx as Tx;
+          await cambiarCategoria(t, {
+            tipo: "categoria",
+            bulto: await bloquearBulto(t, id),
+            calidad: "primera",
+            usuario: { id: datos.usuario.id, nombre: datos.usuario.nombre },
+            nota: "nada",
+          });
+        }),
+      /ya es de primera/,
+    );
+  });
+
+  test("la corrección de control queda como ajuste con su motivo", async () => {
+    let id = 0;
+    await base.db.transaction(async (tx) => {
+      id = (await meter(tx as Tx, null, "palet", [{ modeloId: datos.laja.id, cantidad: 48 }])).id;
+    });
+    await base.db.transaction(async (tx) => {
+      const t = tx as Tx;
+      await cambiarCategoria(t, {
+        tipo: "ajuste",
+        bulto: await bloquearBulto(t, id),
+        calidad: "segunda",
+        usuario: { id: datos.usuario.id, nombre: datos.usuario.nombre },
+        motivo: { id: datos.motivo.id, nombre: "Categoría equivocada" },
+        nota: null,
+        conservarChequeo: true,
+      });
+    });
+    const movs = await movimientosDe(id);
+    const ajuste = movs[movs.length - 1];
+    assert.equal(ajuste.tipo, "ajuste");
+    assert.equal(ajuste.calidad_antes, "primera");
+    assert.equal(ajuste.calidad, "segunda");
+    assert.equal(ajuste.motivo_nombre, "Categoría equivocada");
+    assert.equal(ajuste.efecto, 0);
+    await exigirQueCuadre("después de corregir la categoría");
+  });
+
+  test("un movimiento cualquiera conserva la categoría", async () => {
+    let id = 0;
+    await base.db.transaction(async (tx) => {
+      const t = tx as Tx;
+      id = (await meter(t, null, "palet", [{ modeloId: datos.laja.id, cantidad: 48 }])).id;
+      await cambiarCategoria(t, {
+        tipo: "categoria",
+        bulto: await bloquearBulto(t, id),
+        calidad: "segunda",
+        usuario: { id: datos.usuario.id, nombre: datos.usuario.nombre },
+        nota: "Rotas en una esquina",
+      });
+    });
+    // Sacar una parte: el resto sigue siendo de segunda.
+    await base.db.transaction(async (tx) => {
+      const t = tx as Tx;
+      const b = await bloquearBulto(t, id);
+      await aplicarMovimiento(t, {
+        tipo: "sacar",
+        bulto: b,
+        contenidoDespues: [{ modeloId: datos.laja.id, cantidad: 30 }],
+        packagingDespues: "suelto",
+        estadoDespues: b.estado,
+        posicionDestino: null,
+        motivo: { id: datos.motivo.id, nombre: datos.motivo.nombre },
+        usuario: { id: datos.usuario.id, nombre: datos.usuario.nombre },
+      });
+    });
+    assert.equal(await calidadDe(id), "segunda");
+    const movs = await movimientosDe(id);
+    const salida = movs[movs.length - 1];
+    assert.equal(salida.calidad_antes, "segunda");
+    assert.equal(salida.calidad, "segunda");
   });
 });

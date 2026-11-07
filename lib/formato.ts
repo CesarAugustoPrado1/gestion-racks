@@ -32,6 +32,13 @@ export const ETIQUETA_MOVIMIENTO: Record<string, string> = {
   mover: "Reubicación",
   ajuste: "Ajuste",
   inicial: "Carga inicial",
+  categoria: "Pasaje de categoría",
+};
+
+/** "Primera" y "Segunda", como se dice en la planta. */
+export const ETIQUETA_CALIDAD: Record<string, string> = {
+  primera: "Primera",
+  segunda: "Segunda",
 };
 
 /** El orden de las solapas, que es el que pidió la planta. */

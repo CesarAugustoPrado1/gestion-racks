@@ -10,6 +10,7 @@ import {
   aplicarMovimiento,
   bloquearBulto,
   bloquearPosicion,
+  cambiarCategoria,
   crearBulto,
   exigirAccesible,
   exigirComposicion,
@@ -59,6 +60,8 @@ const esquemaMeter = z.object({
    * no hay dónde ponerlo.
    */
   posicionId: z.number().int().positive().nullable(),
+  /** De primera salvo que el operario marque lo contrario. Un objeto no tiene categoría. */
+  calidad: z.enum(["primera", "segunda"]).default("primera"),
   nota: esquemaNota,
 });
 
@@ -69,6 +72,7 @@ export async function meter(
     const sesion = await autorizar("autoelevador", "admin");
     const datos = esquemaMeter.parse(entrada);
     const objeto = datos.packaging === "objeto";
+    const calidad = objeto ? "primera" : datos.calidad;
 
     if (!objeto && datos.contenido.length === 0) fallar("Elegí al menos un modelo.");
     exigirComposicion(datos.packaging as Packaging, datos.contenido);
@@ -95,6 +99,7 @@ export async function meter(
 
       const nuevo = await crearBulto(tx, {
         packaging: datos.packaging as Packaging,
+        calidad,
         estado: destino ? "ubicado" : "sin_ubicar",
         usuarioId: sesion.uid,
       });
@@ -107,6 +112,7 @@ export async function meter(
           id: nuevo.id,
           codigo: nuevo.codigo,
           packaging: datos.packaging as Packaging,
+          calidad,
           cantidad: 0,
           estado: destino ? "ubicado" : "sin_ubicar",
           posicionId: null,
@@ -328,6 +334,59 @@ export async function mover(
         desde: bulto.posicionCodigo,
         hasta: destino?.codigo ?? null,
       };
+    });
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Pasaje de categoría                                                        */
+/* -------------------------------------------------------------------------- */
+
+const esquemaCategoria = z.object({
+  bultoId: z.number().int().positive(),
+  /** La categoría NUEVA. Tiene que ser distinta de la que tiene. */
+  calidad: z.enum(["primera", "segunda"]),
+  /** Obligatorio: un cambio de categoría sin el porqué no se puede auditar. */
+  nota: z
+    .string()
+    .trim()
+    .min(5, "Escribí por qué cambia de categoría.")
+    .max(300, "La nota es muy larga."),
+});
+
+/**
+ * PASAJE de categoría: se detectó después de ingresarlo que el bulto es de
+ * segunda (o que es de primera).
+ *
+ * No mueve stock ni posición. Queda como un movimiento `categoria` con la
+ * categoría de antes y la de después, quién, cuándo y por qué: se ve en el
+ * historial del bulto, en Movimientos y en Estadísticas.
+ *
+ * Como cualquier movimiento, le borra el chequeo al bulto: control había
+ * verificado "este palet de primera", y eso ya no es lo que dice el sistema.
+ *
+ * Si lo que pasó es que se REGISTRÓ mal, no es esto: lo corrige control desde
+ * el chequeo, como un ajuste, y cuenta como error del registro.
+ */
+export async function pasarCategoria(
+  entrada: z.input<typeof esquemaCategoria>,
+): Promise<Resultado<{ codigo: string; desde: string; hasta: string }>> {
+  return ejecutar(async () => {
+    const sesion = await autorizar("autoelevador", "admin");
+    const datos = esquemaCategoria.parse(entrada);
+
+    return db.transaction(async (tx) => {
+      const bulto = await bloquearBulto(tx, datos.bultoId);
+      await cambiarCategoria(tx, {
+        tipo: "categoria",
+        bulto,
+        calidad: datos.calidad,
+        usuario: { id: sesion.uid, nombre: sesion.nombre },
+        nota: datos.nota,
+      });
+
+      revalidatePath("/", "layout");
+      return { codigo: bulto.codigo, desde: bulto.calidad, hasta: datos.calidad };
     });
   });
 }

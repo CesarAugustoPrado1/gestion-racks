@@ -14,10 +14,14 @@ type Valores = {
   anulados?: string;
 };
 
-const TIPOS = ["meter", "sacar", "mover", "ajuste", "inicial"].map((id) => ({
-  id,
-  etiqueta: ETIQUETA_MOVIMIENTO[id],
-}));
+const TIPOS = [
+  ...["meter", "sacar", "mover", "ajuste", "inicial", "categoria"].map((id) => ({
+    id,
+    etiqueta: ETIQUETA_MOVIMIENTO[id],
+  })),
+  // No es un tipo: junta los pasajes de categoría y las correcciones de control.
+  { id: "cambio_categoria", etiqueta: "Todo cambio de categoría (pasajes y correcciones)" },
+];
 
 const dia = (atras: number) =>
   new Date(Date.now() - atras * 86400000).toISOString().slice(0, 10);

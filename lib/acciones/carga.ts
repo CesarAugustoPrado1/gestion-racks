@@ -39,6 +39,7 @@ const esquemaCarga = z.object({
     }),
   ),
   descripcion: z.string().trim().max(200).optional(),
+  calidad: z.enum(["primera", "segunda"]).default("primera"),
   /** AAAA-MM-DD. Sin fecha, hoy. */
   fechaIngreso: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "La fecha no es válida.").optional(),
   nota: esquemaNota,
@@ -76,6 +77,7 @@ export async function cargarEnPosicion(
       cargarPosicion(tx, {
         posicionId: d.posicionId,
         packaging: d.packaging,
+        calidad: d.calidad,
         contenido: d.packaging === "objeto" ? [] : d.contenido,
         descripcion: d.descripcion ?? null,
         fechaIngreso: fechaDelDia(d.fechaIngreso),

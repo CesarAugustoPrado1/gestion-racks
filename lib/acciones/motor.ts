@@ -7,6 +7,7 @@ import {
   movimientoLineas,
   movimientos,
   posiciones,
+  type Calidad,
   type EstadoBulto,
   type Packaging,
   type TipoMovimiento,
@@ -45,6 +46,8 @@ export type BultoVivo = {
   id: number;
   codigo: string;
   packaging: Packaging;
+  /** Primera o segunda. */
+  calidad: Calidad;
   cantidad: number;
   estado: EstadoBulto;
   posicionId: number | null;
@@ -58,7 +61,7 @@ export type BultoVivo = {
 /** `SELECT ... FOR UPDATE` sobre el bulto, con todo lo que hace falta para decidir. */
 export async function bloquearBulto(tx: Tx, id: number): Promise<BultoVivo> {
   const filas = (await tx.execute(sql`
-    select b.id, b.codigo, b.packaging, b.cantidad, b.estado, b.posicion_id, b.descripcion,
+    select b.id, b.codigo, b.packaging, b.calidad, b.cantidad, b.estado, b.posicion_id, b.descripcion,
            case when p.id is null then null
                 else g.codigo || '-' || p.codigo end as posicion_codigo
       from bultos b
@@ -70,6 +73,7 @@ export async function bloquearBulto(tx: Tx, id: number): Promise<BultoVivo> {
     id: number;
     codigo: string;
     packaging: Packaging;
+    calidad: Calidad;
     cantidad: number;
     estado: EstadoBulto;
     posicion_id: number | null;
@@ -98,6 +102,7 @@ export async function bloquearBulto(tx: Tx, id: number): Promise<BultoVivo> {
     id: b.id,
     codigo: b.codigo,
     packaging: b.packaging,
+    calidad: b.calidad,
     cantidad: b.cantidad,
     estado: b.estado,
     posicionId: b.posicion_id,
@@ -586,6 +591,8 @@ export type Aplicacion = {
   /** Contenido DESPUÉS del movimiento. Vacío = el bulto sale del rack. */
   contenidoDespues: LineaContenido[];
   packagingDespues: Packaging;
+  /** Sin pasarlo, el bulto conserva su categoría. */
+  calidadDespues?: Calidad;
   estadoDespues: EstadoBulto;
   posicionDestino: { id: number; codigo: string } | null;
   /**
@@ -632,6 +639,7 @@ export async function aplicarMovimiento(tx: Tx, a: Aplicacion): Promise<number> 
   }
 
   const cantidadDespues = total(a.contenidoDespues);
+  const calidadDespues = a.calidadDespues ?? a.bulto.calidad;
   const descripcion =
     a.descripcionDespues !== undefined ? a.descripcionDespues : (a.bulto.descripcion ?? null);
 
@@ -662,6 +670,8 @@ export async function aplicarMovimiento(tx: Tx, a: Aplicacion): Promise<number> 
       cantidad: cantidadDespues,
       packagingAntes: a.bulto.packaging,
       packaging: a.packagingDespues,
+      calidadAntes: a.bulto.calidad,
+      calidad: calidadDespues,
       posicionDesdeId: a.bulto.posicionId,
       posicionDesdeCodigo: a.bulto.posicionCodigo,
       posicionHastaId: a.posicionDestino?.id ?? null,
@@ -724,6 +734,7 @@ export async function aplicarMovimiento(tx: Tx, a: Aplicacion): Promise<number> 
     .update(bultos)
     .set({
       packaging: a.packagingDespues,
+      calidad: calidadDespues,
       cantidad: cantidadDespues,
       descripcion,
       estado: a.estadoDespues,
@@ -792,6 +803,54 @@ export async function aplicarMovimiento(tx: Tx, a: Aplicacion): Promise<number> 
 }
 
 /**
+ * Cambia la categoría de un bulto -primera o segunda- sin moverlo.
+ *
+ * La usan el PASAJE de categoría (`categoria`, desde la ficha del bulto) y la
+ * CORRECCIÓN de control (`ajuste`, desde el chequeo). El contenido, el
+ * packaging, el estado y la posición quedan como están; si el bulto sobresale y
+ * ocupa el hueco de arriba, lo sigue ocupando.
+ */
+export async function cambiarCategoria(
+  tx: Tx,
+  a: {
+    tipo: "categoria" | "ajuste";
+    bulto: BultoVivo;
+    calidad: Calidad;
+    usuario: { id: number; nombre: string };
+    motivo?: { id: number; nombre: string };
+    nota: string | null;
+    conservarChequeo?: boolean;
+  },
+): Promise<number> {
+  if (a.bulto.estado === "salido") fallar(`El bulto ${a.bulto.codigo} ya salió del rack.`);
+  if (a.bulto.packaging === "objeto") fallar("Un objeto no tiene categoría.");
+  if (a.bulto.calidad === a.calidad) fallar(`${a.bulto.codigo} ya es de ${a.calidad}.`);
+
+  const [arriba] = (await tx.execute(sql`
+    select p.id, g.codigo || '-' || p.codigo as codigo
+      from posiciones p join grupos g on g.id = p.grupo_id
+     where p.bloqueada_por_bulto_id = ${a.bulto.id}
+     limit 1
+  `)) as unknown as Array<{ id: number; codigo: string }>;
+
+  return aplicarMovimiento(tx, {
+    tipo: a.tipo,
+    bulto: a.bulto,
+    contenidoDespues: a.bulto.contenido.map((c) => ({ modeloId: c.modeloId, cantidad: c.cantidad })),
+    packagingDespues: a.bulto.packaging,
+    calidadDespues: a.calidad,
+    estadoDespues: a.bulto.estado,
+    posicionDestino:
+      a.bulto.posicionId != null ? { id: a.bulto.posicionId, codigo: a.bulto.posicionCodigo ?? "" } : null,
+    invadeArriba: arriba ?? null,
+    usuario: a.usuario,
+    motivo: a.motivo,
+    nota: a.nota,
+    conservarChequeo: a.conservarChequeo,
+  });
+}
+
+/**
  * Crea el bulto vacío para poder meterlo.
  *
  * El código sale del id y por eso son dos pasos dentro de la misma transacción:
@@ -802,13 +861,14 @@ export async function aplicarMovimiento(tx: Tx, a: Aplicacion): Promise<number> 
  */
 export async function crearBulto(
   tx: Tx,
-  datos: { packaging: Packaging; estado: EstadoBulto; usuarioId: number },
+  datos: { packaging: Packaging; calidad: Calidad; estado: EstadoBulto; usuarioId: number },
 ): Promise<{ id: number; codigo: string }> {
   const [creado] = await tx
     .insert(bultos)
     .values({
       codigo: `tmp-${crypto.randomUUID()}`,
       packaging: datos.packaging,
+      calidad: datos.calidad,
       cantidad: 0,
       estado: datos.estado,
       creadoPor: datos.usuarioId,

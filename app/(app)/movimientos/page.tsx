@@ -5,7 +5,7 @@ import {
   opcionesDeHistorial,
   type FiltrosHistorial,
 } from "@/lib/consultas";
-import { ETIQUETA_MOVIMIENTO, ETIQUETA_PACKAGING, numero } from "@/lib/formato";
+import { ETIQUETA_CALIDAD, ETIQUETA_MOVIMIENTO, ETIQUETA_PACKAGING, numero } from "@/lib/formato";
 import { Titulo } from "@/components/ui";
 import { Filtros } from "./filtros";
 
@@ -20,6 +20,7 @@ const COLOR_TIPO: Record<string, string> = {
   mover: "bg-slate-100 text-slate-600",
   ajuste: "bg-dudoso-suave text-yellow-800",
   inicial: "bg-sky-100 text-sky-900",
+  categoria: "bg-orange-100 text-orange-900",
 };
 
 type Busqueda = {
@@ -119,6 +120,14 @@ export default async function PantallaMovimientos({
                       ? `${ETIQUETA_PACKAGING[m.packagingAntes]} → ${ETIQUETA_PACKAGING[m.packaging]}`
                       : ETIQUETA_PACKAGING[m.packaging]}
                   </span>
+                  {/* Un cambio de categoría se ve siempre, sea pasaje o corrección de control. */}
+                  {m.calidadAntes !== m.calidad ? (
+                    <span className="chip bg-orange-100 text-orange-900">
+                      {ETIQUETA_CALIDAD[m.calidadAntes]} → {ETIQUETA_CALIDAD[m.calidad]}
+                    </span>
+                  ) : (
+                    m.calidad === "segunda" && <span className="chip bg-orange-100 text-orange-900">2da</span>
+                  )}
                   {m.anulado && (
                     <span className="chip bg-red-100 text-red-800">anulado</span>
                   )}

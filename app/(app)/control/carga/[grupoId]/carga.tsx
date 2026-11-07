@@ -16,7 +16,8 @@ import { ElegirModelo } from "@/components/elegir-modelo";
 import { validarComposicion, validarDescripcion } from "@/lib/bultos";
 import { ETIQUETA_PACKAGING, PACKAGINGS } from "@/lib/formato";
 import type { ModeloParaCargar, PosicionDeCarga } from "@/lib/consultas";
-import type { Packaging } from "@/lib/db/schema";
+import type { Calidad, Packaging } from "@/lib/db/schema";
+import { TildeSegunda } from "@/components/calidad";
 
 const hoy = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" });
 
@@ -244,8 +245,8 @@ function Posicion({
 }
 
 /**
- * Lo que hay en una posición. Arranca SIEMPRE en blanco: producto, palet, sin
- * modelos y SIN FECHA. Nada se arrastra de la posición anterior: lo que viene
+ * Lo que hay en una posición. Arranca SIEMPRE en blanco: producto, palet, de
+ * primera, sin modelos y SIN FECHA. Nada se arrastra de la posición anterior: lo que viene
  * puesto se termina cargando sin mirar, y la fecha de ingreso de un palet no
  * dice nada de la del de al lado.
  */
@@ -263,6 +264,7 @@ function Formulario({
   const { ejecutar, enviando, error, limpiar } = useAccion();
   const [objeto, setObjeto] = useState(false);
   const [packaging, setPackaging] = useState<Packaging>("palet");
+  const [calidad, setCalidad] = useState<Calidad>("primera");
   const [lineas, setLineas] = useState<Array<{ modeloId: number; cantidad: string }>>([]);
   /** El modelo recién tocado: ahí salta el cursor si hay que escribir la cantidad. */
   const [recienTocado, setRecienTocado] = useState<number | null>(null);
@@ -370,6 +372,9 @@ function Formulario({
                 </button>
               ))}
             </div>
+            <div className="mt-3">
+              <TildeSegunda valor={calidad} onCambio={setCalidad} />
+            </div>
           </div>
 
           <ElegirModelo modelos={modelos} yaElegidos={lineas.map((l) => l.modeloId)} alElegir={agregar} />
@@ -450,6 +455,7 @@ function Formulario({
               cargarEnPosicion({
                 posicionId: p.id,
                 packaging: objeto ? "objeto" : packaging,
+                calidad: objeto ? "primera" : calidad,
                 contenido: objeto ? [] : contenido,
                 descripcion: objeto ? descripcion.trim() : undefined,
                 fechaIngreso: fecha,
@@ -459,7 +465,7 @@ function Formulario({
           );
         }}
       >
-        {enviando ? "Guardando…" : "Cargar"}
+        {enviando ? "Guardando…" : !objeto && calidad === "segunda" ? "Cargar de segunda" : "Cargar"}
       </button>
     </div>
   );

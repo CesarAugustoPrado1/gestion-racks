@@ -392,6 +392,33 @@ usa"; el objeto dice "este lugar está ocupado por algo que se puede mover".
 
 ---
 
+### 3.12 Primera y segunda
+
+Cada bulto es de **primera** o de **segunda** (`bultos.calidad`), y la categoría
+es del bulto entero: un palet es de una o de la otra. Vale igual para placas,
+piedras y pisos. Todo entra de primera salvo que el operario marque el tilde
+*De segunda* al ingresarlo, en la carga inicial o al registrar algo que el
+sistema no tenía.
+
+La categoría **nunca cambia en silencio**. Todo movimiento guarda la categoría
+de antes y la de después (`calidad_antes`, `calidad`), con la misma convención
+que la cantidad, y un cambio se reconoce porque son distintas. Hay dos formas de
+cambiarla, y no son lo mismo:
+
+- **Pasaje de categoría** (movimiento `categoria`): el bulto se registró bien y
+  después se detectó que es de la otra. Lo hace el autoelevador o el admin
+  desde la ficha del bulto, con el porqué obligatorio. No mueve stock ni
+  posición, y le borra el chequeo al bulto como cualquier movimiento.
+- **Corrección de control** (un `ajuste` con motivo *Categoría equivocada*): el
+  bulto estaba cargado con la categoría que no era. Es un error de registro, y
+  por eso cuenta como diferencia en el chequeo y en la precisión, igual que una
+  cantidad mal cargada.
+
+El stock de segunda está incluido en el total y se dice aparte en Stock. En
+Movimientos se filtra con *Todo cambio de categoría* (pasajes y correcciones), y
+Estadísticas tiene la sección *Primera y segunda*: cuántos pasajes y
+correcciones, de quién, lo que pasó a segunda por línea y la lista uno por uno.
+
 ## 4. Movimientos
 
 **En pantalla se llaman Ingreso, Egreso, Reubicación y Ajuste** (y Carga inicial, §4.3). En la base
