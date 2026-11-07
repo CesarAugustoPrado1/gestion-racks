@@ -116,6 +116,12 @@ no tiene"; se cambia con un pasaje de categoría desde la ficha del bulto (con e
 porqué obligatorio) o, si estaba mal registrado, lo corrige control desde el
 chequeo. Todo queda en Movimientos y en Estadísticas. Ver DISENO.md §3.12.
 
+**Resumen y estadísticas**: `/resumen` es la foto del stock en un momento
+(ahora o el cierre de cualquier día, reconstruido del historial, comparable con
+otra foto) y reemplaza al Tablero. `/estadisticas` es la evolución en un período
+(hoy, ayer, esta semana, el mes, rangos a elección…), comparada con el período
+anterior equivalente. Ver DISENO.md §6.2.1.
+
 Pendiente antes de seguir con la fase 1:
 
 - [ ] Aplicar `drizzle/0000_inicial.sql` y crear el usuario admin. Con terminal,

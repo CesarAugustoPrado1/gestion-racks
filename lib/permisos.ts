@@ -32,6 +32,9 @@ const REGLAS: Array<{ prefijo: string; roles: Rol[] }> = [
   // El tablero lo ve todo el mundo: "cómo estamos" no es un secreto de nadie,
   // y al clarkista le sirve saber cuánto lugar queda.
   { prefijo: "/tablero", roles: ["admin", "auditor", "autoelevador", "control", "comercial"] },
+  // El resumen es la foto del stock, ahora o en otro momento: lo ve todo el
+  // mundo por lo mismo que el tablero, al que reemplaza.
+  { prefijo: "/resumen", roles: ["admin", "auditor", "autoelevador", "control", "comercial"] },
   // El plano de la planta lo mira cualquiera; editarlo es de admin (/admin/planta).
   { prefijo: "/planta", roles: ["admin", "auditor", "autoelevador", "control", "comercial"] },
   // Estadísticas es para decidir, no para operar: lo mismo que confiabilidad.
@@ -70,7 +73,7 @@ export function rutaInicial(rol: Rol): string {
       return "/stock";
     default:
       // Admin y auditor: lo primero es ver cómo estamos.
-      return "/tablero";
+      return "/resumen";
   }
 }
 
@@ -97,7 +100,7 @@ export type ItemNav = { href: string; etiqueta: string; icono: string };
  * no tenerlo: el operario aprende a desconfiar de la barra.
  */
 const NAV: ItemNav[] = [
-  { href: "/tablero", etiqueta: "Tablero", icono: "tablero" },
+  { href: "/resumen", etiqueta: "Resumen", icono: "tablero" },
   { href: "/mover", etiqueta: "Mover", icono: "autoelevador" },
   { href: "/control", etiqueta: "Control", icono: "control" },
   { href: "/racks", etiqueta: "Racks", icono: "grid" },

@@ -3,45 +3,9 @@
  * se prueba sin Postgres y lo usan las dos pantallas.
  */
 
-/** Los períodos que se pueden elegir en estadísticas, en días. */
-export const PERIODOS = [7, 30, 90, 365] as const;
-export type Periodo = (typeof PERIODOS)[number];
-
-/** Lee `?dias=` de la URL. Cualquier cosa rara vuelve a 30. */
-export function leerPeriodo(crudo: string | undefined): Periodo {
-  const n = Number(crudo);
-  return (PERIODOS as readonly number[]).includes(n) ? (n as Periodo) : 30;
-}
-
-export function etiquetaPeriodo(dias: Periodo): string {
-  return dias === 365 ? "último año" : `últimos ${dias} días`;
-}
-
 /** Porcentaje entero, sin dividir por cero. */
 export function porcentaje(parte: number, total: number): number {
   return total > 0 ? Math.round((parte / total) * 100) : 0;
-}
-
-/**
- * Completa una serie diaria con ceros en los días sin movimientos.
- *
- * Sin esto, un gráfico de barras por día salta del lunes al jueves sin avisar,
- * y dos días tranquilos se leen como uno. Los días van en hora de Argentina,
- * igual que los agrupa la consulta.
- */
-export function completarDias(
-  filas: Array<{ dia: string; valor: number }>,
-  dias: number,
-  hoy: string,
-): Array<{ dia: string; valor: number }> {
-  const porDia = new Map(filas.map((f) => [f.dia, f.valor]));
-  const salida: Array<{ dia: string; valor: number }> = [];
-  const fin = new Date(`${hoy}T12:00:00Z`);
-  for (let i = dias - 1; i >= 0; i--) {
-    const d = new Date(fin.getTime() - i * 86400000).toISOString().slice(0, 10);
-    salida.push({ dia: d, valor: porDia.get(d) ?? 0 });
-  }
-  return salida;
 }
 
 /**
