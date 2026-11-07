@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
@@ -82,9 +82,20 @@ export function Formulario({
 }) {
   const router = useRouter();
   const { ejecutar, enviando, error, limpiar } = useAccion();
+  const caja = useRef<HTMLDivElement>(null);
+
+  /**
+   * El formulario se abre arriba de la lista. Al tocar "Editar" en un
+   * elemento de más abajo quedaba fuera de la pantalla, y parecía que el botón
+   * no hacía nada. Así que al abrirse -o al pasar a editar otro- la pantalla
+   * va hasta él.
+   */
+  useEffect(() => {
+    caja.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [titulo]);
 
   return (
-    <div className="tarjeta space-y-4 p-5">
+    <div ref={caja} className="tarjeta scroll-mt-20 space-y-4 p-5">
       <h2 className="text-base font-bold text-slate-900">{titulo}</h2>
       {error && <Aviso>{error}</Aviso>}
       {children}
