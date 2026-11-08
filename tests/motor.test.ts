@@ -8,6 +8,9 @@ import {
   bloquearPosicion,
   cambiarCategoria,
   crearBulto,
+  exigirMotivo,
+  exigirNotaSiHaceFalta,
+  rechazarMerma,
   exigirAltura,
   exigirLibre,
   exigirUsable,
@@ -1271,5 +1274,59 @@ describe("fotos diarias y m²", { skip: !hay && "sin base local" }, () => {
       [...foto.m2.modelosSinMedir].sort(),
       otros.map((o) => o.nombre).sort(),
     );
+  });
+});
+
+describe("merma", { skip: !hay && "sin base local" }, () => {
+  test("un egreso con motivo de merma queda marcado como merma y resta del stock", async () => {
+    const [mot] = (await base.db.execute(sql`
+      insert into motivos (nombre, ambito, es_egreso, es_merma, pide_nota, activo, orden)
+      values ('Rotura de prueba', 'salida', false, true, false, true, 99) returning id
+    `)) as unknown as Array<{ id: number }>;
+    let id = 0;
+    await base.db.transaction(async (tx) => {
+      id = (await meter(tx as Tx, null, "palet", [{ modeloId: datos.laja.id, cantidad: 48 }])).id;
+    });
+    const antes = await segunElHistorial();
+    await base.db.transaction(async (tx) => {
+      const t = tx as Tx;
+      const motivo = await exigirMotivo(t, mot.id, "salida");
+      assert.equal(motivo.esMerma, true);
+      const b = await bloquearBulto(t, id);
+      await aplicarMovimiento(t, {
+        tipo: "sacar",
+        bulto: b,
+        contenidoDespues: [{ modeloId: datos.laja.id, cantidad: 40 }],
+        packagingDespues: "suelto",
+        estadoDespues: b.estado,
+        posicionDestino: null,
+        motivo,
+        usuario: { id: datos.usuario.id, nombre: datos.usuario.nombre },
+        nota: "se cayó al bajarlo",
+      });
+    });
+    const [m] = (await base.db.execute(sql`
+      select es_merma, motivo_nombre from movimientos where bulto_id = ${id} order by id desc limit 1
+    `)) as unknown as Array<{ es_merma: boolean; motivo_nombre: string }>;
+    assert.equal(m.es_merma, true);
+    assert.equal(m.motivo_nombre, "Rotura de prueba");
+    assert.equal((await segunElHistorial()).get(datos.laja.id), antes.get(datos.laja.id)! - 8, "la merma resta");
+    await exigirQueCuadre("después de una merma");
+
+    // Si después alguien le saca la marca al motivo, el historial no cambia.
+    await base.db.execute(sql`update motivos set es_merma = false where id = ${mot.id}`);
+    const [m2] = (await base.db.execute(sql`
+      select es_merma from movimientos where bulto_id = ${id} order by id desc limit 1
+    `)) as unknown as Array<{ es_merma: boolean }>;
+    assert.equal(m2.es_merma, true);
+  });
+
+  test("un motivo que pide nota no se acepta sin ella, y la merma no sirve para otra cosa", () => {
+    const otra = { id: 1, nombre: "Otra merma", esMerma: true, pideNota: true };
+    assert.throws(() => exigirNotaSiHaceFalta(otra, "  "), /escribí qué pasó/);
+    assert.doesNotThrow(() => exigirNotaSiHaceFalta(otra, "la pisó el clark"));
+    assert.doesNotThrow(() => exigirNotaSiHaceFalta({ id: 2, nombre: "Muestra" }, null));
+    assert.throws(() => rechazarMerma(otra, "cambiar la categoría"), /es un motivo de merma/);
+    assert.doesNotThrow(() => rechazarMerma({ id: 3, nombre: "Modelo equivocado", esMerma: false }, "x"));
   });
 });

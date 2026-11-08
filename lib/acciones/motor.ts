@@ -565,20 +565,36 @@ export async function exigirMotivo(
   tx: Tx,
   motivoId: number,
   ambito: "salida" | "ajuste",
-): Promise<{ id: number; nombre: string }> {
+): Promise<Motivo> {
   const filas = (await tx.execute(sql`
-    select id, nombre, activo, ambito from motivos where id = ${motivoId} limit 1
+    select id, nombre, activo, ambito, es_merma, pide_nota from motivos where id = ${motivoId} limit 1
   `)) as unknown as Array<{
     id: number;
     nombre: string;
     activo: boolean;
     ambito: string;
+    es_merma: boolean;
+    pide_nota: boolean;
   }>;
   const m = filas[0];
   if (!m || !m.activo || m.ambito !== ambito) {
     fallar("Elegí un motivo de la lista.");
   }
-  return { id: m.id, nombre: m.nombre };
+  return { id: m.id, nombre: m.nombre, esMerma: m.es_merma, pideNota: m.pide_nota };
+}
+
+export type Motivo = { id: number; nombre: string; esMerma?: boolean; pideNota?: boolean };
+
+/** Un motivo que pide nota no se acepta sin ella: es el único registro de qué pasó. */
+export function exigirNotaSiHaceFalta(motivo: Motivo, nota: string | null | undefined) {
+  if (motivo.pideNota && !(nota ?? "").trim()) {
+    fallar(`Con el motivo «${motivo.nombre}», escribí qué pasó en la nota.`);
+  }
+}
+
+/** Un motivo de merma solo tiene sentido si sale producto: no para mover, encontrar o recategorizar. */
+export function rechazarMerma(motivo: Motivo, donde: string) {
+  if (motivo.esMerma) fallar(`«${motivo.nombre}» es un motivo de merma: no se usa para ${donde}.`);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -601,7 +617,7 @@ export type Aplicacion = {
    */
   invadeArriba?: { id: number; codigo: string } | null;
   usuario: { id: number; nombre: string };
-  motivo?: { id: number; nombre: string };
+  motivo?: Motivo;
   nota?: string | null;
   /**
    * Qué hay, si es un objeto. Se guarda en el bulto y se congela en el
@@ -680,6 +696,7 @@ export async function aplicarMovimiento(tx: Tx, a: Aplicacion): Promise<number> 
       usuarioNombre: a.usuario.nombre,
       motivoId: a.motivo?.id ?? null,
       motivoNombre: a.motivo?.nombre ?? null,
+      esMerma: a.motivo?.esMerma ?? false,
       descripcion,
       nota: a.nota ?? null,
     })
@@ -817,7 +834,7 @@ export async function cambiarCategoria(
     bulto: BultoVivo;
     calidad: Calidad;
     usuario: { id: number; nombre: string };
-    motivo?: { id: number; nombre: string };
+    motivo?: Motivo;
     nota: string | null;
     conservarChequeo?: boolean;
   },

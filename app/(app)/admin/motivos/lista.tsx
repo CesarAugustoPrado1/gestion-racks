@@ -10,6 +10,8 @@ type Motivo = {
   nombre: string;
   ambito: "salida" | "ajuste";
   esEgreso: boolean;
+  esMerma: boolean;
+  pideNota: boolean;
   activo: boolean;
 };
 
@@ -76,7 +78,25 @@ export function Motivos({ motivos }: { motivos: Motivo[] }) {
             </div>
           </div>
 
-          {editando.ambito === "salida" && (
+          <Interruptor
+            valor={editando.esMerma}
+            cambiar={(v) => setEditando({ ...editando, esMerma: v, esEgreso: v ? false : editando.esEgreso })}
+            etiqueta="Es merma"
+            ayuda={
+              editando.ambito === "salida"
+                ? "Producto que se pierde o se arruina en el depósito: rotura, accidente, aves, roedores, hongos. Se cuenta aparte en Estadísticas y no es una salida de la fábrica."
+                : "Producto roto o perdido que control encuentra en un chequeo. Solo se puede usar cuando hay menos de lo registrado."
+            }
+          />
+
+          <Interruptor
+            valor={editando.pideNota}
+            cambiar={(v) => setEditando({ ...editando, pideNota: v })}
+            etiqueta="Pide nota obligatoria"
+            ayuda="No deja guardar sin escribir qué pasó. Para motivos como «Otra merma», donde el nombre solo no alcanza."
+          />
+
+          {editando.ambito === "salida" && !editando.esMerma && (
             <Interruptor
               valor={editando.esEgreso}
               cambiar={(v) => setEditando({ ...editando, esEgreso: v })}
@@ -103,6 +123,8 @@ export function Motivos({ motivos }: { motivos: Motivo[] }) {
               nombre: "",
               ambito: "salida",
               esEgreso: true,
+              esMerma: false,
+              pideNota: false,
               activo: true,
             })
           }
@@ -132,10 +154,15 @@ export function Motivos({ motivos }: { motivos: Motivo[] }) {
                         </span>
                       )}
                     </p>
-                    {m.ambito === "salida" && !m.esEgreso && (
-                      <p className="text-xs text-slate-500">
-                        vuelve al rack: no cuenta como despacho
-                      </p>
+                    {m.esMerma ? (
+                      <p className="text-xs font-semibold text-red-700">merma{m.pideNota ? " · pide nota" : ""}</p>
+                    ) : (
+                      <>
+                        {m.ambito === "salida" && !m.esEgreso && (
+                          <p className="text-xs text-slate-500">vuelve al rack: no cuenta como despacho</p>
+                        )}
+                        {m.pideNota && <p className="text-xs text-slate-500">pide nota</p>}
+                      </>
                     )}
                   </div>
                   <button

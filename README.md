@@ -127,6 +127,11 @@ otra foto) y reemplaza al Tablero. `/estadisticas` es la evolución en un perío
 (hoy, ayer, esta semana, el mes, rangos a elección…), comparada con el período
 anterior equivalente. Ver DISENO.md §6.2.1.
 
+**Merma** (migración `0014_merma`): producto que se pierde en el depósito. Se
+registra con motivos de merma (configurables, con nota obligatoria si hace
+falta) al sacar o desde el chequeo de control, y tiene su sección en
+Estadísticas y su filtro en Movimientos. Ver DISENO.md §3.13.
+
 Pendiente antes de seguir con la fase 1:
 
 - [ ] Aplicar `drizzle/0000_inicial.sql` y crear el usuario admin. Con terminal,
@@ -177,9 +182,10 @@ serializando del otro lado (no se arregla con `max`; ahí la salida es
 
 ## Manual del operario
 
-Está en `public/manual.pdf` y se abre desde el botón **Manual** del encabezado,
-en todas las pantallas. El celular no lo guarda en caché (ver `next.config.ts`),
-así que siempre abre la última versión desplegada.
+Se abre desde el botón **Manual vN** del encabezado, en todas las pantallas. La
+versión vigente se dice en un solo lugar, `lib/manual.ts`; cada versión es un
+archivo con su número en `public/manuales/` (`manual-operario-v3.pdf`) y nunca
+se reemplaza. `/manual.pdf` redirige a la vigente.
 
 El original editable (HTML, capturas y el script que arma el PDF) está en
 `docs/manual/`, con los pasos para sacar una versión nueva. Las versiones

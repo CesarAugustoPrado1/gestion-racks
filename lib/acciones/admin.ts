@@ -600,20 +600,34 @@ export async function guardarEmpresa(
  * los toca. Sin motivos no se puede sacar nada del rack, y quedarse sin ellos
  * justo al empezar a trabajar en serio sería el peor momento posible.
  */
+const MERMA = { esEgreso: false, esMerma: true } as const;
 const ESTANDAR: Array<{
   nombre: string;
   ambito: "salida" | "ajuste";
   esEgreso?: boolean;
+  esMerma?: boolean;
+  pideNota?: boolean;
 }> = [
   { nombre: "Entrega a cliente", ambito: "salida" },
   { nombre: "Muestra", ambito: "salida" },
-  { nombre: "Rotura o descarte", ambito: "salida" },
   { nombre: "Rearmado o reempaque", ambito: "salida", esEgreso: false },
   { nombre: "Otro", ambito: "salida" },
+  { nombre: "Rotura al manipular", ambito: "salida", ...MERMA },
+  { nombre: "Accidente con el autoelevador", ambito: "salida", ...MERMA },
+  { nombre: "Caída o golpe en el rack", ambito: "salida", ...MERMA },
+  { nombre: "Suciedad por aves (palomas)", ambito: "salida", ...MERMA },
+  { nombre: "Daño por roedores", ambito: "salida", ...MERMA },
+  { nombre: "Humedad u hongos", ambito: "salida", ...MERMA },
+  { nombre: "Daño por agua o goteras", ambito: "salida", ...MERMA },
+  { nombre: "Defecto de fabricación detectado en depósito", ambito: "salida", ...MERMA },
+  { nombre: "Deterioro por antigüedad", ambito: "salida", ...MERMA },
+  { nombre: "Otra merma", ambito: "salida", ...MERMA, pideNota: true },
   { nombre: "Cantidad distinta a la registrada", ambito: "ajuste" },
   { nombre: "Bulto en otra posición", ambito: "ajuste" },
   { nombre: "Modelo equivocado", ambito: "ajuste" },
   { nombre: "Posición vacía en el sistema", ambito: "ajuste" },
+  { nombre: "Categoría equivocada", ambito: "ajuste", esEgreso: false },
+  { nombre: "Merma encontrada en el chequeo", ambito: "ajuste", ...MERMA, pideNota: true },
 ];
 
 export async function cargarMotivosEstandar(): Promise<
@@ -642,6 +656,9 @@ const esquemaMotivo = z.object({
   nombre,
   ambito: z.enum(["salida", "ajuste"]),
   esEgreso: z.boolean(),
+  /** Merma: producto que se pierde en el depósito. Nunca es egreso de la fábrica. */
+  esMerma: z.boolean().default(false),
+  pideNota: z.boolean().default(false),
   activo: z.boolean(),
 });
 
@@ -658,7 +675,9 @@ export async function guardarMotivo(
         .set({
           nombre: d.nombre,
           ambito: d.ambito,
-          esEgreso: d.esEgreso,
+          esEgreso: d.esMerma ? false : d.esEgreso,
+          esMerma: d.esMerma,
+          pideNota: d.pideNota,
           activo: d.activo,
         })
         .where(eq(motivos.id, d.id));
@@ -669,7 +688,9 @@ export async function guardarMotivo(
       await db.insert(motivos).values({
         nombre: d.nombre,
         ambito: d.ambito,
-        esEgreso: d.esEgreso,
+        esEgreso: d.esMerma ? false : d.esEgreso,
+        esMerma: d.esMerma,
+        pideNota: d.pideNota,
         activo: d.activo,
         orden: max,
       });

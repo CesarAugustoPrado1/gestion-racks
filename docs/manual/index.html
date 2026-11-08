@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Manual del operario · Gestión de Racks</title>
+<title>Manual del operario v3 · Gestión de Racks</title>
 <style>
   @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
   :root {
@@ -36,7 +36,7 @@
   .ej { background: var(--fondo); border-color: #94a3b8; }
   .dos { display: grid; grid-template-columns: 1fr 62mm; gap: 12pt; align-items: start; }
   .dos.ancho { grid-template-columns: 1fr 75mm; }
-  .tel { width: 100%; border: 5pt solid #0f172a; border-radius: 16pt; display: block; }
+  .tel { width: 100%; max-height: 225mm; object-fit: cover; object-position: top; border: 5pt solid #0f172a; border-radius: 16pt; display: block; }
   .parte { width: 100%; border: 1pt solid var(--linea); border-radius: 8pt; display: block; }
   figure { margin: 0; break-inside: avoid; }
   figcaption { font-size: 8.5pt; color: var(--suave); text-align: center; margin-top: 3pt; }
@@ -68,17 +68,21 @@
   .indice div { color: var(--gris); padding-left: 10pt; }
   .tapa { height: 250mm; display: flex; flex-direction: column; justify-content: center; }
   .rapida { display: grid; grid-template-columns: 1fr 1fr; gap: 8pt; }
-  .rapida .tarj { border: 1.5pt solid var(--tinta); }
+  .rapida { font-size: 9pt; gap: 6pt; }
+  .rapida .tarj { border: 1.5pt solid var(--tinta); padding: 6pt 8pt; }
   .rapida .tarj.v { border-color: var(--verde); }
   .rapida .tarj.a { border-color: #1d4ed8; }
-  .rapida ol { margin: 3pt 0 0 14pt; padding: 0; font-size: 9.5pt; }
+  .rapida ol { margin: 2pt 0 0 13pt; padding: 0; font-size: 8.6pt; line-height: 1.35; }
 </style>
 </head>
 <body>
 
 <!-- ============================================================== TAPA -->
 <section class="tapa">
-  <div style="font-weight:700; color:#475569; font-size:12pt; margin-bottom:60mm">▤ Gestión de Racks</div>
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:50mm">
+    <span style="font-weight:700; color:#475569; font-size:12pt">▤ Gestión de Racks</span>
+    <span style="background:#0f172a; color:white; border-radius:8pt; padding:6pt 12pt; font-weight:700; font-size:14pt">Versión 3</span>
+  </div>
   <h1>Manual del operario</h1>
   <p style="font-size:14pt; color:#475569">Cómo se usa la app en el galpón, paso a paso.<br>Para quien empieza hoy y para quien ya la usa.</p>
   <div class="grid3" style="margin-top:18pt">
@@ -87,7 +91,8 @@
     <div class="tarj" style="background:#1d4ed8; color:white; border:0"><b style="font-size:13pt">Supervisión</b>Resumen, estadísticas y curvas de confiabilidad.</div>
   </div>
   <p class="muted chico" style="margin-top:40mm; border-top:1pt solid var(--linea); padding-top:6pt">
-    Versión de noviembre de 2026. Reemplaza a la de octubre de 2026, que queda guardada.
+    <b>Versión 3</b> · noviembre de 2026. Reemplaza a la versión 2, que queda guardada junto con la 1
+    (el historial de versiones está al final).
     Las capturas son de la app real con datos de prueba; los nombres de las personas son de ejemplo.
   </p>
 </section>
@@ -99,22 +104,23 @@
     <h4>1 · Antes de empezar</h4>
     <div>La regla de oro</div><div>Entrar a la app</div><div>Cómo está armada la pantalla</div>
     <h4>2 · Lo que tenés que saber del galpón</h4>
-    <div>Grupos, posiciones y códigos</div><div>Racks numerados de derecha a izquierda</div><div>Bultos y packaging</div><div>Primera y segunda</div><div>Empresas y metros cuadrados</div>
+    <div>Grupos, posiciones y códigos</div><div>Racks numerados de derecha a izquierda</div><div>Bultos y packaging</div><div>Primera y segunda</div><div>Merma</div><div>Empresas y metros cuadrados</div>
     <h4>3 · Clarkista</h4>
-    <div>Tu pantalla: Mover</div><div>Ingreso al rack</div><div>Cuando la app no te deja</div><div>Buscar un bulto</div><div>Egreso</div><div>Reubicar</div><div>Pasaje de categoría</div><div>Mirar los racks</div>
+    <div>Tu pantalla: Mover</div><div>Ingreso al rack</div><div>Cuando la app no te deja</div><div>Buscar un bulto</div><div>Egreso</div><div>Registrar una merma</div><div>Reubicar</div><div>Pasaje de categoría</div><div>Mirar los racks</div>
     <h4>4 · Control</h4>
-    <div>La confiabilidad</div><div>La recorrida</div><div>Chequear una posición</div><div>Cuando hay una diferencia</div><div>Carga inicial de un grupo</div>
+    <div>La confiabilidad</div><div>La recorrida</div><div>Chequear una posición</div><div>Cuando hay una diferencia</div><div>Merma encontrada en un chequeo</div><div>Carga inicial de un grupo</div>
     <h4>5 · Supervisión</h4>
-    <div>Resumen: la foto del stock</div><div>Estadísticas: lo que pasó en un período</div><div>Confiabilidad: las curvas</div><div>Stock y Movimientos</div>
+    <div>Resumen: la foto del stock</div><div>Estadísticas: lo que pasó en un período</div><div>La merma en números</div><div>Confiabilidad: las curvas</div><div>Stock y Movimientos</div>
     <h4>6 · Administración</h4>
-    <div>Grupos de racks</div><div>Modelos: normas y m²</div>
+    <div>Grupos de racks</div><div>Modelos: normas y m²</div><div>Motivos, y los de merma</div>
     <h4>7 · Problemas frecuentes</h4>
     <h4>8 · Glosario y hoja de referencia rápida</h4>
+    <div>Versiones de este manual</div>
   </div>
   <div class="caja info"><b class="t">Si sos clarkista</b>leé las secciones 1, 2, 3 y 7. La 4 te sirve para entender qué hace control con lo que cargás.</div>
   <div class="caja ok"><b class="t">Si sos de control</b>leé de la 1 a la 4 y la 7: para verificar bien tenés que saber cómo trabaja el clarkista.</div>
   <div class="caja ej"><b class="t">Si supervisás o administrás</b>la 5 y la 6 son para vos, pero conviene conocer todo.</div>
-  <div class="caja ej"><b class="t">El manual siempre a mano</b>El botón <span class="btn sec">Manual</span> arriba de cualquier pantalla abre la última versión.</div>
+  <div class="caja ej"><b class="t">El manual siempre a mano</b>El botón <span class="btn sec">Manual v3</span> arriba de cualquier pantalla abre la versión vigente. El número dice cuál estás leyendo: si el botón dice otro número, hay una versión más nueva.</div>
 </section>
 
 <!-- ======================================================= 1. EMPEZAR -->
@@ -150,7 +156,7 @@
       <table>
         <tr><th></th><th>Qué es</th></tr>
         <tr><td><b>Arriba a la izquierda</b></td><td>El nombre de la app. Tocándolo volvés a tu pantalla principal.</td></tr>
-        <tr><td><b>Arriba a la derecha</b></td><td>Tu nombre y tu puesto. Fijate que sea el tuyo: si el celular es compartido, puede haber quedado abierta la sesión de otro. <span class="btn sec">Manual</span> abre este manual y <span class="btn sec">Salir</span> cierra tu sesión.</td></tr>
+        <tr><td><b>Arriba a la derecha</b></td><td>Tu nombre y tu puesto. Fijate que sea el tuyo: si el celular es compartido, puede haber quedado abierta la sesión de otro. <span class="btn sec">Manual v3</span> abre este manual, con su número de versión, y <span class="btn sec">Salir</span> cierra tu sesión.</td></tr>
         <tr><td><b>El medio</b></td><td>Lo que estás haciendo.</td></tr>
         <tr><td><b>La barra de abajo</b></td><td>Las secciones que podés usar. Si no entran todas, el resto está en <b>⋯ Más</b>.</td></tr>
       </table>
@@ -173,34 +179,318 @@
   <p>Los racks están organizados en <b>grupos</b>, con una letra cada uno: <b>A</b>, <b>B</b>, <b>C</b>, <b>D</b>… Cada hueco donde entra un bulto es una <b>posición</b>, y cada posición tiene un código pintado en el fierro. Hay dos tipos de rack.</p>
 
   <h3>Rack selectivo: cada hueco se alcanza directo</h3>
+  <figure style="margin:6pt 0"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 538 222" width="100%" font-family="Inter, sans-serif">
+<line x1="86" y1="152" x2="534" y2="152" stroke="#94a3b8" stroke-width="2"/>
+<text x="82" y="132.0" font-size="9" fill="#64748b" text-anchor="end">nivel 1 · piso</text>
+<text x="82" y="86.0" font-size="9" fill="#64748b" text-anchor="end">nivel 2 · medio</text>
+<text x="82" y="40.0" font-size="9" fill="#64748b" text-anchor="end">nivel 3 · arriba</text>
+<rect x="92" y="10" width="136" height="142" fill="#f8fafc"/>
+<rect x="92" y="8" width="6" height="144" fill="#1d4ed8" rx="1"/>
+<circle cx="95.0" cy="18" r="0.9" fill="#bfdbfe"/>
+<circle cx="95.0" cy="28" r="0.9" fill="#bfdbfe"/>
+<circle cx="95.0" cy="38" r="0.9" fill="#bfdbfe"/>
+<circle cx="95.0" cy="48" r="0.9" fill="#bfdbfe"/>
+<circle cx="95.0" cy="58" r="0.9" fill="#bfdbfe"/>
+<circle cx="95.0" cy="68" r="0.9" fill="#bfdbfe"/>
+<circle cx="95.0" cy="78" r="0.9" fill="#bfdbfe"/>
+<circle cx="95.0" cy="88" r="0.9" fill="#bfdbfe"/>
+<circle cx="95.0" cy="98" r="0.9" fill="#bfdbfe"/>
+<circle cx="95.0" cy="108" r="0.9" fill="#bfdbfe"/>
+<circle cx="95.0" cy="118" r="0.9" fill="#bfdbfe"/>
+<circle cx="95.0" cy="128" r="0.9" fill="#bfdbfe"/>
+<circle cx="95.0" cy="138" r="0.9" fill="#bfdbfe"/>
+<rect x="89" y="149" width="12" height="3" fill="#1e3a8a"/>
+<rect x="222" y="8" width="6" height="144" fill="#1d4ed8" rx="1"/>
+<circle cx="225.0" cy="18" r="0.9" fill="#bfdbfe"/>
+<circle cx="225.0" cy="28" r="0.9" fill="#bfdbfe"/>
+<circle cx="225.0" cy="38" r="0.9" fill="#bfdbfe"/>
+<circle cx="225.0" cy="48" r="0.9" fill="#bfdbfe"/>
+<circle cx="225.0" cy="58" r="0.9" fill="#bfdbfe"/>
+<circle cx="225.0" cy="68" r="0.9" fill="#bfdbfe"/>
+<circle cx="225.0" cy="78" r="0.9" fill="#bfdbfe"/>
+<circle cx="225.0" cy="88" r="0.9" fill="#bfdbfe"/>
+<circle cx="225.0" cy="98" r="0.9" fill="#bfdbfe"/>
+<circle cx="225.0" cy="108" r="0.9" fill="#bfdbfe"/>
+<circle cx="225.0" cy="118" r="0.9" fill="#bfdbfe"/>
+<circle cx="225.0" cy="128" r="0.9" fill="#bfdbfe"/>
+<circle cx="225.0" cy="138" r="0.9" fill="#bfdbfe"/>
+<rect x="219" y="149" width="12" height="3" fill="#1e3a8a"/>
+<rect x="98" y="103" width="124" height="5" fill="#ea580c" rx="1"/>
+<rect x="98" y="57" width="124" height="5" fill="#ea580c" rx="1"/>
+<rect x="98" y="11" width="124" height="5" fill="#ea580c" rx="1"/>
+<rect x="103" y="116" width="52" height="29" rx="2" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.3"/>
+<rect x="101" y="144" width="56" height="4" fill="#b45309"/>
+<text x="129.0" y="134.0" font-size="8.5" font-weight="700" fill="#0f172a" text-anchor="middle" font-family="JetBrains Mono, monospace">D-01-1</text>
+<rect x="103" y="70" width="52" height="29" rx="2" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.3"/>
+<rect x="101" y="98" width="56" height="4" fill="#b45309"/>
+<text x="129.0" y="88.0" font-size="8.5" font-weight="700" fill="#0f172a" text-anchor="middle" font-family="JetBrains Mono, monospace">D-01-2</text>
+<text x="129.0" y="42.0" font-size="8" fill="#94a3b8" text-anchor="middle" font-family="JetBrains Mono, monospace">D-01-3</text>
+<text x="129.0" y="165" font-size="9" font-weight="700" fill="#334155" text-anchor="middle">col. 01</text>
+<rect x="165" y="116" width="52" height="29" rx="2" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.3"/>
+<rect x="163" y="144" width="56" height="4" fill="#b45309"/>
+<text x="191.0" y="134.0" font-size="8.5" font-weight="700" fill="#0f172a" text-anchor="middle" font-family="JetBrains Mono, monospace">D-02-1</text>
+<rect x="165" y="70" width="52" height="29" rx="2" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.3"/>
+<rect x="163" y="98" width="56" height="4" fill="#b45309"/>
+<text x="191.0" y="88.0" font-size="8.5" font-weight="700" fill="#0f172a" text-anchor="middle" font-family="JetBrains Mono, monospace">D-02-2</text>
+<text x="191.0" y="42.0" font-size="8" fill="#94a3b8" text-anchor="middle" font-family="JetBrains Mono, monospace">D-02-3</text>
+<text x="191.0" y="165" font-size="9" font-weight="700" fill="#334155" text-anchor="middle">col. 02</text>
+<path d="M94 174 L94 179 L226 179 L226 174" fill="none" stroke="#94a3b8" stroke-width="1"/>
+<text x="160.0" y="191" font-size="9" fill="#64748b" text-anchor="middle" font-style="italic">módulo 1</text>
+<rect x="242" y="10" width="136" height="142" fill="#f8fafc"/>
+<rect x="242" y="8" width="6" height="144" fill="#1d4ed8" rx="1"/>
+<circle cx="245.0" cy="18" r="0.9" fill="#bfdbfe"/>
+<circle cx="245.0" cy="28" r="0.9" fill="#bfdbfe"/>
+<circle cx="245.0" cy="38" r="0.9" fill="#bfdbfe"/>
+<circle cx="245.0" cy="48" r="0.9" fill="#bfdbfe"/>
+<circle cx="245.0" cy="58" r="0.9" fill="#bfdbfe"/>
+<circle cx="245.0" cy="68" r="0.9" fill="#bfdbfe"/>
+<circle cx="245.0" cy="78" r="0.9" fill="#bfdbfe"/>
+<circle cx="245.0" cy="88" r="0.9" fill="#bfdbfe"/>
+<circle cx="245.0" cy="98" r="0.9" fill="#bfdbfe"/>
+<circle cx="245.0" cy="108" r="0.9" fill="#bfdbfe"/>
+<circle cx="245.0" cy="118" r="0.9" fill="#bfdbfe"/>
+<circle cx="245.0" cy="128" r="0.9" fill="#bfdbfe"/>
+<circle cx="245.0" cy="138" r="0.9" fill="#bfdbfe"/>
+<rect x="239" y="149" width="12" height="3" fill="#1e3a8a"/>
+<rect x="372" y="8" width="6" height="144" fill="#1d4ed8" rx="1"/>
+<circle cx="375.0" cy="18" r="0.9" fill="#bfdbfe"/>
+<circle cx="375.0" cy="28" r="0.9" fill="#bfdbfe"/>
+<circle cx="375.0" cy="38" r="0.9" fill="#bfdbfe"/>
+<circle cx="375.0" cy="48" r="0.9" fill="#bfdbfe"/>
+<circle cx="375.0" cy="58" r="0.9" fill="#bfdbfe"/>
+<circle cx="375.0" cy="68" r="0.9" fill="#bfdbfe"/>
+<circle cx="375.0" cy="78" r="0.9" fill="#bfdbfe"/>
+<circle cx="375.0" cy="88" r="0.9" fill="#bfdbfe"/>
+<circle cx="375.0" cy="98" r="0.9" fill="#bfdbfe"/>
+<circle cx="375.0" cy="108" r="0.9" fill="#bfdbfe"/>
+<circle cx="375.0" cy="118" r="0.9" fill="#bfdbfe"/>
+<circle cx="375.0" cy="128" r="0.9" fill="#bfdbfe"/>
+<circle cx="375.0" cy="138" r="0.9" fill="#bfdbfe"/>
+<rect x="369" y="149" width="12" height="3" fill="#1e3a8a"/>
+<rect x="248" y="103" width="124" height="5" fill="#ea580c" rx="1"/>
+<rect x="248" y="57" width="124" height="5" fill="#ea580c" rx="1"/>
+<rect x="248" y="11" width="124" height="5" fill="#ea580c" rx="1"/>
+<text x="279.0" y="134.0" font-size="8" fill="#94a3b8" text-anchor="middle" font-family="JetBrains Mono, monospace">D-03-1</text>
+<rect x="253" y="70" width="52" height="29" rx="2" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.3"/>
+<rect x="251" y="98" width="56" height="4" fill="#b45309"/>
+<text x="279.0" y="88.0" font-size="8.5" font-weight="700" fill="#0f172a" text-anchor="middle" font-family="JetBrains Mono, monospace">D-03-2</text>
+<text x="279.0" y="42.0" font-size="8" fill="#94a3b8" text-anchor="middle" font-family="JetBrains Mono, monospace">D-03-3</text>
+<text x="279.0" y="165" font-size="9" font-weight="700" fill="#334155" text-anchor="middle">col. 03</text>
+<rect x="315" y="116" width="52" height="29" rx="2" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.3"/>
+<rect x="313" y="144" width="56" height="4" fill="#b45309"/>
+<text x="341.0" y="134.0" font-size="8.5" font-weight="700" fill="#0f172a" text-anchor="middle" font-family="JetBrains Mono, monospace">D-04-1</text>
+<text x="341.0" y="88.0" font-size="8" fill="#94a3b8" text-anchor="middle" font-family="JetBrains Mono, monospace">D-04-2</text>
+<text x="341.0" y="42.0" font-size="8" fill="#94a3b8" text-anchor="middle" font-family="JetBrains Mono, monospace">D-04-3</text>
+<text x="341.0" y="165" font-size="9" font-weight="700" fill="#334155" text-anchor="middle">col. 04</text>
+<path d="M244 174 L244 179 L376 179 L376 174" fill="none" stroke="#94a3b8" stroke-width="1"/>
+<text x="310.0" y="191" font-size="9" fill="#64748b" text-anchor="middle" font-style="italic">módulo 2</text>
+<rect x="392" y="10" width="136" height="142" fill="#f8fafc"/>
+<rect x="392" y="8" width="6" height="144" fill="#1d4ed8" rx="1"/>
+<circle cx="395.0" cy="18" r="0.9" fill="#bfdbfe"/>
+<circle cx="395.0" cy="28" r="0.9" fill="#bfdbfe"/>
+<circle cx="395.0" cy="38" r="0.9" fill="#bfdbfe"/>
+<circle cx="395.0" cy="48" r="0.9" fill="#bfdbfe"/>
+<circle cx="395.0" cy="58" r="0.9" fill="#bfdbfe"/>
+<circle cx="395.0" cy="68" r="0.9" fill="#bfdbfe"/>
+<circle cx="395.0" cy="78" r="0.9" fill="#bfdbfe"/>
+<circle cx="395.0" cy="88" r="0.9" fill="#bfdbfe"/>
+<circle cx="395.0" cy="98" r="0.9" fill="#bfdbfe"/>
+<circle cx="395.0" cy="108" r="0.9" fill="#bfdbfe"/>
+<circle cx="395.0" cy="118" r="0.9" fill="#bfdbfe"/>
+<circle cx="395.0" cy="128" r="0.9" fill="#bfdbfe"/>
+<circle cx="395.0" cy="138" r="0.9" fill="#bfdbfe"/>
+<rect x="389" y="149" width="12" height="3" fill="#1e3a8a"/>
+<rect x="522" y="8" width="6" height="144" fill="#1d4ed8" rx="1"/>
+<circle cx="525.0" cy="18" r="0.9" fill="#bfdbfe"/>
+<circle cx="525.0" cy="28" r="0.9" fill="#bfdbfe"/>
+<circle cx="525.0" cy="38" r="0.9" fill="#bfdbfe"/>
+<circle cx="525.0" cy="48" r="0.9" fill="#bfdbfe"/>
+<circle cx="525.0" cy="58" r="0.9" fill="#bfdbfe"/>
+<circle cx="525.0" cy="68" r="0.9" fill="#bfdbfe"/>
+<circle cx="525.0" cy="78" r="0.9" fill="#bfdbfe"/>
+<circle cx="525.0" cy="88" r="0.9" fill="#bfdbfe"/>
+<circle cx="525.0" cy="98" r="0.9" fill="#bfdbfe"/>
+<circle cx="525.0" cy="108" r="0.9" fill="#bfdbfe"/>
+<circle cx="525.0" cy="118" r="0.9" fill="#bfdbfe"/>
+<circle cx="525.0" cy="128" r="0.9" fill="#bfdbfe"/>
+<circle cx="525.0" cy="138" r="0.9" fill="#bfdbfe"/>
+<rect x="519" y="149" width="12" height="3" fill="#1e3a8a"/>
+<rect x="398" y="103" width="124" height="5" fill="#ea580c" rx="1"/>
+<rect x="398" y="57" width="124" height="5" fill="#ea580c" rx="1"/>
+<rect x="398" y="11" width="124" height="5" fill="#ea580c" rx="1"/>
+<rect x="403" y="116" width="52" height="29" rx="2" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.3"/>
+<rect x="401" y="144" width="56" height="4" fill="#b45309"/>
+<text x="429.0" y="134.0" font-size="8.5" font-weight="700" fill="#0f172a" text-anchor="middle" font-family="JetBrains Mono, monospace">D-05-1</text>
+<text x="429.0" y="88.0" font-size="8" fill="#94a3b8" text-anchor="middle" font-family="JetBrains Mono, monospace">D-05-2</text>
+<text x="429.0" y="42.0" font-size="8" fill="#94a3b8" text-anchor="middle" font-family="JetBrains Mono, monospace">D-05-3</text>
+<text x="429.0" y="165" font-size="9" font-weight="700" fill="#334155" text-anchor="middle">col. 05</text>
+<text x="491.0" y="134.0" font-size="8" fill="#94a3b8" text-anchor="middle" font-family="JetBrains Mono, monospace">D-06-1</text>
+<text x="491.0" y="88.0" font-size="8" fill="#94a3b8" text-anchor="middle" font-family="JetBrains Mono, monospace">D-06-2</text>
+<rect x="465" y="24" width="52" height="29" rx="2" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.3"/>
+<rect x="463" y="52" width="56" height="4" fill="#b45309"/>
+<text x="491.0" y="42.0" font-size="8.5" font-weight="700" fill="#0f172a" text-anchor="middle" font-family="JetBrains Mono, monospace">D-06-3</text>
+<text x="491.0" y="165" font-size="9" font-weight="700" fill="#334155" text-anchor="middle">col. 06</text>
+<path d="M394 174 L394 179 L526 179 L526 174" fill="none" stroke="#94a3b8" stroke-width="1"/>
+<text x="460.0" y="191" font-size="9" fill="#64748b" text-anchor="middle" font-style="italic">módulo 3</text>
+</svg><figcaption>Grupo D visto de frente: tres módulos de dos columnas. Los parantes azules separan los módulos y los largueros naranjas, los niveles.</figcaption></figure>
   <div class="grid2">
-    <div>
-      <div class="rack" style="grid-template-columns: 34pt repeat(6, 1fr)">
-        <div class="ejes" style="align-self:center">nivel 3</div><div class="hueco vacio">D-01-3</div><div class="hueco vacio">D-02-3</div><div class="hueco vacio">D-03-3</div><div class="hueco vacio">D-04-3</div><div class="hueco vacio">D-05-3</div><div class="hueco marca">D-06-3</div>
-        <div class="ejes" style="align-self:center">nivel 2</div><div class="hueco">D-01-2</div><div class="hueco">D-02-2</div><div class="hueco vacio">D-03-2</div><div class="hueco">D-04-2</div><div class="hueco vacio">D-05-2</div><div class="hueco vacio">D-06-2</div>
-        <div class="ejes" style="align-self:center">nivel 1</div><div class="hueco">D-01-1</div><div class="hueco">D-02-1</div><div class="hueco vacio">D-03-1</div><div class="hueco">D-04-1</div><div class="hueco">D-05-1</div><div class="hueco vacio">D-06-1</div>
-      </div>
-      <div class="ejes" style="grid-template-columns: 34pt repeat(6, 1fr)"><div></div><div>col. 01</div><div>col. 02</div><div>col. 03</div><div>col. 04</div><div>col. 05</div><div>col. 06</div></div>
-    </div>
     <div class="caja ej" style="margin-top:0"><b class="t">Ejemplo · <span class="cod">D-06-3</span></b>
-      <b>D</b>: el grupo.<br><b>06</b>: la columna, contada desde la izquierda.<br><b>3</b>: el nivel, contado desde el piso (1 = piso).<br><br>
-      El nivel 1 es el <b>piso</b> y el más alto es <b>arriba</b>; con 3 niveles, el del medio es <b>medio</b>. En la app vas a leer, por ejemplo, <code>D-06-3 · arriba</code>.</div>
+      <b>D</b>: el grupo.<br><b>06</b>: la columna, contada desde la izquierda.<br><b>3</b>: el nivel, contado desde el piso (1 = piso).</div>
+    <div class="caja info" style="margin-top:0"><b class="t">Columnas y módulos</b>Cada <b>módulo</b> es un tramo de rack entre dos parantes, y tiene dos columnas. El código usa la <b>columna</b>, contada de corrido en todo el grupo: la columna 06 es la segunda del módulo 3. El módulo no va en el código, pero ayuda a ubicarse.</div>
   </div>
+  <p>El nivel 1 es el <b>piso</b> y el más alto es <b>arriba</b>; con 3 niveles, el del medio es <b>medio</b>. En la app vas a leer, por ejemplo, <code>D-06-3 · arriba</code>.</p>
 
   <h3>Rack penetrable: el clark entra a la calle</h3>
   <p>En el penetrable los palets se guardan <b>uno detrás de otro</b>. El clark entra por el pasillo y deja el primero al fondo, contra la pared. El código tiene un número más: la profundidad.</p>
-  <div class="grid2">
-    <div>
-      <div class="rack" style="grid-template-columns: 34pt 1fr 1fr 8pt">
-        <div class="ejes" style="align-self:center">arriba</div><div class="hueco vacio">B-07-3-1</div><div class="hueco vacio">B-07-3-2</div><div style="background:#94a3b8;border-radius:2pt"></div>
-        <div class="ejes" style="align-self:center">medio</div><div class="hueco marca">B-07-2-1</div><div class="hueco">B-07-2-2</div><div style="background:#94a3b8;border-radius:2pt"></div>
-        <div class="ejes" style="align-self:center">piso</div><div class="hueco">B-07-1-1</div><div class="hueco">B-07-1-2</div><div style="background:#94a3b8;border-radius:2pt"></div>
-      </div>
-      <div class="ejes" style="grid-template-columns: 34pt 1fr 1fr 8pt"><div>← entra</div><div>1 · pasillo</div><div>2 · fondo</div><div>pared</div></div>
-    </div>
-    <div class="caja ej" style="margin-top:0"><b class="t">Ejemplo · <span class="cod">B-07-2-1</span></b>
-      <b>B</b>: el grupo. <b>07</b>: la calle. <b>2</b>: el nivel (medio). <b>1</b>: la profundidad (1 = la del pasillo, la más cercana).</div>
-  </div>
+  <figure style="margin:6pt 0"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 226" width="100%" font-family="Inter, sans-serif">
+<line x1="0" y1="196" x2="640" y2="196" stroke="#94a3b8" stroke-width="2"/>
+<rect x="564" y="32" width="14" height="164" fill="#cbd5e1"/>
+<text x="571" y="210" font-size="9" fill="#64748b" text-anchor="middle">pared</text>
+<rect x="330" y="38" width="6" height="158" fill="#1d4ed8"/>
+<rect x="556" y="38" width="6" height="158" fill="#1d4ed8"/>
+<rect x="336" y="143" width="220" height="5" fill="#ea580c" opacity="0.85"/>
+<rect x="336" y="93" width="220" height="5" fill="#ea580c" opacity="0.85"/>
+<text x="322" y="174.0" font-size="9" fill="#64748b" text-anchor="end">piso</text>
+<rect x="342" y="155" width="98" height="33" rx="2" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.3"/>
+<rect x="340" y="188" width="102" height="4" fill="#b45309"/>
+<text x="391.0" y="176.0" font-size="9" font-weight="700" fill="#0f172a" text-anchor="middle" font-family="JetBrains Mono, monospace">B-07-1-1</text>
+<rect x="452" y="155" width="98" height="33" rx="2" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.3"/>
+<rect x="450" y="188" width="102" height="4" fill="#b45309"/>
+<text x="501.0" y="176.0" font-size="9" font-weight="700" fill="#0f172a" text-anchor="middle" font-family="JetBrains Mono, monospace">B-07-1-2</text>
+<text x="322" y="124.0" font-size="9" fill="#64748b" text-anchor="end">medio</text>
+<rect x="342" y="105" width="98" height="33" rx="2" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.3"/>
+<rect x="340" y="138" width="102" height="4" fill="#b45309"/>
+<text x="391.0" y="126.0" font-size="9" font-weight="700" fill="#0f172a" text-anchor="middle" font-family="JetBrains Mono, monospace">B-07-2-1</text>
+<rect x="452" y="105" width="98" height="33" rx="2" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.3"/>
+<rect x="450" y="138" width="102" height="4" fill="#b45309"/>
+<text x="501.0" y="126.0" font-size="9" font-weight="700" fill="#0f172a" text-anchor="middle" font-family="JetBrains Mono, monospace">B-07-2-2</text>
+<text x="322" y="74.0" font-size="9" fill="#64748b" text-anchor="end">arriba</text>
+<rect x="342" y="55" width="98" height="33" rx="2" fill="white" stroke="#cbd5e1" stroke-dasharray="3 2"/>
+<text x="391.0" y="76.0" font-size="8.5" fill="#94a3b8" text-anchor="middle" font-family="JetBrains Mono, monospace">B-07-3-1</text>
+<rect x="452" y="55" width="98" height="33" rx="2" fill="white" stroke="#cbd5e1" stroke-dasharray="3 2"/>
+<text x="501.0" y="76.0" font-size="8.5" fill="#94a3b8" text-anchor="middle" font-family="JetBrains Mono, monospace">B-07-3-2</text>
+<text x="391.0" y="210" font-size="9" font-weight="700" fill="#334155" text-anchor="middle">1 · pasillo</text>
+<text x="501.0" y="210" font-size="9" font-weight="700" fill="#334155" text-anchor="middle">2 · fondo</text>
+<g transform="translate(250 195) scale(-0.66 0.66) translate(0 -232)">
+  <defs>
+    <linearGradient id="cuerpo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbbf24"/><stop offset="0.55" stop-color="#f59e0b"/><stop offset="1" stop-color="#d97706"/>
+    </linearGradient>
+    <linearGradient id="contrapeso" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#475569"/><stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="mastil" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#334155"/><stop offset="0.5" stop-color="#64748b"/><stop offset="1" stop-color="#334155"/>
+    </linearGradient>
+    <linearGradient id="vidrio" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e0f2fe" stop-opacity="0.9"/><stop offset="1" stop-color="#bae6fd" stop-opacity="0.5"/>
+    </linearGradient>
+    <radialGradient id="llanta" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#e2e8f0"/><stop offset="0.6" stop-color="#94a3b8"/><stop offset="1" stop-color="#475569"/>
+    </radialGradient>
+    <pattern id="banda" width="6" height="6" patternUnits="userSpaceOnUse">
+      <rect width="6" height="6" fill="#111827"/><rect width="3" height="6" fill="#1f2937"/>
+    </pattern>
+  </defs>
+
+  <!-- piso y sombra -->
+  <line x1="5" y1="232" x2="335" y2="232" stroke="#94a3b8" stroke-width="2"/>
+  <ellipse cx="170" cy="233" rx="140" ry="5" fill="#0f172a" opacity="0.12"/>
+
+  <!-- palet en las horquillas -->
+  <g>
+    <rect x="12" y="184" width="74" height="8" rx="1" fill="#b45309"/>
+    <rect x="12" y="198" width="74" height="6" rx="1" fill="#92400e"/>
+    <rect x="14" y="192" width="10" height="6" fill="#78350f"/><rect x="44" y="192" width="10" height="6" fill="#78350f"/><rect x="74" y="192" width="10" height="6" fill="#78350f"/>
+    <rect x="14" y="138" width="70" height="46" rx="2" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.5"/>
+    <line x1="14" y1="153" x2="84" y2="153" stroke="#93c5fd"/><line x1="14" y1="168" x2="84" y2="168" stroke="#93c5fd"/>
+    <line x1="49" y1="138" x2="49" y2="184" stroke="#93c5fd"/>
+  </g>
+
+  <!-- horquillas -->
+  <path d="M8 205 L96 205 L96 210 L10 210 Z" fill="#374151"/>
+  <rect x="92" y="150" width="7" height="60" fill="#374151"/>
+
+  <!-- respaldo de carga -->
+  <g stroke="#1f2937" stroke-width="2" fill="none">
+    <rect x="96" y="112" width="12" height="40"/>
+    <line x1="96" y1="122" x2="108" y2="122"/><line x1="96" y1="132" x2="108" y2="132"/><line x1="96" y1="142" x2="108" y2="142"/>
+  </g>
+  <!-- carro portahorquillas -->
+  <rect x="99" y="146" width="14" height="22" rx="2" fill="#1f2937"/>
+
+  <!-- mástil de dos tramos -->
+  <rect x="110" y="40" width="10" height="182" rx="1.5" fill="url(#mastil)"/>
+  <rect x="120" y="58" width="9" height="164" rx="1.5" fill="url(#mastil)" opacity="0.9"/>
+  <rect x="108" y="40" width="23" height="6" rx="1" fill="#1e293b"/>
+  <rect x="108" y="92" width="23" height="4" fill="#1e293b"/>
+  <rect x="108" y="150" width="23" height="4" fill="#1e293b"/>
+  <!-- cadena y cilindro -->
+  <line x1="115" y1="48" x2="115" y2="146" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="2 1.5"/>
+  <rect x="122.5" y="96" width="4" height="120" fill="#cbd5e1"/>
+  <!-- cilindro de inclinación -->
+  <line x1="129" y1="168" x2="150" y2="176" stroke="#64748b" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- techo protector y parantes -->
+  <path d="M142 70 L150 66 L262 66 L266 70" fill="none" stroke="#1f2937" stroke-width="4" stroke-linejoin="round"/>
+  <g stroke="#334155" stroke-width="1.5">
+    <line x1="160" y1="66" x2="160" y2="70"/><line x1="180" y1="66" x2="180" y2="70"/><line x1="200" y1="66" x2="200" y2="70"/>
+    <line x1="220" y1="66" x2="220" y2="70"/><line x1="240" y1="66" x2="240" y2="70"/>
+  </g>
+  <line x1="148" y1="68" x2="140" y2="170" stroke="#1f2937" stroke-width="5" stroke-linecap="round"/>
+  <line x1="258" y1="68" x2="246" y2="160" stroke="#1f2937" stroke-width="5" stroke-linecap="round"/>
+  <!-- vidrio delantero -->
+  <path d="M149 74 L143 150 L150 150 L155 74 Z" fill="url(#vidrio)"/>
+  <!-- baliza -->
+  <rect x="226" y="58" width="12" height="8" rx="2" fill="#f97316"/>
+  <rect x="229" y="55" width="6" height="4" rx="2" fill="#fdba74"/>
+
+  <!-- asiento, volante y operario esquemático -->
+  <path d="M206 150 L206 118 Q206 110 214 110 L222 110 Q228 110 228 118 L228 150 Z" fill="#111827"/>
+  <rect x="200" y="146" width="34" height="8" rx="3" fill="#1f2937"/>
+  <line x1="166" y1="146" x2="178" y2="118" stroke="#374151" stroke-width="4" stroke-linecap="round"/>
+  <ellipse cx="180" cy="115" rx="9" ry="3" transform="rotate(-25 180 115)" fill="none" stroke="#111827" stroke-width="3"/>
+  <!-- palancas -->
+  <line x1="160" y1="150" x2="164" y2="128" stroke="#111827" stroke-width="2"/><circle cx="164" cy="127" r="2.5" fill="#dc2626"/>
+  <line x1="155" y1="150" x2="158" y2="132" stroke="#111827" stroke-width="2"/><circle cx="158" cy="131" r="2.5" fill="#111827"/>
+
+  <!-- carrocería -->
+  <path d="M134 220 L134 168 Q134 152 150 152 L250 152 Q262 152 268 162 L278 182 L278 220 Z" fill="url(#cuerpo)" stroke="#b45309" stroke-width="1.5"/>
+  <!-- contrapeso -->
+  <path d="M262 150 Q300 150 308 178 L312 212 Q312 222 302 222 L268 222 L268 160 Z" fill="url(#contrapeso)"/>
+  <circle cx="300" cy="172" r="3" fill="#fca5a5"/>
+  <!-- detalles de carrocería -->
+  <path d="M150 166 L246 166" stroke="#fde68a" stroke-width="2" opacity="0.8"/>
+  <rect x="226" y="172" width="30" height="14" rx="2" fill="#d97706" opacity="0.6"/>
+  <g stroke="#b45309" stroke-width="1"><line x1="229" y1="176" x2="253" y2="176"/><line x1="229" y1="180" x2="253" y2="180"/><line x1="229" y1="184" x2="253" y2="184"/></g>
+  <rect x="140" y="160" width="10" height="5" rx="1" fill="#fef9c3" stroke="#a16207" stroke-width="0.8"/>
+  <!-- escalón -->
+  <rect x="192" y="210" width="30" height="5" rx="1" fill="#1f2937"/>
+
+  <!-- guardabarros -->
+  <path d="M138 218 Q138 182 172 182 Q206 182 206 218" fill="#1f2937"/>
+  <path d="M248 218 Q248 192 272 192 Q296 192 296 218" fill="#1f2937"/>
+
+  <!-- rueda delantera (motriz, más grande) -->
+  <g>
+    <circle cx="172" cy="210" r="22" fill="url(#banda)"/>
+    <circle cx="172" cy="210" r="22" fill="none" stroke="#030712" stroke-width="1.5"/>
+    <circle cx="172" cy="210" r="13" fill="url(#llanta)" stroke="#334155"/>
+    <circle cx="172" cy="210" r="4" fill="#334155"/>
+    <g fill="#475569"><circle cx="172" cy="202" r="1.5"/><circle cx="179" cy="207" r="1.5"/><circle cx="177" cy="216" r="1.5"/><circle cx="167" cy="216" r="1.5"/><circle cx="165" cy="207" r="1.5"/></g>
+  </g>
+  <!-- rueda trasera (de dirección) -->
+  <g>
+    <circle cx="272" cy="214" r="17" fill="url(#banda)"/>
+    <circle cx="272" cy="214" r="17" fill="none" stroke="#030712" stroke-width="1.5"/>
+    <circle cx="272" cy="214" r="10" fill="url(#llanta)" stroke="#334155"/>
+    <circle cx="272" cy="214" r="3" fill="#334155"/>
+  </g>
+</g>
+<text x="20" y="210" font-size="9" fill="#64748b">el clark entra por el pasillo →</text>
+</svg><figcaption>Grupo B, calle 07, visto de costado: el clark entra por el pasillo y deja el primer palet contra la pared.</figcaption></figure>
+  <div class="caja ej"><b class="t">Ejemplo · <span class="cod">B-07-2-1</span></b>
+    <b>B</b>: el grupo. <b>07</b>: la calle. <b>2</b>: el nivel (medio). <b>1</b>: la profundidad (1 = la del pasillo, la más cercana).</div>
   <div class="caja ojo"><b class="t">En el penetrable, el orden importa</b>Para sacar el del fondo primero hay que sacar el de adelante. Y el palet del piso le corta el paso al clark: si <code>B-07-1-1</code> está ocupada, no se puede llegar a <code>B-07-2-2</code>. <b>La app lo sabe y te avisa</b> (sección 3).</div>
 </section>
 
@@ -242,6 +532,10 @@
         <li>Si después se detecta que es de la otra categoría, se hace un <b>pasaje de categoría</b> (sección 3). Si fue un error de registro, lo corrige control (sección 4).</li>
       </ul>
       <div class="caja ojo"><b class="t">La categoría nunca cambia en silencio</b>Cada cambio queda registrado con quién, cuándo, de qué a qué y por qué. Se ve en Movimientos y en Estadísticas.</div>
+
+      <h3>Merma</h3>
+      <p><b>Merma</b> es el producto que se pierde o se arruina en el depósito y no sale vendido: una rotura al manipular, un accidente con el autoelevador, suciedad de palomas, daño de roedores, humedad u hongos, agua de una gotera.</p>
+      <p>Se registra <b>siempre</b>, en el momento, con el motivo que corresponda. Resta del stock como un egreso, pero se cuenta aparte: así se sabe cuánto se pierde, por qué y dónde.</p>
 
       <h3>Empresas: Rustikas y Pirka</h3>
       <p>Cada grupo de racks es de una empresa, y cada modelo también. Lo normal es que los productos de cada una estén en sus racks. Si guardás un palet en un rack de la otra, <b>la app te deja</b> -a veces no hay otro lugar- pero te avisa en ámbar y lo marca para reacomodarlo cuando se pueda.</p>
@@ -354,9 +648,33 @@
         <li>Si sirve, escribí una nota: remito, cliente…</li>
         <li>Tocá <span class="btn rojo">Egreso de 10</span>. El botón dice cuánto sale.</li>
       </ol>
-      <div class="caja info"><b class="t">"Rearmado o reempaque" no es una venta</b>Es el único motivo que dice <i>vuelve al rack</i>: el producto sale para rearmarse y después vuelve a entrar con un ingreso nuevo.</div>
+      <div class="caja info"><b class="t">Los motivos vienen en tres grupos</b><b>Sale de la fábrica</b> (entrega, muestra…), <b>Merma</b> (se perdió en el depósito) y <b>Vuelve al rack</b> (rearmado o reempaque: sale para rearmarse y vuelve a entrar con un ingreso nuevo).</div>
     </div>
     <figure><img class="tel" src="img/18-egreso.png"><figcaption>Egreso de una parte, con el motivo.</figcaption></figure>
+  </div>
+</section>
+
+<section class="pagina">
+  <div class="dos">
+    <div>
+      <h3>Registrar una merma</h3>
+      <p>Si un bulto se rompió, se ensució o se arruinó, se registra como un egreso con un <b>motivo de merma</b>:</p>
+      <ol class="pasos">
+        <li>Buscá el bulto y abrilo.</li>
+        <li>Tocá <span class="btn rojo">Egreso</span>.</li>
+        <li><span class="btn sec">Todo el bulto</span> si se perdió entero, o <span class="btn">Una parte</span> y escribí <b>cuánto se perdió</b> de cada modelo.</li>
+        <li>En <b>Merma: se perdió o se arruinó en el depósito</b>, elegí lo que pasó. El motivo elegido se pone <span class="chip" style="background:#b91c1c;color:white">rojo</span>.</li>
+        <li>Si podés, escribí en la nota cómo pasó. Con <b>Otra merma</b> la nota es obligatoria: el botón no se habilita sin ella.</li>
+        <li>Tocá <span class="btn rojo">Merma de 6</span>. El botón dice que es merma y cuánto: leelo antes de tocarlo.</li>
+      </ol>
+      <table>
+        <tr><th>Motivos de merma</th></tr>
+        <tr><td>Rotura al manipular · Accidente con el autoelevador · Caída o golpe en el rack · Suciedad por aves (palomas) · Daño por roedores · Humedad u hongos · Daño por agua o goteras · Defecto de fabricación detectado en depósito · Deterioro por antigüedad · Otra merma</td></tr>
+      </table>
+      <div class="caja ojo"><b class="t">La merma también respeta el rack</b>Si el bulto está al fondo de una calle penetrable, primero hay que sacar el de adelante, igual que en cualquier egreso. La app lo avisa.</div>
+      <div class="caja ej"><b class="t">¿Se rompió una parte pero el resto se puede vender como segunda?</b>Primero registrá la merma de lo roto. Después, si corresponde, hacé el <b>pasaje de categoría</b> del resto a segunda.</div>
+    </div>
+    <figure><img class="tel" src="img/24-merma-egreso.png"><figcaption>Merma de 6 placas por suciedad de palomas.</figcaption></figure>
   </div>
 </section>
 
@@ -469,11 +787,12 @@
 
 <section class="pagina">
   <h3>Cuando hay una diferencia</h3>
-  <p>Hay cuatro casos. En todos tenés que elegir <b>qué pasó</b> (el motivo): así se sabe por qué se equivoca el sistema.</p>
+  <p>Hay cuatro botones. En todos tenés que elegir <b>qué pasó</b> (el motivo): así se sabe por qué se equivoca el sistema.</p>
   <table>
     <tr><th>Botón</th><th>Cuándo</th><th>Qué hace</th></tr>
     <tr><td><span class="btn sec">Otra cantidad</span></td><td>El bulto está, pero hay más o menos.</td><td>Escribís cuánto hay de verdad de cada modelo. La app muestra la diferencia ("−17 placas").</td></tr>
     <tr><td><span class="btn sec">Es de segunda</span><br><span class="muted chico">(o «Es de primera»)</span></td><td>El bulto está registrado con la categoría que no es.</td><td>Lo pasa a la otra categoría. El motivo «Categoría equivocada» viene elegido. No cambia la cantidad ni el lugar.</td></tr>
+    <tr><td><span class="btn sec">Otra cantidad</span> con merma</td><td>El bulto está, pero hay producto roto, sucio o arruinado.</td><td>Escribís cuánto hay sano y elegís <b>Merma encontrada en el chequeo</b>. La nota es obligatoria: contá qué encontraste. Solo aparece cuando hay <b>menos</b> de lo registrado.</td></tr>
     <tr><td><span class="btn sec">No está acá</span></td><td>El sistema dice que hay un bulto y no está.</td><td>El bulto pasa a <b>sin ubicar</b>: el producto existe, lo que se perdió es saber dónde está. Si sabés algo, ponelo en la nota.</td></tr>
     <tr><td><span class="btn sec">Hay algo que el sistema no tiene</span></td><td>Hay un bulto que el sistema no conoce.</td><td>Lo registrás como un ingreso: producto u objeto, packaging, <b>De segunda</b> si corresponde, tipo y modelo con el buscador, y cantidades.</td></tr>
   </table>
@@ -488,9 +807,28 @@
         <tr><td>Modelo equivocado</td><td>Se cargó un modelo y en realidad es otro.</td></tr>
         <tr><td>Posición vacía en el sistema</td><td>Había algo que nunca se registró.</td></tr>
         <tr><td>Categoría equivocada</td><td>Está cargado de primera y es de segunda, o al revés.</td></tr>
+        <tr><td style="color:#b91c1c"><b>Merma encontrada en el chequeo</b></td><td>Producto roto o arruinado que nadie registró. Cuenta como merma.</td></tr>
       </table>
       <p class="chico muted">Cada corrección cuenta como una diferencia en la confiabilidad: es un error que alguien cometió antes. Por eso se elige el motivo que más se acerque a lo que pasó, no el primero de la lista.</p>
     </div>
+  </div>
+</section>
+
+<section class="pagina">
+  <div class="dos">
+    <div>
+      <h3>Merma encontrada en un chequeo</h3>
+      <p>Si en una posición encontrás producto roto, mojado o sucio que nadie registró:</p>
+      <ol class="pasos s-control-pasos">
+        <li>Tocá <span class="btn sec">Otra cantidad</span> en ese bulto.</li>
+        <li>Escribí cuánto hay <b>sano</b>. La app muestra la diferencia.</li>
+        <li>Elegí <b>Merma encontrada en el chequeo</b>. Aparece un aviso ámbar: se registra como merma.</li>
+        <li>Contá en la nota qué encontraste: es obligatoria.</li>
+        <li>Tocá <span class="btn">Corregir</span>.</li>
+      </ol>
+      <div class="caja info"><b class="t">Por qué importa avisar dónde</b>La merma queda asociada a la posición. Si se repite en el mismo sector -palomas, roedores, una gotera-, las estadísticas lo muestran y se puede atacar la causa.</div>
+    </div>
+    <figure><img class="tel" src="img/36-merma-control.png"><figcaption>Merma encontrada en el chequeo, con la nota.</figcaption></figure>
   </div>
 </section>
 
@@ -599,6 +937,27 @@
 </section>
 
 <section class="pagina">
+  <div class="dos ancho">
+    <div>
+      <h3>La merma en números</h3>
+      <p>En <b>Estadísticas</b>, arriba aparecen los <b>m² de merma</b> del período comparados con el anterior. Más abajo, la sección <b>Merma</b> contesta:</p>
+      <ul>
+        <li><b>Cuánto</b> se perdió: m² y unidades por línea, y qué parte de lo que salió del rack fue merma.</li>
+        <li><b>Quién la detectó</b>: el clarkista al sacar, o control en un chequeo.</li>
+        <li><b>Cuándo</b>: los m² perdidos por día, semana o mes.</li>
+        <li><b>Por qué</b>: los motivos, de mayor a menor.</li>
+        <li><b>Dónde</b>: por grupo de racks y las posiciones donde más se repite. Ahí se ven los sectores con aves, roedores o goteras.</li>
+        <li><b>Qué modelos</b> y <b>quién la registró</b>.</li>
+        <li><b>Uno por uno</b>: cada registro con su motivo, la nota, quién y cuándo.</li>
+      </ul>
+      <p>En <b>Movimientos</b>, el filtro <b>Merma</b> trae todos los registros, y el CSV tiene la columna «Merma» para llevarlo a Excel.</p>
+      <div class="caja ojo"><b class="t">Los m² cuentan los modelos medidos</b>Si un modelo no tiene cargados sus m² por unidad, su merma se ve en unidades pero no suma en los m².</div>
+    </div>
+    <figure><img class="parte" src="img/49-merma-estadisticas.png"><figcaption>La sección Merma de Estadísticas.</figcaption></figure>
+  </div>
+</section>
+
+<section class="pagina">
   <h3>Confiabilidad: las curvas</h3>
   <p>En <b>Confiabilidad</b> (en el celular, dentro de <b>⋯ Más</b>), debajo del número de hoy, está <b>"Cómo evolucionó"</b>, con los mismos períodos que Estadísticas. Todas las curvas van de 0 a 100 %, con líneas guía en 50 % (Confiable) y 25 % (A chequear), así se comparan a ojo. Un tramo sin nada medido deja un hueco: no es cero, es que no hay dato.</p>
   <div class="grid2">
@@ -658,6 +1017,22 @@
   </div>
 </section>
 
+<section class="pagina">
+  <div class="dos">
+    <div>
+      <h3>Motivos, y los de merma</h3>
+      <p>En <b>Administración → Motivos</b> están los motivos de egreso («Al sacar») y de corrección de control («Al corregir»). Se pueden agregar los propios y apagar los que no se usan: un motivo apagado no se ofrece más, pero el historial que lo usó se sigue leyendo.</p>
+      <ul>
+        <li><b>Es merma</b>: el motivo es de producto perdido o arruinado en el depósito. Se cuenta aparte en Estadísticas y nunca es una salida de la fábrica. En correcciones de control, solo se puede usar cuando hay menos de lo registrado.</li>
+        <li><b>Pide nota obligatoria</b>: no deja guardar sin escribir qué pasó. Para motivos donde el nombre solo no alcanza, como «Otra merma».</li>
+        <li><b>El producto se va de la fábrica</b> (solo los que no son merma): apagalo si vuelve al rack, como un rearmado.</li>
+      </ul>
+      <div class="caja info"><b class="t">El historial no cambia</b>Cada movimiento guarda si fue merma en el momento en que se registró. Si después se le cambia la marca a un motivo, lo ya registrado queda como estaba.</div>
+    </div>
+    <figure><img class="tel" src="img/52-admin-motivos.png"><figcaption>Motivos: los de merma, marcados en rojo.</figcaption></figure>
+  </div>
+</section>
+
 <!-- ====================================================== 7. PROBLEMAS -->
 <section class="pagina">
   <div class="seccion s-prob"><div class="num">Sección 7</div><h2>Problemas frecuentes</h2><p>Qué hacer cuando algo no sale.</p></div>
@@ -674,6 +1049,9 @@
     <tr><td><b>"No entra: …" (altura).</b></td><td>El palet necesita 10 cm de aire arriba y el hueco no los tiene. Elegí un nivel más alto o una posición de otro grupo.</td></tr>
     <tr><td><b>Registré un ingreso con la cantidad o el modelo mal.</b></td><td>Avisale a control. No hagas un egreso para "compensar".</td></tr>
     <tr><td><b>Ingresé de primera algo que es de segunda.</b></td><td>Si fue un error al cargarlo, avisale a control (lo corrige como «Categoría equivocada»). Si se detectó después, hacé el pasaje de categoría desde la ficha.</td></tr>
+    <tr><td><b>Se rompió o se ensució un bulto.</b></td><td>Registralo como merma: <b>Egreso</b> → todo o una parte → el motivo de merma. Si lo encuentra control, <b>Otra cantidad</b> → <i>Merma encontrada en el chequeo</i>.</td></tr>
+    <tr><td><b>Con «Otra merma» el botón no se habilita.</b></td><td>Ese motivo pide nota: escribí qué pasó.</td></tr>
+    <tr><td><b>En el chequeo no aparece «Merma encontrada».</b></td><td>Solo aparece cuando escribís una cantidad <b>menor</b> a la registrada.</td></tr>
     <tr><td><b>Moví un palet y me olvidé de registrarlo.</b></td><td>Registralo ahora con <b>Reubicar</b>, apenas te acuerdes. Si ya no sabés dónde quedó, avisale a control.</td></tr>
     <tr><td><b>Aviso ámbar de "otra empresa".</b></td><td>Se puede ingresar igual. Si hay lugar en un rack de la empresa correcta, usá ese.</td></tr>
     <tr><td><b>En la pantalla aparece el nombre de otra persona.</b></td><td>Tocá <b>Salir</b> y entrá con tu usuario. Todo lo que hagas queda a nombre de quien figura arriba.</td></tr>
@@ -696,6 +1074,8 @@
     <tr><td><b>Primera / Segunda</b></td><td>La categoría del bulto. Todo entra de primera salvo que se marque.</td></tr>
     <tr><td><b>Pasaje de categoría</b></td><td>Cambiar un bulto de primera a segunda o al revés, con el porqué.</td></tr>
     <tr><td><b>Objeto</b></td><td>Algo que ocupa lugar en el rack y no es producto para vender.</td></tr>
+    <tr><td><b>Merma</b></td><td>Producto que se pierde o se arruina en el depósito (rotura, accidente, aves, roedores, hongos). Resta del stock y se cuenta aparte.</td></tr>
+    <tr><td><b>Módulo</b></td><td>En un selectivo, el tramo de rack entre dos parantes. Tiene varias columnas.</td></tr>
     <tr><td><b>m² por unidad</b></td><td>Cuántos m² ocupa una unidad de un modelo. Con eso el stock se suma en m².</td></tr>
     <tr><td><b>Ingreso / Egreso / Reubicación</b></td><td>Un bulto entra (suma stock) / sale, entero o una parte (resta) / cambia de posición (no cambia el stock).</td></tr>
     <tr><td><b>Sin ubicar</b></td><td>Bulto que está en el galpón pero en ninguna posición.</td></tr>
@@ -714,14 +1094,25 @@
   <p class="muted">Para imprimir y tener a mano en el autoelevador.</p>
   <div class="rapida">
     <div class="tarj"><b>Clarkista: entra un bulto</b><ol><li>Mover → <b>+ Ingreso al rack</b></li><li>Producto · packaging · ¿de segunda?</li><li>Tipo · modelo (escribí el principio) · cantidad</li><li>Dónde va: grupo → columna/calle → altura → profundidad (o Sin ubicar)</li><li><b>Ingresar</b>: leé el botón</li></ol></div>
-    <div class="tarj"><b>Clarkista: sale un bulto</b><ol><li>Buscar (posición, código o modelo)</li><li><b>Egreso</b> → todo o una parte</li><li>Motivo · nota</li><li><b>Egreso de N</b>: leé el botón</li></ol></div>
+    <div class="tarj"><b>Clarkista: sale un bulto o se perdió</b><ol><li>Buscar (posición, código o modelo)</li><li><b>Egreso</b> → todo o una parte</li><li>Motivo (de merma si se rompió o arruinó) · nota</li><li><b>Egreso de N</b> o <b>Merma de N</b>: leé el botón</li></ol></div>
     <div class="tarj"><b>Clarkista: cambia de lugar o de categoría</b><ol><li>Buscar y abrir</li><li><b>Reubicar</b> → posición nueva por partes · bajarlo al piso = <b>Dejarlo sin ubicar</b></li><li><b>Cambiar a segunda/primera</b> → porqué obligatorio</li></ol></div>
     <div class="tarj"><b>Código de posición</b><p style="margin:3pt 0 0"><code>D-06-3</code> = grupo D · columna 06 · nivel 3<br><code>B-07-2-1</code> = grupo B · calle 07 · nivel 2 · profundidad 1 (pasillo)<br>Nivel 1 = piso. Profundidad 1 = la del pasillo.</p></div>
-    <div class="tarj v"><b>Control: chequear</b><ol><li>Recorrida → tocar la primera</li><li>Leer el código del fierro</li><li>Coincide (también la categoría) → <b>Está bien</b></li><li>No coincide → <b>Otra cantidad</b> / <b>Es de segunda</b> / <b>No está acá</b> / <b>Hay algo que el sistema no tiene</b> + motivo</li></ol></div>
+    <div class="tarj v"><b>Control: chequear</b><ol><li>Recorrida → tocar la primera</li><li>Leer el código del fierro</li><li>Coincide (también la categoría) → <b>Está bien</b></li><li>No coincide → <b>Otra cantidad</b> / <b>Es de segunda</b> / <b>No está acá</b> / <b>Hay algo que el sistema no tiene</b> + motivo</li><li>Producto roto → <b>Otra cantidad</b> + <b>Merma encontrada</b> + nota</li></ol></div>
     <div class="tarj v"><b>Control: carga inicial</b><ol><li>Recorrida → recuadro celeste → <b>Seguir</b></li><li>Dónde estás (lo verde ya está)</li><li><b>Está vacía</b> / <b>Está</b> / cargar con fecha</li><li>Error → <b>Me equivoqué: deshacer</b></li><li>Al final → <b>Cerrar carga inicial</b></li></ol></div>
     <div class="tarj a"><b>Supervisión</b><ol><li><b>Resumen</b>: la foto de ahora o de un cierre, y comparar</li><li><b>Estadísticas</b>: período y comparación con el anterior</li><li><b>Confiabilidad</b>: las curvas</li><li><b>Movimientos</b>: el detalle y el CSV</li></ol></div>
     <div class="tarj" style="background:#dbeafe;border-color:#2a78d6"><b>La regla de oro</b>Lo que dice la app tiene que ser lo que hay en el rack. Registrá cada movimiento <b>en el momento</b>. Si la app te frena, <b>leé el cartel</b>. Si algo no cierra, <b>avisá a control</b>.</div>
   </div>
+</section>
+
+<section class="pagina">
+  <h2>Versiones de este manual</h2>
+  <p class="muted">Cada versión tiene su número, que se ve en el botón de la app, en la tapa, en el pie de cada hoja y en el nombre del archivo. Las versiones anteriores se guardan.</p>
+  <table>
+    <tr><th style="width:16%">Versión</th><th style="width:22%">Fecha</th><th>Qué cambió</th></tr>
+    <tr><td><b>3</b> (vigente)</td><td>noviembre de 2026</td><td>Merma: qué es, cómo la registra el clarkista y cómo la encuentra control, los motivos y las estadísticas. Número de versión en todos lados. Esquemas de racks redibujados, con los módulos del selectivo y el autoelevador en el penetrable.</td></tr>
+    <tr><td><b>2</b></td><td>noviembre de 2026</td><td>Escrito de cero para la app nueva: selector de posición por partes, buscador de modelos, primera y segunda, pasaje de categoría, carga inicial nueva, Resumen y foto diaria, Estadísticas, curvas de confiabilidad, m² y racks numerados de derecha a izquierda.</td></tr>
+    <tr><td><b>1</b></td><td>octubre de 2026</td><td>Primera versión.</td></tr>
+  </table>
 </section>
 
 </body>

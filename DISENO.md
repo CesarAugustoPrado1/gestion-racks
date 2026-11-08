@@ -419,6 +419,38 @@ Movimientos se filtra con *Todo cambio de categoría* (pasajes y correcciones), 
 Estadísticas tiene la sección *Primera y segunda*: cuántos pasajes y
 correcciones, de quién, lo que pasó a segunda por línea y la lista uno por uno.
 
+### 3.13 Merma
+
+**Merma** es el producto que se pierde o se arruina en el depósito y no sale
+vendido: rotura al manipular, accidente con el autoelevador, aves, roedores,
+humedad u hongos, agua.
+
+No es un tipo de movimiento: es un **motivo**. Los motivos tienen
+`es_merma` y `pide_nota`, y se administran en Administración → Motivos, así la
+planta agrega los suyos. La merma se registra de dos formas:
+
+- **Egreso** (`sacar`) con motivo de merma: la registra el clarkista, entera o
+  una parte. Respeta las mismas reglas físicas que cualquier egreso.
+- **Ajuste** de control con motivo de merma ("Merma encontrada en el
+  chequeo"): producto roto que nadie registró. Solo con menos de lo
+  registrado.
+
+Un motivo de merma no sirve para reubicar, para un bulto que no está, para
+recategorizar ni para registrar algo encontrado: lo rechaza el servidor.
+
+Cada movimiento guarda **`es_merma` congelado** al escribirlo, como el nombre del
+motivo: si mañana alguien le cambia la marca a un motivo, el historial no
+cambia. Una merma nunca es egreso de la fábrica (`es_egreso = false`).
+
+En Estadísticas tiene sección propia:
+
+- m² y unidades perdidas, y qué parte de lo que salió fue merma;
+- quién la detectó (al sacar o en un chequeo);
+- evolución, motivos, **dónde** (por grupo y las posiciones donde se repite),
+  modelos, personas y la lista uno por uno.
+
+En Movimientos, el filtro *Merma* y la columna en el CSV.
+
 ## 4. Movimientos
 
 **En pantalla se llaman Ingreso, Egreso, Reubicación y Ajuste** (y Carga inicial, §4.3). En la base

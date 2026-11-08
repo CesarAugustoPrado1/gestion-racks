@@ -3,6 +3,7 @@ import { cerrarSesion } from "@/lib/acciones/sesion";
 import { ETIQUETA_ROL, navParaRol } from "@/lib/permisos";
 import { NavInferior, NavLateral } from "@/components/navegacion";
 import { Marca } from "@/components/marca";
+import { MANUAL, MANUAL_VIGENTE } from "@/lib/manual";
 
 export default async function LayoutApp({
   children,
@@ -32,14 +33,14 @@ export default async function LayoutApp({
                 {ETIQUETA_ROL[sesion.rol]}
               </p>
             </div>
-            {/* El manual se publica con la app: el link abre siempre la última versión. */}
+            {/* El manual vigente, con su número de versión a la vista. */}
             <a
-              href="/manual.pdf"
+              href={MANUAL_VIGENTE}
               target="_blank"
               rel="noopener"
-              className="rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-500 ring-1 ring-slate-300 hover:bg-slate-100"
+              className="whitespace-nowrap rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-500 ring-1 ring-slate-300 hover:bg-slate-100"
             >
-              Manual
+              Manual v{MANUAL.version}
             </a>
             <form action={cerrarSesion}>
               <button

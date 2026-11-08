@@ -21,6 +21,8 @@ const TIPOS = [
   })),
   // No es un tipo: junta los pasajes de categoría y las correcciones de control.
   { id: "cambio_categoria", etiqueta: "Todo cambio de categoría (pasajes y correcciones)" },
+  // Tampoco es un tipo: los egresos y ajustes con motivo de merma.
+  { id: "merma", etiqueta: "Merma (roturas, accidentes, aves, roedores…)" },
 ];
 
 const dia = (atras: number) =>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
-import { estadisticas, estadisticasDeCategoria, evolucion, totales } from "@/lib/estadisticas";
+import { estadisticas, estadisticasDeCategoria, estadisticasDeMerma, evolucion, totales } from "@/lib/estadisticas";
 import { dias as textoDias, porcentaje } from "@/lib/estadisticas-calculo";
 import { Barras, Columnas, Seccion, Tile } from "@/components/graficos";
 import { GraficoEvolucion } from "@/components/evolucion";
@@ -36,12 +36,13 @@ export default async function PantallaEstadisticas({
   const ahora = new Date();
   const rango = leerRango(await searchParams, ahora);
   const anterior = rangoAnterior(rango);
-  const [e, cat, tot, ant, evo] = await Promise.all([
+  const [e, cat, tot, ant, evo, merma] = await Promise.all([
     estadisticas(rango),
     estadisticasDeCategoria(rango),
     totales(rango.inicio, rango.fin),
     totales(anterior.inicio, anterior.fin),
     evolucion(rango),
+    estadisticasDeMerma(rango, anterior),
   ]);
 
   const tipos = ["meter", "sacar", "mover", "ajuste"] as const;
@@ -93,6 +94,12 @@ export default async function PantallaEstadisticas({
           etiqueta="m² que salieron"
           valor={m2(tot.m2Salieron)}
           detalle={<Delta actual={Math.round(tot.m2Salieron)} anterior={Math.round(ant.m2Salieron)} contra={contra} unidad="m²" />}
+        />
+        <Tile
+          etiqueta="m² de merma"
+          valor={m2(merma.m2)}
+          detalle={<Delta actual={Math.round(merma.m2)} anterior={Math.round(merma.anterior.m2)} contra={contra} unidad="m²" />}
+          tono={merma.m2 > 0 ? "atencion" : "normal"}
         />
         <Tile
           etiqueta="Egresos (enteros y parciales)"
@@ -262,6 +269,176 @@ export default async function PantallaEstadisticas({
             detalle: m.esEgreso ? "sale de la fábrica" : "no es una salida de la fábrica",
           }))}
         />
+      </Seccion>
+
+      <Seccion
+        titulo="Merma"
+        detalle="Lo que se perdió o se arruinó en el depósito: roturas, accidentes, aves, roedores, hongos. La registra el clarkista al sacar, o control cuando la encuentra en un chequeo. Los m² cuentan solo los modelos con m² por unidad."
+      >
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Tile
+            etiqueta="m² perdidos"
+            valor={m2(merma.m2)}
+            detalle={<Delta actual={Math.round(merma.m2)} anterior={Math.round(merma.anterior.m2)} contra={contra} unidad="m²" />}
+          />
+          <Tile
+            etiqueta="Registros de merma"
+            valor={numero(merma.registros)}
+            detalle={<Delta actual={merma.registros} anterior={merma.anterior.registros} contra={contra} />}
+          />
+          <Tile
+            etiqueta="Parte de lo que salió"
+            valor={merma.parteDeLoQueSalio == null ? "—" : `${(merma.parteDeLoQueSalio * 100).toLocaleString("es-AR", { maximumFractionDigits: 1 })}%`}
+            detalle="de los m² que salieron del rack, fue merma"
+          />
+          <Tile
+            etiqueta="Quién la detectó"
+            valor={`${numero(merma.porOrigen.egreso)} / ${numero(merma.porOrigen.chequeo)}`}
+            detalle="al sacar / en un chequeo de control"
+          />
+        </div>
+
+        {merma.registros === 0 ? (
+          <p className="tarjeta mt-2 p-4 text-sm text-slate-500">No se registró merma en este período.</p>
+        ) : (
+          <>
+            <div className="mt-2">
+              <Columnas
+                titulo={`m² perdidos ${POR[rango.granularidad]}`}
+                unidad="m²"
+                serie={merma.serie.map((t) => ({ ...t, valor: Math.round(t.valor) }))}
+                etiquetaX={rango.granularidad === "hora" ? marcasHora : undefined}
+              />
+            </div>
+
+            <div className="tarjeta mt-2 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-xs text-slate-500">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">Línea</th>
+                    <th className="px-2 py-2 text-right font-medium">Perdido</th>
+                    <th className="px-2 py-2 text-right font-medium">m²</th>
+                    <th className="px-4 py-2 text-right font-medium">De lo que salió</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {merma.porLinea.map((l) => (
+                    <tr key={l.linea}>
+                      <td className="px-4 py-2 font-semibold text-slate-900">{l.linea}</td>
+                      <td className="cifra px-2 py-2 text-right">
+                        {numero(l.unidades)} <span className="text-xs text-slate-400">{l.unidadPlural}</span>
+                      </td>
+                      <td className="cifra px-2 py-2 text-right">{m2(l.m2)}</td>
+                      <td className="cifra px-4 py-2 text-right">{porcentaje(l.unidades, l.salieron)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="mt-3 mb-1 text-xs font-semibold text-slate-500">Por qué se perdió</p>
+            <Barras
+              filas={merma.porMotivo.map((x) => ({
+                clave: x.motivo,
+                etiqueta: x.motivo,
+                valor: Math.max(x.m2, 0.001),
+                texto: `${m2(x.m2)} · ${x.registros} ${x.registros === 1 ? "vez" : "veces"}`,
+              }))}
+            />
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div>
+                <p className="mb-1 text-xs font-semibold text-slate-500">Dónde pasó, por grupo</p>
+                <Barras
+                  filas={merma.porGrupo.map((x) => ({
+                    clave: x.grupo,
+                    etiqueta: x.grupo === "Sin ubicar" ? x.grupo : `Grupo ${x.grupo}`,
+                    valor: Math.max(x.m2, 0.001),
+                    texto: `${m2(x.m2)} · ${x.registros}`,
+                  }))}
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-semibold text-slate-500">Las posiciones donde más se repite</p>
+                <Barras
+                  vacio="Ninguna posición se repite."
+                  filas={merma.porPosicion.map((x) => ({
+                    clave: x.posicion,
+                    etiqueta: <span className="codigo">{x.posicion}</span>,
+                    valor: x.registros,
+                    texto: `${x.registros} ${x.registros === 1 ? "vez" : "veces"} · ${m2(x.m2)}`,
+                  }))}
+                />
+              </div>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">
+              Si la merma se concentra en un lugar -por ejemplo aves o roedores-, conviene revisar ese sector.
+            </p>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <div>
+                <p className="mb-1 text-xs font-semibold text-slate-500">Qué modelos</p>
+                <Barras
+                  filas={merma.porModelo.slice(0, 8).map((x) => ({
+                    clave: String(x.id),
+                    etiqueta: (
+                      <>
+                        {x.modelo} <span className="text-slate-400">· {x.linea}</span>
+                      </>
+                    ),
+                    valor: x.unidades,
+                    texto: `${numero(x.unidades)} ${x.unidadPlural} · ${m2(x.m2)}`,
+                  }))}
+                />
+              </div>
+              <div>
+                <p className="mb-1 text-xs font-semibold text-slate-500">Quién la registró</p>
+                <Barras
+                  filas={merma.porUsuario.map((x) => ({
+                    clave: x.usuario,
+                    etiqueta: x.usuario,
+                    valor: x.registros,
+                    texto: `${x.registros} · ${m2(x.m2)}`,
+                  }))}
+                />
+              </div>
+            </div>
+
+            <p className="mt-3 mb-1 text-xs font-semibold text-slate-500">Uno por uno</p>
+            <ul className="tarjeta divide-y divide-slate-100">
+              {merma.ultimos.map((u, i) => (
+                <li key={i} className="px-4 py-2.5 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="codigo text-slate-900">{u.bultoCodigo}</span>
+                    {u.posicion && <span className="codigo text-xs text-slate-500">{u.posicion}</span>}
+                    <span className="chip bg-red-100 text-red-800">{u.motivo}</span>
+                    {u.tipo !== "sacar" && <span className="chip bg-dudoso-suave text-yellow-800">encontrada por control</span>}
+                  </div>
+                  <p className="mt-0.5 text-slate-600">{u.contenido}</p>
+                  {u.nota && <p className="text-xs text-slate-500 italic">{u.nota}</p>}
+                  <p className="text-xs text-slate-400">
+                    {u.usuario} ·{" "}
+                    {u.creadoEn.toLocaleString("es-AR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      timeZone: "America/Argentina/Buenos_Aires",
+                    })}
+                  </p>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1 text-xs text-slate-500">
+              El detalle completo, filtrable y para Excel:{" "}
+              <Link href="/movimientos?tipo=merma" className="font-semibold underline">
+                Movimientos → Merma
+              </Link>
+              .
+            </p>
+          </>
+        )}
       </Seccion>
 
       <Seccion
