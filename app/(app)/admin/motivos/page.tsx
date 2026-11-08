@@ -11,12 +11,14 @@ export const dynamic = "force-dynamic";
 export default async function PantallaMotivos() {
   await requerirRol("admin");
   const filas = (await db.execute(sql`
-    select id, nombre, ambito, es_egreso, activo from motivos order by ambito, orden, nombre
+    select id, nombre, ambito, es_egreso, es_merma, pide_nota, activo from motivos order by ambito, es_merma, orden, nombre
   `)) as unknown as Array<{
     id: number;
     nombre: string;
     ambito: string;
     es_egreso: boolean;
+    es_merma: boolean;
+    pide_nota: boolean;
     activo: boolean;
   }>;
 
@@ -34,6 +36,8 @@ export default async function PantallaMotivos() {
           nombre: m.nombre,
           ambito: m.ambito as "salida" | "ajuste",
           esEgreso: m.es_egreso,
+          esMerma: m.es_merma,
+          pideNota: m.pide_nota,
           activo: m.activo,
         }))}
       />

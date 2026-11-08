@@ -53,10 +53,22 @@ const MOTIVOS: Array<{
   nombre: string;
   ambito: "salida" | "ajuste";
   esEgreso?: boolean;
+  esMerma?: boolean;
+  pideNota?: boolean;
 }> = [
   { nombre: "Entrega a cliente", ambito: "salida" },
   { nombre: "Muestra", ambito: "salida" },
-  { nombre: "Rotura o descarte", ambito: "salida" },
+  // Merma: lo que se pierde en el depósito. No es salida de la fábrica.
+  { nombre: "Rotura al manipular", ambito: "salida", esEgreso: false, esMerma: true },
+  { nombre: "Accidente con el autoelevador", ambito: "salida", esEgreso: false, esMerma: true },
+  { nombre: "Caída o golpe en el rack", ambito: "salida", esEgreso: false, esMerma: true },
+  { nombre: "Suciedad por aves (palomas)", ambito: "salida", esEgreso: false, esMerma: true },
+  { nombre: "Daño por roedores", ambito: "salida", esEgreso: false, esMerma: true },
+  { nombre: "Humedad u hongos", ambito: "salida", esEgreso: false, esMerma: true },
+  { nombre: "Daño por agua o goteras", ambito: "salida", esEgreso: false, esMerma: true },
+  { nombre: "Defecto de fabricación detectado en depósito", ambito: "salida", esEgreso: false, esMerma: true },
+  { nombre: "Deterioro por antigüedad", ambito: "salida", esEgreso: false, esMerma: true },
+  { nombre: "Otra merma", ambito: "salida", esEgreso: false, esMerma: true, pideNota: true },
   { nombre: "Rearmado o reempaque", ambito: "salida", esEgreso: false },
   { nombre: "Otro", ambito: "salida" },
   { nombre: "Cantidad distinta a la registrada", ambito: "ajuste" },
@@ -64,6 +76,7 @@ const MOTIVOS: Array<{
   { nombre: "Modelo equivocado", ambito: "ajuste" },
   { nombre: "Posición vacía en el sistema", ambito: "ajuste" },
   { nombre: "Categoría equivocada", ambito: "ajuste", esEgreso: false },
+  { nombre: "Merma encontrada en el chequeo", ambito: "ajuste", esEgreso: false, esMerma: true, pideNota: true },
 ];
 
 const EJEMPLOS: Array<{ usuario: string; nombre: string; rol: Rol }> = [

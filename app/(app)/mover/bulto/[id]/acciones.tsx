@@ -8,7 +8,7 @@ import { Aviso } from "@/components/ui";
 import { ETIQUETA_PACKAGING, numero } from "@/lib/formato";
 import { SelectorPosicion } from "@/components/selector-posicion";
 import { avisoAjeno, esAjeno } from "@/lib/uso";
-import type { PosicionLibre } from "@/lib/consultas";
+import type { MotivoOpcion, PosicionLibre } from "@/lib/consultas";
 import type { Calidad, Packaging } from "@/lib/db/schema";
 
 type Bulto = {
@@ -32,7 +32,7 @@ export function AccionesBulto({
 }: {
   bulto: Bulto;
   contenido: Array<{ modeloId: number; nombre: string; cantidad: number }>;
-  motivos: Array<{ id: number; nombre: string; esEgreso: boolean }>;
+  motivos: MotivoOpcion[];
   posiciones: PosicionLibre[];
 }) {
   const [modo, setModo] = useState<"nada" | "sacar" | "mover" | "categoria">("nada");
@@ -166,7 +166,7 @@ function Sacar({
 }: {
   bulto: Bulto;
   contenido: Array<{ modeloId: number; nombre: string; cantidad: number }>;
-  motivos: Array<{ id: number; nombre: string; esEgreso: boolean }>;
+  motivos: MotivoOpcion[];
   cancelar: () => void;
 }) {
   const router = useRouter();
@@ -192,7 +192,19 @@ function Sacar({
   const excedido = contenido.some(
     (c) => Number(cantidades[c.modeloId] || 0) > c.cantidad,
   );
-  const listo = motivoId != null && salen > 0 && !excedido;
+  const motivo = motivos.find((m) => m.id === motivoId) ?? null;
+  const faltaNota = motivo?.pideNota === true && nota.trim() === "";
+  const listo = motivoId != null && salen > 0 && !excedido && !faltaNota;
+  /**
+   * Los motivos en tres grupos, porque son tres cosas distintas: lo que se va
+   * de la fábrica (una venta, una muestra), lo que se PIERDE en el depósito
+   * (la merma) y lo que vuelve al rack (un rearmado).
+   */
+  const grupos = [
+    { titulo: "Sale de la fábrica", motivos: motivos.filter((m) => !m.esMerma && m.esEgreso) },
+    { titulo: "Merma: se perdió o se arruinó en el depósito", motivos: motivos.filter((m) => m.esMerma) },
+    { titulo: "Vuelve al rack", motivos: motivos.filter((m) => !m.esMerma && !m.esEgreso) },
+  ].filter((g) => g.motivos.length > 0);
 
   /**
    * Un objeto sale entero y sin motivo: no es stock, así que no hay venta ni
@@ -288,35 +300,55 @@ function Sacar({
 
       <div>
         <span className="etiqueta">Por qué sale</span>
-        <div className="grid gap-2">
-          {motivos.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => setMotivoId(m.id)}
-              className={`min-h-12 rounded-xl px-4 text-left text-sm font-semibold ${
-                motivoId === m.id
-                  ? "bg-slate-900 text-white"
-                  : "bg-white text-slate-700 ring-1 ring-slate-300"
-              }`}
-            >
-              {m.nombre}
-              {!m.esEgreso && (
-                <span className="ml-2 text-xs font-normal opacity-70">
-                  vuelve al rack
-                </span>
-              )}
-            </button>
+        <div className="space-y-3">
+          {grupos.map((g) => (
+            <div key={g.titulo}>
+              <p className="mb-1.5 text-xs font-semibold text-slate-500">{g.titulo}</p>
+              <div className="grid gap-2">
+                {g.motivos.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMotivoId(m.id)}
+                    className={`min-h-12 rounded-xl px-4 text-left text-sm font-semibold ${
+                      motivoId === m.id
+                        ? m.esMerma
+                          ? "bg-red-700 text-white"
+                          : "bg-slate-900 text-white"
+                        : "bg-white text-slate-700 ring-1 ring-slate-300"
+                    }`}
+                  >
+                    {m.nombre}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       </div>
 
-      <input
-        className="campo"
-        value={nota}
-        onChange={(e) => setNota(e.target.value)}
-        placeholder="Nota (opcional): remito, cliente…"
-      />
+      <label className="block">
+        {motivo?.pideNota && <span className="etiqueta">Qué pasó (obligatorio)</span>}
+        <input
+          className={`campo ${faltaNota ? "ring-2 ring-amber-400" : ""}`}
+          value={nota}
+          onChange={(e) => setNota(e.target.value)}
+          placeholder={
+            motivo?.esMerma
+              ? motivo.pideNota
+                ? "Contá qué pasó"
+                : "Nota (opcional): cómo pasó, dónde estaba…"
+              : "Nota (opcional): remito, cliente…"
+          }
+        />
+      </label>
+
+      {motivo?.esMerma && (
+        <Aviso tono="advertencia">
+          Se registra como <strong>merma</strong>: producto perdido en el depósito. Resta del stock y se cuenta
+          aparte, no como una salida de la fábrica.
+        </Aviso>
+      )}
 
       {seConvierte && (
         <Aviso tono="info">
@@ -351,7 +383,7 @@ function Sacar({
             );
           }}
         >
-          {enviando ? "Guardando…" : `Egreso de ${numero(salen)}`}
+          {enviando ? "Guardando…" : `${motivo?.esMerma ? "Merma" : "Egreso"} de ${numero(salen)}`}
         </button>
       </div>
     </div>

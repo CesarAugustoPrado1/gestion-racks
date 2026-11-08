@@ -15,7 +15,7 @@ import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
 import { validarComposicion, validarDescripcion } from "@/lib/bultos";
 import { ETIQUETA_CALIDAD, ETIQUETA_PACKAGING, PACKAGINGS, numero } from "@/lib/formato";
-import type { BultoEnPosicion, ModeloParaCargar } from "@/lib/consultas";
+import type { BultoEnPosicion, ModeloParaCargar, MotivoOpcion } from "@/lib/consultas";
 import type { Calidad, Packaging } from "@/lib/db/schema";
 
 type Modo = "mirando" | "cantidades" | "categoria" | "ausente" | "encontrado";
@@ -28,13 +28,15 @@ export function Chequeo({
 }: {
   posicion: { id: number; codigo: string; bultos: number; invasor: string | null };
   bultos: BultoEnPosicion[];
-  motivos: Array<{ id: number; nombre: string }>;
+  motivos: MotivoOpcion[];
   modelos: ModeloParaCargar[];
 }) {
   const router = useRouter();
   const { ejecutar, enviando, error, limpiar } = useAccion();
   const [modo, setModo] = useState<Modo>("mirando");
   const [elegido, setElegido] = useState<BultoEnPosicion | null>(null);
+  // La merma solo sirve para "Otra cantidad" con menos de lo registrado.
+  const sinMerma = motivos.filter((m) => !m.esMerma);
 
   function volverALaLista() {
     router.push("/control");
@@ -219,7 +221,7 @@ export function Chequeo({
         <Categoria
           posicionId={posicion.id}
           bulto={elegido}
-          motivos={motivos}
+          motivos={sinMerma}
           cancelar={() => setModo("mirando")}
           listo={volverALaLista}
         />
@@ -229,7 +231,7 @@ export function Chequeo({
         <Ausente
           posicionId={posicion.id}
           bulto={elegido}
-          motivos={motivos}
+          motivos={sinMerma}
           cancelar={() => setModo("mirando")}
           listo={volverALaLista}
         />
@@ -239,7 +241,7 @@ export function Chequeo({
         <Encontrado
           posicionId={posicion.id}
           modelos={modelos}
-          motivos={motivos}
+          motivos={sinMerma}
           cancelar={() => setModo("mirando")}
           listo={volverALaLista}
         />
@@ -253,7 +255,7 @@ function SelectorMotivo({
   elegido,
   elegir,
 }: {
-  motivos: Array<{ id: number; nombre: string }>;
+  motivos: MotivoOpcion[];
   elegido: number | null;
   elegir: (id: number) => void;
 }) {
@@ -289,7 +291,7 @@ function Cantidades({
 }: {
   posicionId: number;
   bulto: BultoEnPosicion;
-  motivos: Array<{ id: number; nombre: string }>;
+  motivos: MotivoOpcion[];
   cancelar: () => void;
   listo: () => void;
 }) {
@@ -306,6 +308,8 @@ function Cantidades({
   }));
   const nuevo = cantidades.reduce((s, c) => s + c.cantidad, 0);
   const diferencia = nuevo - bulto.cantidad;
+  const motivoElegido = motivos.find((m) => m.id === motivoId) ?? null;
+  const faltaNota = motivoElegido?.pideNota === true && nota.trim() === "";
 
   return (
     <div className="tarjeta space-y-4 p-5">
@@ -348,13 +352,22 @@ function Cantidades({
         </Aviso>
       )}
 
-      <SelectorMotivo motivos={motivos} elegido={motivoId} elegir={setMotivoId} />
+      <SelectorMotivo
+        motivos={motivos.filter((m) => !m.esMerma || diferencia < 0)}
+        elegido={motivoId}
+        elegir={setMotivoId}
+      />
+      {motivoElegido?.esMerma && (
+        <Aviso tono="advertencia">
+          Se registra como <strong>merma</strong>: producto roto o perdido que encontraste en el chequeo.
+        </Aviso>
+      )}
 
       <input
-        className="campo"
+        className={`campo ${faltaNota ? "ring-2 ring-amber-400" : ""}`}
         value={nota}
         onChange={(e) => setNota(e.target.value)}
-        placeholder="Nota (opcional)"
+        placeholder={motivoElegido?.pideNota ? "Qué pasó (obligatorio)" : "Nota (opcional)"}
       />
 
       <div className="grid grid-cols-2 gap-2">
@@ -364,7 +377,13 @@ function Cantidades({
         <button
           type="button"
           className="boton-primario"
-          disabled={enviando || motivoId == null || diferencia === 0}
+          disabled={
+            enviando ||
+            motivoId == null ||
+            diferencia === 0 ||
+            faltaNota ||
+            (motivoElegido?.esMerma === true && diferencia > 0)
+          }
           onClick={() => {
             limpiar();
             void ejecutar(
@@ -401,7 +420,7 @@ function Categoria({
 }: {
   posicionId: number;
   bulto: BultoEnPosicion;
-  motivos: Array<{ id: number; nombre: string }>;
+  motivos: MotivoOpcion[];
   cancelar: () => void;
   listo: () => void;
 }) {
@@ -470,7 +489,7 @@ function Ausente({
 }: {
   posicionId: number;
   bulto: BultoEnPosicion;
-  motivos: Array<{ id: number; nombre: string }>;
+  motivos: MotivoOpcion[];
   cancelar: () => void;
   listo: () => void;
 }) {
@@ -537,7 +556,7 @@ function Encontrado({
 }: {
   posicionId: number;
   modelos: ModeloParaCargar[];
-  motivos: Array<{ id: number; nombre: string }>;
+  motivos: MotivoOpcion[];
   cancelar: () => void;
   listo: () => void;
 }) {

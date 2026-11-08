@@ -15,6 +15,8 @@ import {
   exigirComposicion,
   exigirLibre,
   exigirMotivo,
+  exigirNotaSiHaceFalta,
+  rechazarMerma,
   type Tx,
 } from "./motor";
 import { ejecutar, fallar, type Resultado } from "./comun";
@@ -160,6 +162,7 @@ export async function corregirCantidades(
       }
 
       const motivo = await exigirMotivo(tx, datos.motivoId, "ajuste");
+      exigirNotaSiHaceFalta(motivo, datos.nota);
       const contenidoDespues = datos.cantidades.filter((c) => c.cantidad > 0);
       if (contenidoDespues.length === 0) {
         fallar(
@@ -171,6 +174,10 @@ export async function corregirCantidades(
       const diferencia = nuevoTotal - bulto.cantidad;
       if (diferencia === 0) {
         fallar("Las cantidades son las mismas. Si está todo bien, usá «Está bien».");
+      }
+      // La merma es producto que se perdió: solo puede bajar la cantidad.
+      if (motivo.esMerma && diferencia > 0) {
+        fallar(`«${motivo.nombre}» es merma: solo se usa cuando hay MENOS de lo registrado.`);
       }
 
       const ahora = new Date();
@@ -240,6 +247,8 @@ export async function corregirCategoria(
         fallar(`${bulto.codigo} ya no está en ${pos.codigo}. Actualizá la pantalla.`);
       }
       const motivo = await exigirMotivo(tx, datos.motivoId, "ajuste");
+      rechazarMerma(motivo, "cambiar la categoría");
+      exigirNotaSiHaceFalta(motivo, datos.nota);
       const calidad = bulto.calidad === "primera" ? "segunda" : "primera";
       const ahora = new Date();
 
@@ -304,6 +313,8 @@ export async function marcarAusente(
         fallar(`${bulto.codigo} ya no está en ${pos.codigo}. Actualizá la pantalla.`);
       }
       const motivo = await exigirMotivo(tx, datos.motivoId, "ajuste");
+      rechazarMerma(motivo, "un bulto que no está: si se rompió, usá «Otra cantidad»");
+      exigirNotaSiHaceFalta(motivo, datos.nota);
       const ahora = new Date();
 
       await aplicarMovimiento(tx, {
@@ -381,6 +392,8 @@ export async function registrarEncontrado(
     return db.transaction(async (tx) => {
       const pos = await bloquearPosicion(tx, datos.posicionId);
       const motivo = await exigirMotivo(tx, datos.motivoId, "ajuste");
+      rechazarMerma(motivo, "registrar algo que el sistema no tenía");
+      exigirNotaSiHaceFalta(motivo, datos.nota);
       exigirLibre(pos);
       const ahora = new Date();
 

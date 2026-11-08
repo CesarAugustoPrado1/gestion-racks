@@ -720,6 +720,15 @@ export const motivos = pgTable("motivos", {
    * que se vendio" serian el mismo numero y no lo son.
    */
   esEgreso: boolean("es_egreso").notNull().default(true),
+  /**
+   * MERMA: producto que se pierde o se arruina en el depósito (rotura,
+   * accidente con el clark, aves, roedores, hongos…) y no sale vendido. Puede
+   * ser de un egreso o de un ajuste de control que encuentra producto roto.
+   * Una merma nunca es egreso de la fábrica.
+   */
+  esMerma: boolean("es_merma").notNull().default(false),
+  /** Si el motivo exige escribir qué pasó ("Otra merma"). */
+  pideNota: boolean("pide_nota").notNull().default(false),
   activo: boolean("activo").notNull().default(true),
   orden: integer("orden").notNull().default(0),
 });
@@ -792,6 +801,11 @@ export const movimientos = pgTable(
     usuarioNombre: text("usuario_nombre").notNull(),
     motivoId: integer("motivo_id").references(() => motivos.id),
     motivoNombre: text("motivo_nombre"),
+    /**
+     * Si este movimiento fue MERMA, congelado al escribirlo como el nombre del
+     * motivo: si el motivo cambia después, el historial no.
+     */
+    esMerma: boolean("es_merma").notNull().default(false),
     /** La descripción del objeto, congelada. Null en los de producto. */
     descripcion: text("descripcion"),
     nota: text("nota"),

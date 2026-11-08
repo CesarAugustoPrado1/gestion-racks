@@ -9,21 +9,30 @@ Acá está la fuente del manual que abre el botón **Manual** de la app
 
 ## Para sacar una versión nueva
 
-1. **Guardar la vigente**: mover `public/manual.pdf` a
-   `public/manuales/manual-operario-AAAA-MM.pdf`, con el mes de esa versión.
-   Las versiones viejas no se borran.
-2. Editar `index.html` y, si hace falta, rehacer las capturas de `img/` con la
-   app levantada y los datos de ejemplo, en pantalla de celular (390 × 844).
-3. Cambiar la fecha de la versión en la tapa y en el pie (`generar-pdf.js`).
-4. Generar el PDF desde la raíz del repo, con Playwright instalado aparte:
-   `node docs/manual/generar-pdf.js`. Queda en `public/manual.pdf`.
+La versión se dice en UN solo lugar: `lib/manual.ts`. De ahí la leen el botón
+de la app ("Manual v3"), la redirección de `/manual.pdf` y este script.
 
-El servidor sirve `/manual.pdf` sin caché (ver `next.config.ts`), así que el
-celular abre siempre la última versión apenas se despliega.
+1. Subir `version` (y la `fecha`) en `lib/manual.ts`.
+2. Editar `index.html`: el contenido, "Versión N" en la tapa, y una fila nueva
+   en la tabla "Versiones de este manual" del final.
+3. Si cambió alguna pantalla, rehacer sus capturas en `img/` con la app
+   levantada y los datos de ejemplo, en pantalla de celular (390 × 844).
+4. Generar el PDF desde la raíz del repo, con Playwright instalado aparte:
+   `node docs/manual/generar-pdf.js`. Queda en
+   `public/manuales/manual-operario-vN.pdf`, y no pisa ninguna versión anterior
+   (el script además se niega a generar si la tapa no dice la versión nueva).
+
+Cada versión es un archivo con su número y nunca se reemplaza, así que el
+celular no puede quedarse con una vieja por caché. `/manual.pdf` redirige a la
+vigente, para quien tenga guardada la dirección de antes.
+
+Los esquemas de racks y el dibujo del autoelevador son SVG dentro de
+`index.html`; los genera `dibujos/gen.py` a partir de `dibujos/clark.svg`.
 
 ## Versiones
 
-| Versión | Archivo |
-|---|---|
-| Noviembre 2026 (vigente) | `public/manual.pdf` |
-| Octubre 2026 | `public/manuales/manual-operario-2026-10.pdf` |
+| Versión | Fecha | Archivo |
+|---|---|---|
+| 3 (vigente) | noviembre 2026 | `public/manuales/manual-operario-v3.pdf` |
+| 2 | noviembre 2026 | `public/manuales/manual-operario-v2.pdf` |
+| 1 | octubre 2026 | `public/manuales/manual-operario-v1.pdf` |

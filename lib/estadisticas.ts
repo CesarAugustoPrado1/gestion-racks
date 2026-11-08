@@ -621,3 +621,188 @@ export async function evolucion(r: Rango): Promise<Evolucion> {
     }),
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Merma                                                                      */
+/* -------------------------------------------------------------------------- */
+
+export type RegistroDeMerma = {
+  creadoEn: Date;
+  bultoCodigo: string;
+  posicion: string | null;
+  contenido: string;
+  motivo: string;
+  nota: string | null;
+  usuario: string;
+  /** `sacar` = la registró el clarkista; `ajuste` = la encontró control. */
+  tipo: string;
+};
+
+export type EstadisticasDeMerma = {
+  /** m² perdidos (solo modelos con m² por unidad) y cuántos registros. */
+  m2: number;
+  registros: number;
+  /** Lo mismo en el período anterior equivalente, para comparar. */
+  anterior: { m2: number; registros: number };
+  /** De todo lo que salió del rack en m², qué parte fue merma (0 a 1). Null si no salió nada. */
+  parteDeLoQueSalio: number | null;
+  /** Registrada por el clarkista al sacar, o encontrada por control en un chequeo. */
+  porOrigen: { egreso: number; chequeo: number };
+  porLinea: Array<{ linea: string; unidadPlural: string; unidades: number; m2: number; salieron: number }>;
+  porMotivo: Array<{ motivo: string; registros: number; m2: number }>;
+  porGrupo: Array<{ grupo: string; registros: number; m2: number }>;
+  porPosicion: Array<{ posicion: string; registros: number; m2: number }>;
+  porModelo: Array<{ id: number; modelo: string; linea: string; unidadPlural: string; unidades: number; m2: number }>;
+  porUsuario: Array<{ usuario: string; registros: number; m2: number }>;
+  /** m² perdidos por tramo del período. */
+  serie: Serie;
+  ultimos: RegistroDeMerma[];
+};
+
+/**
+ * La MERMA de un período: lo que se perdió o se arruinó en el depósito. Sale de
+ * los movimientos marcados como merma (egresos del clarkista y ajustes de
+ * control), sin anulados. Lo perdido de cada modelo es lo que bajó: `cantidad
+ * antes − cantidad después` de sus líneas.
+ */
+export async function estadisticasDeMerma(
+  r: Rango,
+  anterior: { inicio: Date; fin: Date },
+): Promise<EstadisticasDeMerma> {
+  const { desde, hasta } = puntas(r.inicio, r.fin);
+  const ant = puntas(anterior.inicio, anterior.fin);
+  const enRango = sql`m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}`;
+  const perdido = sql`(ml.cantidad_antes - ml.cantidad)`;
+  const m2Perdido = sql`(ml.cantidad_antes - ml.cantidad) * mo.m2_por_unidad`;
+  const lineasDe = sql`
+    from movimientos m
+    join movimiento_lineas ml on ml.movimiento_id = m.id
+    join modelos mo on mo.id = ml.modelo_id
+    join lineas l on l.id = mo.linea_id`;
+
+  const [cabecera, cabeceraAnterior, salido, porLinea, porMotivo, porGrupo, porPosicion, porModelo, porUsuario, serie, ultimos] =
+    await Promise.all([
+      db.execute(sql`
+        select count(distinct m.id)::int as registros,
+               coalesce(sum(${m2Perdido}), 0)::float8 as m2,
+               count(distinct m.id) filter (where m.tipo = 'sacar')::int as egreso,
+               count(distinct m.id) filter (where m.tipo <> 'sacar')::int as chequeo
+          ${lineasDe}
+         where ${enRango} and m.es_merma
+      `) as unknown as Promise<Array<{ registros: number; m2: number; egreso: number; chequeo: number }>>,
+      db.execute(sql`
+        select count(distinct m.id)::int as registros, coalesce(sum(${m2Perdido}), 0)::float8 as m2
+          ${lineasDe}
+         where m.anulado_en is null and m.creado_en >= ${ant.desde} and m.creado_en < ${ant.hasta} and m.es_merma
+      `) as unknown as Promise<Array<{ registros: number; m2: number }>>,
+      db.execute(sql`
+        select coalesce(sum(${m2Perdido}), 0)::float8 as m2
+          ${lineasDe}
+         where ${enRango} and (m.tipo = 'sacar' or m.es_merma)
+      `) as unknown as Promise<Array<{ m2: number }>>,
+      db.execute(sql`
+        select l.nombre as linea, l.unidad_plural,
+               coalesce(sum(${perdido}) filter (where m.es_merma), 0)::int as unidades,
+               coalesce(sum(${m2Perdido}) filter (where m.es_merma), 0)::float8 as m2,
+               coalesce(sum(${perdido}) filter (where m.tipo = 'sacar' or m.es_merma), 0)::int as salieron
+          ${lineasDe}
+         where ${enRango} and (m.tipo = 'sacar' or m.es_merma)
+         group by l.id, l.nombre, l.unidad_plural, l.orden
+        having coalesce(sum(${perdido}) filter (where m.es_merma), 0) > 0
+         order by l.orden
+      `) as unknown as Promise<Array<{ linea: string; unidad_plural: string; unidades: number; m2: number; salieron: number }>>,
+      db.execute(sql`
+        select coalesce(m.motivo_nombre, 'Sin motivo') as motivo, count(distinct m.id)::int as registros,
+               coalesce(sum(${m2Perdido}), 0)::float8 as m2
+          ${lineasDe}
+         where ${enRango} and m.es_merma
+         group by 1 order by 3 desc, 2 desc
+      `) as unknown as Promise<Array<{ motivo: string; registros: number; m2: number }>>,
+      db.execute(sql`
+        select coalesce(g.codigo, 'Sin ubicar') as grupo, count(distinct m.id)::int as registros,
+               coalesce(sum(${m2Perdido}), 0)::float8 as m2
+          ${lineasDe}
+          left join posiciones p on p.id = m.posicion_desde_id
+          left join grupos g on g.id = p.grupo_id
+         where ${enRango} and m.es_merma
+         group by 1 order by 3 desc, 2 desc
+      `) as unknown as Promise<Array<{ grupo: string; registros: number; m2: number }>>,
+      db.execute(sql`
+        select m.posicion_desde_codigo as posicion, count(distinct m.id)::int as registros,
+               coalesce(sum(${m2Perdido}), 0)::float8 as m2
+          ${lineasDe}
+         where ${enRango} and m.es_merma and m.posicion_desde_codigo is not null
+         group by 1 order by 2 desc, 3 desc
+         limit 10
+      `) as unknown as Promise<Array<{ posicion: string; registros: number; m2: number }>>,
+      db.execute(sql`
+        select mo.id, mo.nombre as modelo, l.nombre as linea, l.unidad_plural,
+               sum(${perdido})::int as unidades, coalesce(sum(${m2Perdido}), 0)::float8 as m2
+          ${lineasDe}
+         where ${enRango} and m.es_merma
+         group by mo.id, l.id
+         order by 6 desc, 5 desc
+      `) as unknown as Promise<Array<{ id: number; modelo: string; linea: string; unidad_plural: string; unidades: number; m2: number }>>,
+      db.execute(sql`
+        select m.usuario_nombre as usuario, count(distinct m.id)::int as registros,
+               coalesce(sum(${m2Perdido}), 0)::float8 as m2
+          ${lineasDe}
+         where ${enRango} and m.es_merma
+         group by 1 order by 2 desc
+      `) as unknown as Promise<Array<{ usuario: string; registros: number; m2: number }>>,
+      db.execute(sql`
+        select ${claveDe(sql.raw("m.creado_en"), r)} as clave, coalesce(sum(${m2Perdido}), 0)::float8 as valor
+          ${lineasDe}
+         where ${enRango} and m.es_merma
+         group by 1
+      `) as unknown as Promise<Array<{ clave: string; valor: number }>>,
+      db.execute(sql`
+        select m.creado_en, m.bulto_codigo, m.posicion_desde_codigo as posicion, m.motivo_nombre, m.nota,
+               m.usuario_nombre, m.tipo,
+               (select string_agg(x.modelo_nombre || ' ' || (x.cantidad_antes - x.cantidad), ' + ' order by x.modelo_nombre)
+                  from movimiento_lineas x where x.movimiento_id = m.id and x.cantidad_antes > x.cantidad) as contenido
+          from movimientos m
+         where ${enRango} and m.es_merma
+         order by m.creado_en desc, m.id desc
+         limit 30
+      `) as unknown as Promise<
+        Array<{
+          creado_en: Date | string;
+          bulto_codigo: string;
+          posicion: string | null;
+          motivo_nombre: string | null;
+          nota: string | null;
+          usuario_nombre: string;
+          tipo: string;
+          contenido: string | null;
+        }>
+      >,
+    ]);
+
+  const c = cabecera[0];
+  const totalSalido = salido[0]?.m2 ?? 0;
+  return {
+    m2: c?.m2 ?? 0,
+    registros: c?.registros ?? 0,
+    anterior: { m2: cabeceraAnterior[0]?.m2 ?? 0, registros: cabeceraAnterior[0]?.registros ?? 0 },
+    parteDeLoQueSalio: totalSalido > 0 ? (c?.m2 ?? 0) / totalSalido : null,
+    porOrigen: { egreso: c?.egreso ?? 0, chequeo: c?.chequeo ?? 0 },
+    porLinea: porLinea.map((l) => ({ linea: l.linea, unidadPlural: l.unidad_plural, unidades: l.unidades, m2: l.m2, salieron: l.salieron })),
+    porMotivo,
+    porGrupo,
+    porPosicion,
+    porModelo: porModelo.map((x) => ({ ...x, unidadPlural: x.unidad_plural })),
+    porUsuario,
+    serie: completar(r, serie),
+    ultimos: ultimos.map((u) => ({
+      creadoEn: new Date(u.creado_en),
+      bultoCodigo: u.bulto_codigo,
+      posicion: u.posicion,
+      contenido: u.contenido ?? "",
+      motivo: u.motivo_nombre ?? "Sin motivo",
+      nota: u.nota,
+      usuario: u.usuario_nombre,
+      tipo: u.tipo,
+    })),
+  };
+}

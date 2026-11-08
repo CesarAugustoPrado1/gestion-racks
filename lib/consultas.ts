@@ -591,18 +591,22 @@ export async function bultosSinUbicar(): Promise<BultoEnLista[]> {
   return filas.map(aBulto);
 }
 
-export async function motivosDeSalida(): Promise<
-  Array<{ id: number; nombre: string; esEgreso: boolean }>
-> {
+export type MotivoOpcion = { id: number; nombre: string; esEgreso: boolean; esMerma: boolean; pideNota: boolean };
+
+const aMotivo = (f: { id: number; nombre: string; es_egreso: boolean; es_merma: boolean; pide_nota: boolean }): MotivoOpcion => ({
+  id: f.id,
+  nombre: f.nombre,
+  esEgreso: f.es_egreso,
+  esMerma: f.es_merma,
+  pideNota: f.pide_nota,
+});
+
+export async function motivosDeSalida(): Promise<MotivoOpcion[]> {
   const filas = (await db.execute(sql`
-    select id, nombre, es_egreso from motivos
-     where ambito = 'salida' and activo order by orden, nombre
-  `)) as unknown as Array<{ id: number; nombre: string; es_egreso: boolean }>;
-  return filas.map((f) => ({
-    id: f.id,
-    nombre: f.nombre,
-    esEgreso: f.es_egreso,
-  }));
+    select id, nombre, es_egreso, es_merma, pide_nota from motivos
+     where ambito = 'salida' and activo order by es_merma, orden, nombre
+  `)) as unknown as Array<{ id: number; nombre: string; es_egreso: boolean; es_merma: boolean; pide_nota: boolean }>;
+  return filas.map(aMotivo);
 }
 
 export type MovimientoDelDia = {
@@ -866,14 +870,12 @@ export async function posicionConBultos(id: number): Promise<{
   return { posicion, bultos: [...bultos.values()] };
 }
 
-export async function motivosDeAjuste(): Promise<
-  Array<{ id: number; nombre: string }>
-> {
+export async function motivosDeAjuste(): Promise<MotivoOpcion[]> {
   const filas = (await db.execute(sql`
-    select id, nombre from motivos
-     where ambito = 'ajuste' and activo order by orden, nombre
-  `)) as unknown as Array<{ id: number; nombre: string }>;
-  return filas;
+    select id, nombre, es_egreso, es_merma, pide_nota from motivos
+     where ambito = 'ajuste' and activo order by es_merma, orden, nombre
+  `)) as unknown as Array<{ id: number; nombre: string; es_egreso: boolean; es_merma: boolean; pide_nota: boolean }>;
+  return filas.map(aMotivo);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1176,6 +1178,7 @@ function dondeHistorial(f: FiltrosHistorial) {
   // "Todo cambio de categoría" no es un tipo: son los pasajes Y los ajustes de
   // control que cambiaron la categoría. Se reconocen por el antes y el después.
   if (f.tipo === "cambio_categoria") partes.push(sql`m.calidad_antes <> m.calidad`);
+  else if (f.tipo === "merma") partes.push(sql`m.es_merma`);
   else if (f.tipo) partes.push(sql`m.tipo = ${f.tipo}`);
   if (f.usuarioId) partes.push(sql`m.usuario_id = ${f.usuarioId}`);
   if (f.modeloId) {
@@ -1201,6 +1204,7 @@ export type MovimientoDelHistorial = {
   packagingAntes: Packaging | null;
   calidad: Calidad;
   calidadAntes: Calidad;
+  esMerma: boolean;
   cantidadAntes: number;
   cantidad: number;
   desde: string | null;
@@ -1228,7 +1232,7 @@ export async function historial(
     db.execute(sql`
       select m.id, m.tipo, m.bulto_codigo, m.linea_codigo, m.packaging,
              m.packaging_antes, m.cantidad_antes, m.cantidad,
-             m.calidad, m.calidad_antes,
+             m.calidad, m.calidad_antes, m.es_merma,
              m.posicion_desde_codigo, m.posicion_hasta_codigo,
              m.motivo_nombre, m.usuario_nombre, m.nota, m.creado_en,
              m.anulado_en, m.motivo_anulacion, m.descripcion,
@@ -1252,6 +1256,7 @@ export async function historial(
         cantidad: number;
         calidad: Calidad;
         calidad_antes: Calidad;
+        es_merma: boolean;
         posicion_desde_codigo: string | null;
         posicion_hasta_codigo: string | null;
         motivo_nombre: string | null;
@@ -1280,6 +1285,7 @@ export async function historial(
       packagingAntes: f2.packaging_antes,
       calidad: f2.calidad,
       calidadAntes: f2.calidad_antes,
+      esMerma: f2.es_merma,
       cantidadAntes: f2.cantidad_antes,
       cantidad: f2.cantidad,
       desde: f2.posicion_desde_codigo,
@@ -1308,7 +1314,7 @@ export async function historialPlano(f: FiltrosHistorial): Promise<
 > {
   const filas = (await db.execute(sql`
     select m.creado_en, m.tipo, m.bulto_codigo, m.linea_codigo,
-           m.packaging_antes, m.packaging, m.calidad_antes, m.calidad,
+           m.packaging_antes, m.packaging, m.calidad_antes, m.calidad, m.es_merma,
            -- Un objeto no tiene líneas: sale una fila con su descripción en
            -- vez del modelo y diferencia cero, para que el CSV lo muestre sin
            -- que sume en ninguna tabla dinámica.
@@ -1332,6 +1338,7 @@ export async function historialPlano(f: FiltrosHistorial): Promise<
     packaging: string;
     calidad_antes: string;
     calidad: string;
+    es_merma: boolean;
     modelo_nombre: string;
     cantidad_antes: number;
     cantidad: number;
@@ -1367,6 +1374,7 @@ export async function historialPlano(f: FiltrosHistorial): Promise<
       Desde: f2.posicion_desde_codigo ?? "",
       Hasta: f2.posicion_hasta_codigo ?? "",
       Motivo: f2.motivo_nombre ?? "",
+      Merma: f2.es_merma ? "sí" : "",
       Usuario: f2.usuario_nombre,
       Nota: f2.nota ?? "",
       Anulado: f2.anulado_en ? "sí" : "",

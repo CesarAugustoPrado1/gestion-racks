@@ -1,18 +1,16 @@
 import type { NextConfig } from "next";
+import { MANUAL_VIGENTE } from "./lib/manual";
 
 const nextConfig: NextConfig = {
   /**
-   * El manual se reemplaza en cada versión con el mismo nombre. Sin esto el
-   * celular puede mostrar uno viejo que quedó guardado: así pregunta siempre
-   * si hay uno nuevo.
+   * Cada versión del manual es un archivo con su número
+   * (/manuales/manual-operario-v3.pdf) y no se reemplaza nunca, así que el
+   * celular no puede quedarse con una vieja por caché. /manual.pdf -la
+   * dirección de antes- lleva siempre a la vigente, para quien la tenga
+   * guardada.
    */
-  async headers() {
-    return [
-      {
-        source: "/manual.pdf",
-        headers: [{ key: "Cache-Control", value: "no-cache" }],
-      },
-    ];
+  async redirects() {
+    return [{ source: "/manual.pdf", destination: MANUAL_VIGENTE, permanent: false }];
   },
 };
 

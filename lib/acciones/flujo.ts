@@ -19,6 +19,7 @@ import {
   exigirEnStock,
   exigirLibre,
   exigirMotivo,
+  exigirNotaSiHaceFalta,
   exigirUsable,
 } from "./motor";
 import { ejecutar, fallar, type Resultado } from "./comun";
@@ -193,6 +194,7 @@ export async function sacar(
 
       if (datos.motivoId == null) fallar("Elegí un motivo.");
       const motivo = await exigirMotivo(tx, datos.motivoId, "salida");
+      exigirNotaSiHaceFalta(motivo, datos.nota);
 
       const actual = new Map(bulto.contenido.map((c) => [c.modeloId, c.cantidad]));
       const sale = new Map<number, number>();

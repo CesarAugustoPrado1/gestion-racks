@@ -128,6 +128,7 @@ export default async function PantallaMovimientos({
                   ) : (
                     m.calidad === "segunda" && <span className="chip bg-orange-100 text-orange-900">2da</span>
                   )}
+                  {m.esMerma && <span className="chip bg-red-700 text-white">merma</span>}
                   {m.anulado && (
                     <span className="chip bg-red-100 text-red-800">anulado</span>
                   )}
