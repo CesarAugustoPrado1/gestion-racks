@@ -140,6 +140,12 @@ export async function cargarPosicion(
     if (!(e instanceof ErrorDeNegocio)) throw e;
     avisos.push(`Según las medidas cargadas no entraría (${e.message}) Revisá la altura del nivel o de la norma.`);
   }
+  if (encaje.invadeArriba && encaje.arriba) {
+    avisos.push(
+      `Según las medidas cargadas sobresale y tapa ${encaje.arriba.codigo}. ` +
+        `Si al llegar ahí ves que está libre, tocá "No, está libre".`,
+    );
+  }
 
   const ahora = new Date();
   const calidad: Calidad = objeto ? "primera" : c.calidad;
@@ -190,6 +196,60 @@ export async function confirmarVacia(tx: Tx, posicionId: number): Promise<void> 
     fallar(`${pos.codigo} tiene cargado el bulto ${pos.ocupante.codigo}. Si no está, deshacé esa carga primero.`);
   }
   await marcarRelevada(tx, pos.id, new Date());
+}
+
+/**
+ * La posición figura TAPADA por el bulto de abajo, pero quien está parado
+ * enfrente ve que está libre. En la carga inicial manda lo que hay: se le saca
+ * la tapa y queda para cargar o marcar vacía como cualquier otra.
+ *
+ * La tapa la había puesto el sistema solo, con las medidas: el bulto de abajo
+ * no entraba en su nivel según la altura de su norma y la del nivel. Si está
+ * libre, alguna de esas dos medidas está mal. Se devuelve el porqué, para que
+ * se corrija: si no, la próxima vez que ese bulto se mueva la vuelve a tapar.
+ */
+export async function liberarTapada(tx: Tx, posicionId: number): Promise<{ aviso: string }> {
+  const pos = await posicionEnCarga(tx, posicionId);
+  if (!pos.invasor) fallar(`${pos.codigo} no figura tapada.`);
+
+  const [d] = (await tx.execute(sql`
+    select b.codigo, b.packaging, g.codigo || '-' || pb.codigo as abajo,
+           coalesce(pb.altura_max_cm, n.altura_max_cm) as hueco, g.holgura_cm as holgura,
+           nm.altura_cm as alto, m.nombre
+      from posiciones p
+      join bultos b on b.id = p.bloqueada_por_bulto_id
+      left join posiciones pb on pb.id = b.posicion_id
+      left join grupos g on g.id = pb.grupo_id
+      left join niveles n on n.grupo_id = pb.grupo_id and n.nivel = pb.nivel
+      left join lateral (
+        select bc.modelo_id from bulto_contenido bc where bc.bulto_id = b.id order by bc.modelo_id limit 1
+      ) bc on true
+      left join modelos m on m.id = bc.modelo_id
+      left join normas nm on nm.modelo_id = bc.modelo_id and nm.packaging = b.packaging
+     where p.id = ${pos.id}
+  `)) as unknown as Array<{
+    codigo: string;
+    packaging: string;
+    abajo: string | null;
+    hueco: number | null;
+    holgura: number | null;
+    alto: number | null;
+    nombre: string | null;
+  }>;
+
+  await tx.execute(sql`update posiciones set bloqueada_por_bulto_id = null where id = ${pos.id}`);
+
+  const m = (cm: number) => (cm / 100).toFixed(2).replace(".", ",");
+  const aviso =
+    d?.alto != null && d.hueco != null
+      ? `Según las medidas, un ${d.packaging} de ${d.nombre} mide ${m(d.alto)} m y en ${d.abajo} entran ` +
+        (d.holgura
+          ? `hasta ${m(d.hueco - d.holgura)} m (el hueco mide ${m(d.hueco)} y el grupo pide ${d.holgura} cm de aire). `
+          : `hasta ${m(d.hueco)} m. `) +
+        `Como ${pos.codigo} está libre, revisá en Admin la altura de ese nivel, el aire del grupo o la altura de la norma: ` +
+        `si no, cuando ${d.codigo} se mueva la vuelve a tapar.`
+      : `Revisá en Admin las medidas de ${d?.abajo ?? "la posición de abajo"} y de la norma de ${d?.codigo ?? "ese bulto"}.`;
+  return { aviso };
 }
 
 /**

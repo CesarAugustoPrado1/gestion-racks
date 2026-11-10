@@ -7,6 +7,7 @@ import {
   cerrarCargaInicial,
   confirmarExistenteEnCarga,
   deshacerEnCarga,
+  liberarTapadaEnCarga,
   marcarVaciaEnCarga,
 } from "@/lib/acciones/carga";
 import { useAccion } from "@/components/usar-accion";
@@ -44,7 +45,7 @@ export function Carga({
   const arriba = useRef<HTMLDivElement>(null);
   const primeraPendiente = posiciones.find((p) => !p.relevada)?.id ?? posiciones[0]?.id ?? null;
   const [elegidaId, setElegidaId] = useState<number | null>(primeraPendiente);
-  const [avisos, setAvisos] = useState<{ codigo: string; textos: string[] } | null>(null);
+  const [avisos, setAvisos] = useState<{ codigo: string; textos: string[]; libre?: boolean } | null>(null);
   const [hecho, setHecho] = useState<string | null>(null);
 
   const relevadas = posiciones.filter((p) => p.relevada).length;
@@ -86,7 +87,8 @@ export function Carga({
       {hecho && <Aviso tono="exito">{hecho}</Aviso>}
       {avisos && (
         <Aviso tono="advertencia">
-          <strong>{avisos.codigo}</strong> se cargó, pero hay algo para revisar: {avisos.textos.join(" ")}
+          <strong>{avisos.codigo}</strong> {avisos.libre ? "quedó libre para cargar" : "se cargó"}, pero hay algo para revisar:{" "}
+          {avisos.textos.join(" ")}
         </Aviso>
       )}
 
@@ -121,6 +123,11 @@ export function Carga({
             setAvisos(null);
             avanzar(elegida.id, `${elegida.codigo}: ${elegida.ocupante ? "confirmada" : "vacía"}.`);
           }}
+          alLiberar={(aviso) => {
+            setHecho(null);
+            setAvisos({ codigo: elegida.codigo, textos: [aviso], libre: true });
+            router.refresh();
+          }}
           alDeshacer={() => {
             setAvisos(null);
             setHecho(`${elegida.codigo} volvió a pendiente.`);
@@ -141,12 +148,14 @@ function Posicion({
   modelos,
   alCargar,
   alVaciar,
+  alLiberar,
   alDeshacer,
 }: {
   p: PosicionDeCarga;
   modelos: ModeloParaCargar[];
   alCargar: (codigo: string, avisos: string[]) => void;
   alVaciar: () => void;
+  alLiberar: (aviso: string) => void;
   alDeshacer: () => void;
 }) {
   const { ejecutar, enviando, error, limpiar } = useAccion();
@@ -222,19 +231,36 @@ function Posicion({
         ) : (
           <>
             <p className="text-sm text-slate-700">
-              La tapa <strong className="codigo">{p.invasor}</strong>, que sobresale desde abajo.
+              Según las medidas cargadas, la tapa <strong className="codigo">{p.invasor}</strong>, que sobresale
+              desde abajo. ¿Es así?
             </p>
-            <button
-              type="button"
-              className="boton-primario w-full"
-              disabled={enviando}
-              onClick={() => {
-                limpiar();
-                void ejecutar(() => marcarVaciaEnCarga(p.id), alVaciar);
-              }}
-            >
-              {enviando ? "Guardando…" : "Es así"}
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="boton-secundario"
+                disabled={enviando}
+                onClick={() => {
+                  limpiar();
+                  void ejecutar(() => liberarTapadaEnCarga(p.id), (r) => alLiberar(r.aviso));
+                }}
+              >
+                No, está libre
+              </button>
+              <button
+                type="button"
+                className="boton-primario"
+                disabled={enviando}
+                onClick={() => {
+                  limpiar();
+                  void ejecutar(() => marcarVaciaEnCarga(p.id), alVaciar);
+                }}
+              >
+                {enviando ? "Guardando…" : "Sí, la tapa"}
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Si está libre, se le saca la tapa y la cargás como cualquier otra.
+            </p>
           </>
         )}
       </div>

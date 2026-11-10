@@ -29,6 +29,7 @@ import {
   cerrarCarga,
   confirmarVacia,
   deshacerPosicion,
+  liberarTapada,
 } from "../lib/acciones/carga-motor";
 
 /**
@@ -641,11 +642,11 @@ describe("lugares que no se usan", { skip: !hay && "sin base local" }, () => {
  * La holgura en el motor: el mismo palet, en un hueco justo y en uno con aire.
  * Patagónica en palet mide 140 cm (ver el sembrado).
  */
-describe("la holgura de 10 cm arriba del bulto", { skip: !hay && "sin base local" }, () => {
-  async function hueco(codigo: string, alturaCm: number) {
+describe("la holgura de cada grupo", { skip: !hay && "sin base local" }, () => {
+  async function hueco(codigo: string, alturaCm: number, holguraCm?: number) {
     const [g] = await base.db
       .insert(schema.grupos)
-      .values({ codigo, accesibilidad: "selectivo", ancho: 1, niveles: 1, unidades: 1 })
+      .values({ codigo, accesibilidad: "selectivo", ancho: 1, niveles: 1, unidades: 1, ...(holguraCm != null ? { holguraCm } : {}) })
       .returning();
     await base.db.insert(schema.nivelesDeGrupo).values({ grupoId: g.id, nivel: 1, alturaMaxCm: alturaCm });
     const [p] = await base.db
@@ -654,23 +655,32 @@ describe("la holgura de 10 cm arriba del bulto", { skip: !hay && "sin base local
       .returning();
     return p.id;
   }
-
-  test("un palet de 1,40 m no entra en un hueco de 1,45 m: le faltan 5 cm de aire", async () => {
-    const id = await hueco("H1", 145);
-    await assert.rejects(
-      () =>
-        base.db.transaction(async (tx) => {
-          await meter(tx as Tx, id, "palet", [{ modeloId: datos.patagonica.id, cantidad: 40 }]);
-        }),
-      /hasta 1,35 m .*10 cm de aire/,
-    );
-  });
-
-  test("en un hueco de 1,50 m, con 10 cm justos, entra", async () => {
-    const id = await hueco("H2", 150);
-    await base.db.transaction(async (tx) => {
+  const meterPalet = (id: number) =>
+    base.db.transaction(async (tx) => {
       await meter(tx as Tx, id, "palet", [{ modeloId: datos.patagonica.id, cantidad: 40 }]);
     });
+
+  test("sin configurar es cero: un palet de 1,40 m entra en un hueco de 1,40 m", async () => {
+    await meterPalet(await hueco("H0", 140));
+    await exigirQueCuadre("después de meter sin holgura");
+  });
+
+  test("sin holgura, uno que no cabe no entra, y el mensaje no habla de aire", async () => {
+    const id = await hueco("H00", 139);
+    await assert.rejects(() => meterPalet(id), (e: Error) => {
+      assert.match(e.message, /entran hasta 1,39 m\./);
+      assert.doesNotMatch(e.message, /aire/);
+      return true;
+    });
+  });
+
+  test("con 10 cm en el grupo, un palet de 1,40 m no entra en 1,45: le faltan 5 cm de aire", async () => {
+    const id = await hueco("H1", 145, 10);
+    await assert.rejects(() => meterPalet(id), /hasta 1,35 m .*10 cm de aire/);
+  });
+
+  test("con 10 cm en el grupo, en un hueco de 1,50 m entra justo", async () => {
+    await meterPalet(await hueco("H2", 150, 10));
     await exigirQueCuadre("después de meter con holgura justa");
   });
 });
@@ -1020,6 +1030,66 @@ describe("carga inicial", { skip: !hay && "sin base local" }, () => {
       /ya está cerrada/,
     );
     await exigirQueCuadre("después de cerrar la carga");
+  });
+});
+
+describe("carga inicial: la tapa que no es", { skip: !hay && "sin base local" }, () => {
+  const usuario = () => ({ id: datos.usuario.id, nombre: datos.usuario.nombre });
+  const pos: Record<number, number> = {};
+  before(async () => {
+    if (!hay) return;
+    const [g] = await base.db
+      .insert(schema.grupos)
+      .values({ codigo: "CT", accesibilidad: "penetrable", niveles: 3, profundidad: 1, unidades: 1 })
+      .returning();
+    await base.db.insert(schema.nivelesDeGrupo).values([
+      { grupoId: g.id, nivel: 1, alturaMaxCm: 150 },
+      { grupoId: g.id, nivel: 2, alturaMaxCm: 150 },
+      { grupoId: g.id, nivel: 3, alturaMaxCm: 150 },
+    ]);
+    for (let n = 1; n <= 3; n++) {
+      const [p] = await base.db
+        .insert(schema.posiciones)
+        .values({ grupoId: g.id, codigo: `01-${n}-1`, unidad: 1, nivel: n, profundidad: 1 })
+        .returning();
+      pos[n] = p.id;
+    }
+    await base.db.transaction((tx) => abrirCarga(tx as Tx, g.id));
+  });
+
+  const cargar = (posicionId: number, packaging: "optimizado" | "palet", cantidad: number) =>
+    base.db.transaction((tx) =>
+      cargarPosicion(tx as Tx, {
+        posicionId,
+        packaging,
+        calidad: "primera",
+        contenido: [{ modeloId: datos.laja.id, cantidad }],
+        fechaIngreso: new Date("2025-03-10T15:00:00Z"),
+        usuario: usuario(),
+      }),
+    );
+
+  test("si según las medidas sobresale, tapa la de arriba y lo avisa al cargar", async () => {
+    // Optimizado de laja: 2,05 m en un hueco de 1,50.
+    const r = await cargar(pos[2], "optimizado", 60);
+    assert.ok(r.avisos.some((a) => /tapa CT-01-3-1/.test(a)), r.avisos.join(" | "));
+    await assert.rejects(() => cargar(pos[3], "palet", 48), /tapada/);
+  });
+
+  test("'No, está libre' le saca la tapa, dice qué medida revisar, y se puede cargar", async () => {
+    const { aviso } = await base.db.transaction((tx) => liberarTapada(tx as Tx, pos[3]));
+    assert.match(aviso, /2,05 m/);
+    assert.match(aviso, /CT-01-2-1/);
+    const [p] = (await base.db.execute(sql`
+      select bloqueada_por_bulto_id as id from posiciones where id = ${pos[3]}
+    `)) as unknown as Array<{ id: number | null }>;
+    assert.equal(p.id, null);
+    await cargar(pos[3], "palet", 48);
+    await exigirQueCuadre("después de liberar y cargar arriba");
+  });
+
+  test("una posición que no está tapada no se libera", async () => {
+    await assert.rejects(() => base.db.transaction((tx) => liberarTapada(tx as Tx, pos[1])), /no figura tapada/);
   });
 });
 

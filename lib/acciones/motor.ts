@@ -16,7 +16,6 @@ import { total, validarComposicion, type LineaContenido } from "../bultos";
 import {
   alturaAdmitida,
   entraEnAltura,
-  HOLGURA_CM,
   loQueTapa,
   nombreDeNivel,
   nombreDeProfundidad,
@@ -129,6 +128,8 @@ export type PosicionVivo = {
   profundidadMax: number | null;
   penetrable: boolean;
   alturaMaxCm: number | null;
+  /** El aire que el grupo exige arriba del bulto, en cm. Ver `entraEnAltura`. */
+  holguraCm: number;
   /** El bulto que ya está ahí, si hay. Una posición aloja UNO. */
   ocupante: { id: number; codigo: string } | null;
   /**
@@ -183,7 +184,7 @@ export async function bloquearPosicion(
            g.codigo || '-' || p.codigo as codigo,
            g.id as grupo_id, g.accesibilidad, g.niveles,
            g.carga_inicial_desde, g.carga_inicial_cerrada_en,
-           g.profundidad as profundidad_max,
+           g.profundidad as profundidad_max, g.holgura_cm,
            n.altura_max_cm as altura_nivel,
            coalesce(n.alcanzable, true) as alcanzable,
            ex.motivo as exclusion_motivo, ex.nota as exclusion_nota,
@@ -226,6 +227,7 @@ export async function bloquearPosicion(
     accesibilidad: string;
     niveles: number;
     profundidad_max: number | null;
+    holgura_cm: number;
     ocupante_id: number | null;
     ocupante_codigo: string | null;
     invasor_codigo: string | null;
@@ -259,6 +261,7 @@ export async function bloquearPosicion(
     penetrable: p.accesibilidad === "penetrable",
     // La de la posición pisa a la del nivel: es el escape para la viga cruzada.
     alturaMaxCm: p.altura_max_cm ?? p.altura_nivel,
+    holguraCm: p.holgura_cm ?? 0,
     ocupante:
       p.ocupante_id != null
         ? { id: p.ocupante_id, codigo: p.ocupante_codigo! }
@@ -417,8 +420,9 @@ export function exigirUsable(pos: PosicionVivo) {
 /**
  * Que el bulto entre en el hueco.
  *
- * "Entrar" incluye la HOLGURA: tienen que sobrar al menos `HOLGURA_CM` entre el
- * bulto y el límite del nivel, porque el clark lo levanta para entrarlo. Ver
+ * "Entrar" incluye la HOLGURA del grupo: tienen que sobrar al menos esos cm
+ * entre el bulto y el límite del nivel, porque el clark lo levanta para
+ * entrarlo. La configura el admin por grupo; arranca en cero. Ver
  * lib/posiciones.ts.
  *
  * Solo se valida lo normalizado: un palet o un optimizado tienen una altura
@@ -456,7 +460,8 @@ export async function exigirAltura(
   const altura = filas[0]?.altura_cm;
   if (altura == null) return { invadeArriba: false };
 
-  if (entraEnAltura(altura, pos.alturaMaxCm)) return { invadeArriba: false };
+  const holgura = pos.holguraCm;
+  if (entraEnAltura(altura, pos.alturaMaxCm, holgura)) return { invadeArriba: false };
 
   /**
    * No entra en su nivel. Pero en el galpon entra igual, sobresaliendo hacia el
@@ -475,7 +480,9 @@ export async function exigirAltura(
    * de 1,30 entra, que es justo el error que la holgura evita.
    */
   const admite = (cm: number) =>
-    `hasta ${m(alturaAdmitida(cm))} m (el hueco mide ${m(cm)} y el clark necesita ${HOLGURA_CM} cm de aire)`;
+    holgura > 0
+      ? `hasta ${m(alturaAdmitida(cm, holgura))} m (el hueco mide ${m(cm)} y el grupo pide ${holgura} cm de aire)`
+      : `hasta ${m(cm)} m`;
 
   /**
    * 0. SOLO EN PENETRABLES.
@@ -516,7 +523,7 @@ export async function exigirAltura(
 
   // 3. Ni con el hueco de arriba alcanza.
   const juntas = pos.alturaMaxCm + (pos.arriba.alturaMaxCm ?? 0);
-  if (pos.arriba.alturaMaxCm != null && !entraEnAltura(altura, juntas)) {
+  if (pos.arriba.alturaMaxCm != null && !entraEnAltura(altura, juntas, holgura)) {
     fallar(
       `No entra ni ocupando dos: ${quien} y entre ${pos.codigo} y ` +
         `${pos.arriba.codigo} entran ${admite(juntas)}.`,

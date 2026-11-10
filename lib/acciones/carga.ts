@@ -12,6 +12,7 @@ import {
   confirmarExistente,
   confirmarVacia,
   deshacerPosicion,
+  liberarTapada,
 } from "./carga-motor";
 
 /**
@@ -95,6 +96,16 @@ export async function marcarVaciaEnCarga(posicionId: number): Promise<Resultado>
     await autorizar("control", "admin");
     await db.transaction((tx) => confirmarVacia(tx, posicionId));
     revalidatePath("/", "layout");
+  });
+}
+
+/** "No, está libre": la posición figuraba tapada por el de abajo y no lo está. */
+export async function liberarTapadaEnCarga(posicionId: number): Promise<Resultado<{ aviso: string }>> {
+  return ejecutar(async () => {
+    await autorizar("control", "admin");
+    const r = await db.transaction((tx) => liberarTapada(tx, posicionId));
+    revalidatePath("/", "layout");
+    return r;
   });
 }
 

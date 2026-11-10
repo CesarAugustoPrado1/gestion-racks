@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   alturaAdmitida,
   entraEnAltura,
-  HOLGURA_CM,
+  HOLGURA_POR_DEFECTO,
   codigoDePosicion,
   cuantasPosiciones,
   loQueTapa,
@@ -160,17 +160,20 @@ describe("nombres de niveles y profundidades", () => {
 });
 
 describe("la holgura: el aire que necesita el clark arriba del bulto", () => {
-  test("un palet de 1,30 m no entra en un hueco de 1,33 m", () => {
-    assert.equal(entraEnAltura(130, 133), false);
+  test("por defecto es cero: si cabe, entra", () => {
+    assert.equal(HOLGURA_POR_DEFECTO, 0);
+    assert.equal(entraEnAltura(133, 133), true);
+    assert.equal(entraEnAltura(134, 133), false);
+    assert.equal(alturaAdmitida(133), 133);
   });
 
-  test("con 10 cm justos de aire, entra", () => {
-    assert.equal(HOLGURA_CM, 10);
-    assert.equal(entraEnAltura(130, 140), true);
-    assert.equal(entraEnAltura(131, 140), false);
+  test("con 10 cm de aire, un palet de 1,30 m no entra en 1,33 y sí en 1,40", () => {
+    assert.equal(entraEnAltura(130, 133, 10), false);
+    assert.equal(entraEnAltura(130, 140, 10), true);
+    assert.equal(entraEnAltura(131, 140, 10), false);
   });
 
   test("lo que admite un hueco es el hueco menos la holgura", () => {
-    assert.equal(alturaAdmitida(133), 123);
+    assert.equal(alturaAdmitida(133, 10), 123);
   });
 });

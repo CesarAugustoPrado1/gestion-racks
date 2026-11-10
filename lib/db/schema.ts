@@ -379,6 +379,12 @@ export const grupos = pgTable("grupos", {
    */
   numeracionInvertida: boolean("numeracion_invertida").notNull().default(false),
   /**
+   * Cuántos cm de aire tienen que sobrarle al bulto arriba para que el clark
+   * lo levante por encima del larguero sin chocar. Lo decide el admin para
+   * cada grupo; arranca en cero. Ver `entraEnAltura` en lib/posiciones.ts.
+   */
+  holguraCm: integer("holgura_cm").notNull().default(0),
+  /**
    * La carga inicial del grupo: abierta desde `cargaInicialDesde` hasta
    * `cargaInicialCerradaEn`. Mientras está abierta, solo control carga ahí: el
    * autoelevador no lo ve como destino. Ver lib/acciones/carga-motor.ts.
