@@ -53,8 +53,13 @@ export type ModeloConStock = {
   porPackaging: TotalPorPackaging;
   unidades: number;
   bultos: number;
-  /** De esas unidades, cuántas son de SEGUNDA. Están incluidas en `unidades`. */
+  /**
+   * Cuántas unidades del modelo son de SEGUNDA. Están incluidas en `unidades`
+   * solo si se pidió el stock con segunda.
+   */
   segunda: number;
+  /** Los m² de esas unidades, con los m² por unidad del modelo. Null si el modelo no los tiene. */
+  m2: number | null;
 };
 
 export type LineaConStock = {
@@ -73,10 +78,10 @@ export type LineaConStock = {
  * resultado, y esa es la clase de consulta que un día suma bultos entregados
  * sin que nadie lo note.
  */
-export async function stockPorLinea(): Promise<LineaConStock[]> {
+export async function stockPorLinea(conSegunda = true): Promise<LineaConStock[]> {
   const [modelos, totales] = await Promise.all([
     db.execute(sql`
-      select m.id, m.nombre, m.orden,
+      select m.id, m.nombre, m.orden, m.m2_por_unidad::float as m2_por_unidad,
              l.id as linea_id, l.codigo as linea_codigo, l.nombre as linea_nombre,
              l.unidad_singular, l.unidad_plural, l.orden as linea_orden
       from modelos m
@@ -87,6 +92,7 @@ export async function stockPorLinea(): Promise<LineaConStock[]> {
       Array<{
         id: number;
         nombre: string;
+        m2_por_unidad: number | null;
         linea_id: number;
         linea_codigo: string;
         linea_nombre: string;
@@ -96,8 +102,8 @@ export async function stockPorLinea(): Promise<LineaConStock[]> {
     >,
     db.execute(sql`
       select c.modelo_id, b.packaging,
-             sum(c.cantidad)::int as unidades,
-             count(*)::int as bultos,
+             coalesce(sum(c.cantidad) filter (where ${conSegunda} or b.calidad <> 'segunda'), 0)::int as unidades,
+             count(*) filter (where ${conSegunda} or b.calidad <> 'segunda')::int as bultos,
              coalesce(sum(c.cantidad) filter (where b.calidad = 'segunda'), 0)::int as segunda
       from bulto_contenido c
       join bultos b on b.id = c.bulto_id
@@ -119,7 +125,7 @@ export async function stockPorLinea(): Promise<LineaConStock[]> {
   for (const t of totales) {
     segundaPorModelo.set(t.modelo_id, (segundaPorModelo.get(t.modelo_id) ?? 0) + t.segunda);
     const actual = porModelo.get(t.modelo_id) ?? {};
-    actual[t.packaging] = { unidades: t.unidades, bultos: t.bultos };
+    if (t.bultos > 0) actual[t.packaging] = { unidades: t.unidades, bultos: t.bultos };
     porModelo.set(t.modelo_id, actual);
   }
 
@@ -136,6 +142,7 @@ export async function stockPorLinea(): Promise<LineaConStock[]> {
     }
     const porPackaging = porModelo.get(m.id) ?? {};
     const valores = Object.values(porPackaging);
+    const unidades = valores.reduce((s, v) => s + v.unidades, 0);
     lineas.get(m.linea_id)!.modelos.push({
       id: m.id,
       nombre: m.nombre,
@@ -144,9 +151,10 @@ export async function stockPorLinea(): Promise<LineaConStock[]> {
       unidadSingular: m.unidad_singular,
       unidadPlural: m.unidad_plural,
       porPackaging,
-      unidades: valores.reduce((s, v) => s + v.unidades, 0),
+      unidades,
       bultos: valores.reduce((s, v) => s + v.bultos, 0),
       segunda: segundaPorModelo.get(m.id) ?? 0,
+      m2: m.m2_por_unidad != null ? unidades * Number(m.m2_por_unidad) : null,
     });
   }
 
