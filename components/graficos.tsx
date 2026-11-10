@@ -89,6 +89,8 @@ export function Barras({
     valor: number;
     /** Lo que se escribe al lado. Por defecto, el valor. */
     texto?: ReactNode;
+    /** Un renglón chico debajo, para lo que no entra al lado (las unidades de cada línea). */
+    subtexto?: ReactNode;
     /** El detalle del tooltip. */
     detalle?: string;
     href?: string;
@@ -112,6 +114,7 @@ export function Barras({
               <span className="min-w-0 truncate text-slate-700">{f.etiqueta}</span>
               <span className="cifra shrink-0 text-slate-900">{f.texto ?? numero(f.valor)}</span>
             </div>
+            {f.subtexto && <p className="cifra text-right text-xs text-slate-500">{f.subtexto}</p>}
             <div className="mt-1 h-2 rounded bg-slate-100">
               <div
                 className={`h-2 rounded ${f.atenuada ? "bg-medida/40" : "bg-medida"}`}

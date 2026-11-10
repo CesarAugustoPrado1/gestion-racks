@@ -220,7 +220,10 @@ export default async function PantallaResumen({
         <Tile
           etiqueta="De segunda"
           valor={numero(foto.bultos.segunda)}
-          detalle={d(foto.bultos.segunda, otra?.bultos.segunda) ?? `bulto${foto.bultos.segunda === 1 ? "" : "s"} de segunda en stock`}
+          detalle={
+            d(foto.bultos.segunda, otra?.bultos.segunda) ??
+            `bulto${foto.bultos.segunda === 1 ? "" : "s"} de segunda en stock${foto.m2.segunda ? ` · ${m2(foto.m2.segunda)}` : ""}`
+          }
         />
       </div>
 
@@ -302,6 +305,11 @@ export default async function PantallaResumen({
                     )}
                   </p>
                 )}
+                {o && ln.m2 > 0 && (
+                  <p className="text-xs">
+                    <Delta actual={Math.round(ln.m2)} anterior={Math.round(o.m2)} contra={contra} unidad="m²" />
+                  </p>
+                )}
                 <p className="text-xs text-slate-500">
                   en {numero(ln.bultos)} bulto{ln.bultos === 1 ? "" : "s"} · {numero(ln.modelosConStock)} modelo
                   {ln.modelosConStock === 1 ? "" : "s"} con stock
@@ -314,6 +322,7 @@ export default async function PantallaResumen({
                         <span className="cifra text-slate-900">{numero(ln.porPackaging[p]!.bultos)}</span> bulto
                         {ln.porPackaging[p]!.bultos === 1 ? "" : "s"} · {numero(ln.porPackaging[p]!.unidades)}{" "}
                         {ln.unidadPlural}
+                        {ln.porPackaging[p]!.m2 ? ` · ${m2(ln.porPackaging[p]!.m2!)}` : ""}
                       </span>
                     </li>
                   ))}
@@ -323,6 +332,7 @@ export default async function PantallaResumen({
                       <span>
                         {numero(ln.segunda.bultos)} bulto{ln.segunda.bultos === 1 ? "" : "s"} ·{" "}
                         {numero(ln.segunda.unidades)} {ln.unidadPlural}
+                        {ln.segunda.m2 ? ` · ${m2(ln.segunda.m2)}` : ""}
                       </span>
                     </li>
                   )}
@@ -353,6 +363,9 @@ export default async function PantallaResumen({
                 {modelos.map((m) => {
                   const o = modelosOtra.get(m.id);
                   const dif = m.unidades - (o?.unidades ?? 0);
+                  const difM2 = m.m2 != null ? m.m2 - (o?.m2 ?? 0) : null;
+                  // Los m² por unidad son los mismos para todo el modelo en la foto.
+                  const segundaM2 = m.m2 != null && m.unidades > 0 ? (m.segunda * m.m2) / m.unidades : null;
                   return (
                     <tr key={m.id}>
                       <td className="px-4 py-2">
@@ -372,15 +385,21 @@ export default async function PantallaResumen({
                       <td className="cifra px-2 py-2 text-right">
                         {numero(m.unidades)} <span className="text-xs text-slate-400">{m.unidadPlural}</span>
                       </td>
-                      <td className={`cifra px-2 py-2 text-right ${m.m2 == null ? "text-slate-300" : ""}`}>
+                      <td className={`cifra whitespace-nowrap px-2 py-2 text-right ${m.m2 == null ? "text-slate-300" : ""}`}>
                         {m.m2 == null ? "—" : m2(m.m2)}
                       </td>
                       <td className={`cifra px-2 py-2 text-right ${m.segunda > 0 ? "text-orange-800" : "text-slate-300"}`}>
                         {m.segunda > 0 ? numero(m.segunda) : "—"}
+                        {m.segunda > 0 && segundaM2 != null && (
+                          <span className="block whitespace-nowrap text-xs text-orange-700">{m2(segundaM2)}</span>
+                        )}
                       </td>
                       {otra && (
                         <td className={`cifra px-4 py-2 text-right ${dif === 0 ? "text-slate-300" : "text-slate-800"}`}>
                           {dif === 0 ? "=" : `${dif > 0 ? "+" : "−"}${numero(Math.abs(dif))}`}
+                          {dif !== 0 && difM2 != null && (
+                            <span className="block whitespace-nowrap text-xs text-slate-500">{`${difM2 > 0 ? "+" : "−"}${m2(Math.abs(difM2))}`}</span>
+                          )}
                         </td>
                       )}
                     </tr>

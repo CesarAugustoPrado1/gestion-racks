@@ -37,8 +37,9 @@ export type StockDeLinea = {
   unidades: number;
   bultos: number;
   modelosConStock: number;
-  porPackaging: Partial<Record<Packaging, { bultos: number; unidades: number }>>;
-  segunda: { bultos: number; unidades: number };
+  /** `m2` falta en las fotos guardadas antes de que se agregara. */
+  porPackaging: Partial<Record<Packaging, { bultos: number; unidades: number; m2?: number }>>;
+  segunda: { bultos: number; unidades: number; m2?: number };
   /** m² de lo que tiene medida, y cuántas unidades quedaron sin medir. */
   m2: number;
   unidadesSinM2: number;
@@ -82,7 +83,7 @@ export type Foto = {
    * líneas además de los bultos. Lo de modelos sin medir queda afuera y se
    * cuenta aparte, para que nadie lea un total incompleto como completo.
    */
-  m2: { total: number; modelosSinMedir: string[] };
+  m2: { total: number; modelosSinMedir: string[]; /** Falta en fotos viejas. */ segunda?: number };
   lineas: StockDeLinea[];
   modelos: StockDeModelo[];
   grupos: GrupoEnFoto[];
@@ -234,7 +235,7 @@ export async function fotoEn(
       bultos: 0,
       modelosConStock: 0,
       porPackaging: {},
-      segunda: { bultos: 0, unidades: 0 },
+      segunda: { bultos: 0, unidades: 0, m2: 0 },
       m2: 0,
       unidadesSinM2: 0,
     });
@@ -308,11 +309,15 @@ export async function fotoEn(
       const l = porLinea.get(m.linea_id);
       if (!l) continue;
       l.unidades += c.cantidad;
-      const pk = (l.porPackaging[b.packaging] ??= { bultos: 0, unidades: 0 });
+      const pk = (l.porPackaging[b.packaging] ??= { bultos: 0, unidades: 0, m2: 0 });
       pk.unidades += c.cantidad;
       if (b.calidad === "segunda") l.segunda.unidades += c.cantidad;
-      if (m.m2 != null) l.m2 += c.cantidad * m.m2;
-      else l.unidadesSinM2 += c.cantidad;
+      if (m.m2 != null) {
+        const metros = c.cantidad * m.m2;
+        l.m2 += metros;
+        pk.m2 = (pk.m2 ?? 0) + metros;
+        if (b.calidad === "segunda") l.segunda.m2 = (l.segunda.m2 ?? 0) + metros;
+      } else l.unidadesSinM2 += c.cantidad;
       if (!lineasTocadas.has(l.id)) {
         lineasTocadas.add(l.id);
         l.bultos++;
@@ -428,6 +433,7 @@ export async function fotoEn(
     m2: {
       total: [...porLinea.values()].reduce((s2, l) => s2 + l.m2, 0),
       modelosSinMedir: [...porModelo.values()].filter((m) => m.m2 == null).map((m) => m.nombre),
+      segunda: [...porLinea.values()].reduce((s2, l) => s2 + (l.segunda.m2 ?? 0), 0),
     },
     bultos: {
       enStock: cuenta.ubicados + cuenta.sinUbicar,

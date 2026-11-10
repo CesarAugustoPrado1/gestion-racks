@@ -5,7 +5,7 @@ import { dias as textoDias, porcentaje } from "@/lib/estadisticas-calculo";
 import { Barras, Columnas, Seccion, Tile } from "@/components/graficos";
 import { GraficoEvolucion } from "@/components/evolucion";
 import { Delta, SelectorPeriodo } from "@/components/periodo";
-import { ETIQUETA_MOVIMIENTO, m2, numero } from "@/lib/formato";
+import { ETIQUETA_MOVIMIENTO, enM2, m2, numero } from "@/lib/formato";
 import { POR, fechaLarga, diaDe, leerRango, rangoAnterior } from "@/lib/periodos";
 import { Titulo } from "@/components/ui";
 
@@ -52,6 +52,19 @@ export default async function PantallaEstadisticas({
   const precision = porcentaje(e.control.ok + e.control.vacioOk, e.control.chequeos);
   const precisionAnt = porcentaje(ant.chequeosBien, ant.chequeos);
   const lineasDeModelos = [...new Set(e.modelos.map((m) => m.linea))];
+  /** Un total de m² dicho también en la unidad de cada línea, que no se suman entre sí. */
+  const enCadaLinea = (filas: Array<{ unidades: number; unidadPlural: string }>) =>
+    filas
+      .filter((f) => f.unidades !== 0)
+      .map((f) => `${numero(f.unidades)} ${f.unidadPlural}`)
+      .join(" + ");
+  const entraronPorLinea = enCadaLinea(
+    Object.values(tot.porLinea).map((l) => ({ unidades: l.entraron, unidadPlural: l.unidadPlural })),
+  );
+  const salieronPorLinea = enCadaLinea(
+    Object.values(tot.porLinea).map((l) => ({ unidades: l.salieron, unidadPlural: l.unidadPlural })),
+  );
+  const mermaPorLinea = enCadaLinea(merma.porLinea);
   const contra = anterior.etiqueta;
   const hoy = diaDe(ahora);
   // Un período en curso se muestra hasta hoy, no hasta su último día.
@@ -88,17 +101,32 @@ export default async function PantallaEstadisticas({
         <Tile
           etiqueta="m² que entraron"
           valor={m2(tot.m2Entraron)}
-          detalle={<Delta actual={Math.round(tot.m2Entraron)} anterior={Math.round(ant.m2Entraron)} contra={contra} unidad="m²" />}
+          detalle={
+            <>
+              {entraronPorLinea && <span className="block">{entraronPorLinea}</span>}
+              <Delta actual={Math.round(tot.m2Entraron)} anterior={Math.round(ant.m2Entraron)} contra={contra} unidad="m²" />
+            </>
+          }
         />
         <Tile
           etiqueta="m² que salieron"
           valor={m2(tot.m2Salieron)}
-          detalle={<Delta actual={Math.round(tot.m2Salieron)} anterior={Math.round(ant.m2Salieron)} contra={contra} unidad="m²" />}
+          detalle={
+            <>
+              {salieronPorLinea && <span className="block">{salieronPorLinea}</span>}
+              <Delta actual={Math.round(tot.m2Salieron)} anterior={Math.round(ant.m2Salieron)} contra={contra} unidad="m²" />
+            </>
+          }
         />
         <Tile
           etiqueta="m² de merma"
           valor={m2(merma.m2)}
-          detalle={<Delta actual={Math.round(merma.m2)} anterior={Math.round(merma.anterior.m2)} contra={contra} unidad="m²" />}
+          detalle={
+            <>
+              {mermaPorLinea && <span className="block">{mermaPorLinea}</span>}
+              <Delta actual={Math.round(merma.m2)} anterior={Math.round(merma.anterior.m2)} contra={contra} unidad="m²" />
+            </>
+          }
           tono={merma.m2 > 0 ? "atencion" : "normal"}
         />
         <Tile
@@ -197,12 +225,14 @@ export default async function PantallaEstadisticas({
                       </td>
                       <td className="cifra px-2 py-2 text-right">
                         {numero(f.ingresaron)}
+                        {f.m2.ingresaron !== 0 && <span className="block whitespace-nowrap text-xs text-slate-600">{m2(f.m2.ingresaron)}</span>}
                         <span className="block text-[11px] font-normal text-slate-400">
                           antes {numero(ant.porLinea[f.linea]?.entraron ?? 0)}
                         </span>
                       </td>
                       <td className="cifra px-2 py-2 text-right">
                         {numero(f.egresaron)}
+                        {f.m2.egresaron !== 0 && <span className="block whitespace-nowrap text-xs text-slate-600">{m2(f.m2.egresaron)}</span>}
                         <span className="block text-[11px] font-normal text-slate-400">
                           antes {numero(ant.porLinea[f.linea]?.salieron ?? 0)}
                         </span>
@@ -210,10 +240,22 @@ export default async function PantallaEstadisticas({
                       <td className="cifra px-2 py-2 text-right">
                         {neto > 0 ? "+" : ""}
                         {numero(neto)}
+                        {f.m2.ingresaron - f.m2.egresaron !== 0 && (
+                          <span className="block whitespace-nowrap text-xs text-slate-600">
+                            {f.m2.ingresaron - f.m2.egresaron > 0 ? "+" : "−"}
+                            {m2(Math.abs(f.m2.ingresaron - f.m2.egresaron))}
+                          </span>
+                        )}
                       </td>
                       <td className="cifra px-4 py-2 text-right">
                         {f.ajusteNeto > 0 ? "+" : ""}
                         {numero(f.ajusteNeto)} / {numero(f.ajusteBruto)}
+                        {f.m2.ajusteBruto !== 0 && (
+                          <span className="block whitespace-nowrap text-xs text-slate-600">
+                            {f.m2.ajusteNeto > 0 ? "+" : f.m2.ajusteNeto < 0 ? "−" : ""}
+                            {m2(Math.abs(f.m2.ajusteNeto))} / {m2(f.m2.ajusteBruto)}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -244,8 +286,12 @@ export default async function PantallaEstadisticas({
                       clave: String(m.id),
                       etiqueta: m.nombre,
                       valor: m.egresaron,
-                      texto: `${numero(m.egresaron)} ${unidad}`,
-                      detalle: `${m.nombre}: salieron ${numero(m.egresaron)} y entraron ${numero(m.ingresaron)} ${unidad}`,
+                      texto: `${numero(m.egresaron)} ${unidad}${m.m2PorUnidad != null ? ` · ${m2(enM2(m.egresaron, m.m2PorUnidad)!)}` : ""}`,
+                      detalle: `${m.nombre}: salieron ${numero(m.egresaron)} y entraron ${numero(m.ingresaron)} ${unidad}${
+                        m.m2PorUnidad != null
+                          ? ` (${m2(enM2(m.egresaron, m.m2PorUnidad)!)} y ${m2(enM2(m.ingresaron, m.m2PorUnidad)!)})`
+                          : ""
+                      }`,
                       href: `/stock/${m.id}`,
                     }))}
                   />
@@ -279,7 +325,12 @@ export default async function PantallaEstadisticas({
           <Tile
             etiqueta="m² perdidos"
             valor={m2(merma.m2)}
-            detalle={<Delta actual={Math.round(merma.m2)} anterior={Math.round(merma.anterior.m2)} contra={contra} unidad="m²" />}
+            detalle={
+            <>
+              {mermaPorLinea && <span className="block">{mermaPorLinea}</span>}
+              <Delta actual={Math.round(merma.m2)} anterior={Math.round(merma.anterior.m2)} contra={contra} unidad="m²" />
+            </>
+          }
           />
           <Tile
             etiqueta="Registros de merma"
@@ -343,6 +394,7 @@ export default async function PantallaEstadisticas({
                 etiqueta: x.motivo,
                 valor: Math.max(x.m2, 0.001),
                 texto: `${m2(x.m2)} · ${x.registros} ${x.registros === 1 ? "vez" : "veces"}`,
+                subtexto: x.unidades,
               }))}
             />
 
@@ -355,6 +407,7 @@ export default async function PantallaEstadisticas({
                     etiqueta: x.grupo === "Sin ubicar" ? x.grupo : `Grupo ${x.grupo}`,
                     valor: Math.max(x.m2, 0.001),
                     texto: `${m2(x.m2)} · ${x.registros}`,
+                    subtexto: x.unidades,
                   }))}
                 />
               </div>
@@ -367,6 +420,7 @@ export default async function PantallaEstadisticas({
                     etiqueta: <span className="codigo">{x.posicion}</span>,
                     valor: x.registros,
                     texto: `${x.registros} ${x.registros === 1 ? "vez" : "veces"} · ${m2(x.m2)}`,
+                    subtexto: x.unidades,
                   }))}
                 />
               </div>
@@ -399,6 +453,7 @@ export default async function PantallaEstadisticas({
                     etiqueta: x.usuario,
                     valor: x.registros,
                     texto: `${x.registros} · ${m2(x.m2)}`,
+                    subtexto: x.unidades,
                   }))}
                 />
               </div>
@@ -531,7 +586,9 @@ export default async function PantallaEstadisticas({
             detalle={
               cat.stockSegunda.length === 0
                 ? "nada"
-                : cat.stockSegunda.map((l) => `${numero(l.unidades)} ${l.unidadPlural}`).join(" · ")
+                : `${cat.stockSegunda.map((l) => `${numero(l.unidades)} ${l.unidadPlural}`).join(" + ")} · ${m2(
+                    cat.stockSegunda.reduce((s2, l) => s2 + l.m2, 0),
+                  )}`
             }
           />
         </div>
@@ -544,7 +601,7 @@ export default async function PantallaEstadisticas({
                 clave: l.linea,
                 etiqueta: l.linea,
                 valor: l.bultos,
-                texto: `${numero(l.unidades)} ${l.unidadPlural} · ${l.bultos} bulto${l.bultos === 1 ? "" : "s"}`,
+                texto: `${numero(l.unidades)} ${l.unidadPlural}${l.m2 ? ` · ${m2(l.m2)}` : ""} · ${l.bultos} bulto${l.bultos === 1 ? "" : "s"}`,
               }))}
             />
           </div>

@@ -9,9 +9,11 @@ import { fueraDeNorma } from "@/lib/bultos";
 import {
   ETIQUETA_PACKAGING,
   PACKAGINGS,
+  enM2,
+  m2,
   medidaDeSolapa,
   numero,
-  unidades,
+  unidadesYM2,
 } from "@/lib/formato";
 import { ChipConfianza, Indice } from "@/components/confiabilidad";
 import { Titulo } from "@/components/ui";
@@ -60,12 +62,12 @@ export default async function PantallaModelo({
   /** Lo que se cuenta en cada solapa. Ver `medidaDeSolapa`: no es lo mismo. */
   const medidaDe = (s: Solapa) => {
     const bultos = s === "total" ? modelo.bultos : porPackaging(s as Packaging);
-    return medidaDeSolapa(
-      s,
-      { bultos: bultos.length, unidades: totalDe(bultos) },
-      modelo.unidadSingular,
-      modelo.unidadPlural,
-    );
+    const total = totalDe(bultos);
+    return {
+      ...medidaDeSolapa(s, { bultos: bultos.length, unidades: total }, modelo.unidadSingular, modelo.unidadPlural),
+      unidades: total,
+      m2: enM2(total, modelo.m2PorUnidad),
+    };
   };
   const medida = medidaDe(solapa);
 
@@ -119,6 +121,11 @@ export default async function PantallaModelo({
               >
                 {m.unidad}
               </span>
+              {m.m2 != null && (
+                <span className={`cifra text-[10px] leading-tight ${activa ? "text-slate-300" : "text-slate-500"}`}>
+                  {m2(m.m2)}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -132,17 +139,16 @@ export default async function PantallaModelo({
         </p>
         <p className="cifra mt-1 text-3xl text-slate-900">
           {numero(medida.valor)} {medida.unidad}
+          {medida.equivale == null && medida.m2 != null && (
+            <span className="ml-2 text-xl text-slate-600">· {m2(medida.m2)}</span>
+          )}
         </p>
         <p className="mt-1 text-sm text-slate-500">
           {medida.equivale != null ? (
             <>
               {medida.valor === 1 ? "equivale a" : "equivalen a"}{" "}
               <strong className="text-slate-700">
-                {unidades(
-                  medida.equivale,
-                  modelo.unidadSingular,
-                  modelo.unidadPlural,
-                )}
+                {unidadesYM2(medida.equivale, modelo.unidadSingular, modelo.unidadPlural, medida.m2)}
               </strong>
             </>
           ) : (
@@ -158,7 +164,11 @@ export default async function PantallaModelo({
             venda como primera algo que no lo es. */}
         {segunda.unidades > 0 && (
           <p className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-sm text-orange-900">
-            De eso, <strong>{unidades(segunda.unidades, modelo.unidadSingular, modelo.unidadPlural)}</strong> son
+            De eso,{" "}
+            <strong>
+              {unidadesYM2(segunda.unidades, modelo.unidadSingular, modelo.unidadPlural, enM2(segunda.unidades, modelo.m2PorUnidad))}
+            </strong>{" "}
+            son
             de segunda, en {segunda.bultos} bulto{segunda.bultos === 1 ? "" : "s"}.
           </p>
         )}
@@ -198,7 +208,7 @@ function FilaBulto({
 }: {
   bulto: BultoDeModelo;
   confianza: ReturnType<typeof confianza>;
-  modelo: { normas: Partial<Record<Packaging, number>>; unidadPlural: string };
+  modelo: { normas: Partial<Record<Packaging, number>>; unidadPlural: string; m2PorUnidad: number | null };
   mostrarPackaging: boolean;
 }) {
   const norma = modelo.normas[bulto.packaging] ?? null;
@@ -298,6 +308,9 @@ function FilaBulto({
           {numero(bulto.unidades)}
         </p>
         <p className="text-[11px] text-slate-500">{modelo.unidadPlural}</p>
+        {modelo.m2PorUnidad != null && (
+          <p className="cifra text-xs text-slate-500">{m2(enM2(bulto.unidades, modelo.m2PorUnidad)!)}</p>
+        )}
       </div>
     </li>
   );
