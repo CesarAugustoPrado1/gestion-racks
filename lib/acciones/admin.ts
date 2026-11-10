@@ -367,6 +367,23 @@ export async function guardarAlturaNivel(
 }
 
 /**
+ * La holgura del grupo: cuántos cm de aire tienen que sobrarle al bulto arriba
+ * para que el clark lo levante sin chocar. Cero = entra si cabe.
+ *
+ * No toca lo que ya está ubicado: vale para lo próximo que se meta o se mueva.
+ */
+export async function guardarHolgura(grupoId: number, holguraCm: number): Promise<Resultado<void>> {
+  return ejecutar(async () => {
+    await autorizar("admin");
+    if (!Number.isInteger(holguraCm) || holguraCm < 0 || holguraCm > 100) {
+      fallar("El aire tiene que ser un número de cm entre 0 y 100.");
+    }
+    await db.update(grupos).set({ holguraCm }).where(eq(grupos.id, grupoId));
+    revalidatePath("/", "layout");
+  });
+}
+
+/**
  * Si el clark llega a un nivel del grupo.
  *
  * Apagarlo con bultos adentro SE PERMITE: lo que está ahí se puede seguir

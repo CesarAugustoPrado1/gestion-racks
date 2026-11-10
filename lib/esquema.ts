@@ -60,6 +60,7 @@ const DIARIO: Array<{ tag: string; when: number }> = [
   { tag: "0012_calidad", when: 1790900000000 },
   { tag: "0013_m2_y_fotos", when: 1791000000000 },
   { tag: "0014_merma", when: 1791100000000 },
+  { tag: "0015_holgura-por-grupo", when: 1791200000000 },
 ];
 
 /**
@@ -129,6 +130,7 @@ const HUELLAS: Huella[] = [
   { migracion: "0013_m2_y_fotos", que: "las fotos diarias del stock", objeto: "fotos_diarias" },
   { migracion: "0014_merma", que: "qué motivos son de merma", objeto: "motivos.es_merma" },
   { migracion: "0014_merma", que: "si cada movimiento fue merma", objeto: "movimientos.es_merma" },
+  { migracion: "0015_holgura-por-grupo", que: "el aire que se deja arriba del bulto en cada grupo", objeto: "grupos.holgura_cm" },
   { migracion: "0004_grupos", que: "el rack viejo de la posición, que pasó a llamarse grupo_id", objeto: "posiciones.rack_id", debeEstar: false },
   { migracion: "0004_grupos", que: "la capacidad por posición, que ya no se usa: una posición lleva un bulto", objeto: "posiciones.capacidad_bultos", debeEstar: false },
   { migracion: "0004_grupos", que: "la profundidad en el bulto, que es de la posición y no del bulto", objeto: "bultos.profundidad", debeEstar: false },

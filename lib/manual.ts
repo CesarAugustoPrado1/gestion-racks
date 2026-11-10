@@ -7,7 +7,7 @@
  * quedan en public/manuales/ para que no se pierdan.
  */
 export const MANUAL = {
-  version: 3,
+  version: 4,
   fecha: "noviembre de 2026",
 } as const;
 

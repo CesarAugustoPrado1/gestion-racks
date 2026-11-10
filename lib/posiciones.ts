@@ -190,26 +190,22 @@ export function describirPosicion(p: {
 /* -------------------------------------------------------------------------- */
 
 /**
- * El aire que tiene que quedar entre la parte de arriba del bulto y el límite
- * del nivel, en centímetros.
+ * La HOLGURA: el aire que tiene que quedar entre la parte de arriba del bulto y
+ * el límite del nivel, en centímetros.
  *
  * Al guardar un palet el clark lo LEVANTA por encima del larguero para entrarlo,
- * y después lo baja. Si el hueco es justo, en esa maniobra choca arriba. Con
- * menos de 10 cm no se entra, aunque el palet "quepa": un palet de 1,30 m no va
- * en un nivel de 1,33 m.
- *
- * Es una regla de la planta y no una preferencia, por eso es una constante y no
- * un parámetro de Administración. Si algún día cambia, se cambia acá y vale
- * para todo: el motor, las pantallas y los datos de ejemplo.
+ * y después lo baja. Si el hueco es justo, en esa maniobra choca arriba. Cuánto
+ * aire hace falta depende del rack y del clark, así que la decide el admin para
+ * cada grupo (`grupos.holgura_cm`). Arranca en cero: el bulto entra si cabe.
  */
-export const HOLGURA_CM = 10;
+export const HOLGURA_POR_DEFECTO = 0;
 
-/** Si un bulto de `bultoCm` entra en un hueco de `huecoCm`, con la holgura. */
-export function entraEnAltura(bultoCm: number, huecoCm: number): boolean {
-  return bultoCm + HOLGURA_CM <= huecoCm;
+/** Si un bulto de `bultoCm` entra en un hueco de `huecoCm`, dejando `holguraCm` de aire. */
+export function entraEnAltura(bultoCm: number, huecoCm: number, holguraCm: number = HOLGURA_POR_DEFECTO): boolean {
+  return bultoCm + holguraCm <= huecoCm;
 }
 
 /** La altura máxima de bulto que admite un hueco: el hueco menos la holgura. */
-export function alturaAdmitida(huecoCm: number): number {
-  return huecoCm - HOLGURA_CM;
+export function alturaAdmitida(huecoCm: number, holguraCm: number = HOLGURA_POR_DEFECTO): number {
+  return huecoCm - holguraCm;
 }

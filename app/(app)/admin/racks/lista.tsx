@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   guardarAlcanceNivel,
   guardarAlturaNivel,
+  guardarHolgura,
   guardarGrupo,
 } from "@/lib/acciones/admin";
 import { iniciarCargaInicial } from "@/lib/acciones/carga";
@@ -15,7 +16,6 @@ import { Aviso } from "@/components/ui";
 import { useRouter } from "next/navigation";
 import {
   alturaAdmitida,
-  HOLGURA_CM,
   cuantasPosiciones,
   describirGeometria,
   nombreDeNivel,
@@ -36,6 +36,7 @@ type Grupo = {
   empresaNombre: string | null;
   acceso: "izquierda" | "derecha";
   numeracionInvertida: boolean;
+  holguraCm: number;
   posiciones: number;
   ocupadas: number;
   carga: EstadoCarga;
@@ -430,6 +431,8 @@ function Niveles({ grupo, niveles }: { grupo: Grupo; niveles: Nivel[] }) {
   const [alcance, setAlcance] = useState<Record<number, boolean>>(
     Object.fromEntries(niveles.map((n) => [n.nivel, n.alcanzable])),
   );
+  const [holgura, setHolgura] = useState(String(grupo.holguraCm));
+  const aire = Number(holgura) || 0;
   const [valores, setValores] = useState<Record<number, string>>(
     Object.fromEntries(
       niveles.map((n) => [n.nivel, n.alturaMaxCm != null ? String(n.alturaMaxCm) : ""]),
@@ -518,7 +521,7 @@ function Niveles({ grupo, niveles }: { grupo: Grupo; niveles: Nivel[] }) {
               {valores[n.nivel] && (
                 <span className="text-xs text-slate-400">
                   entran hasta{" "}
-                  {(alturaAdmitida(Number(valores[n.nivel])) / 100)
+                  {(alturaAdmitida(Number(valores[n.nivel]), aire) / 100)
                     .toFixed(2)
                     .replace(".", ",")}{" "}
                   m
@@ -527,10 +530,32 @@ function Niveles({ grupo, niveles }: { grupo: Grupo; niveles: Nivel[] }) {
             </li>
           ))}
       </ul>
-      <p className="mt-2 text-xs text-slate-500">
-        La altura es la del hueco, de larguero a larguero. Al bulto se le exigen{" "}
-        {HOLGURA_CM} cm de aire arriba para que el clark lo pueda levantar y
-        entrar sin chocar.
+      <label className="mt-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+        <span>Aire arriba del bulto</span>
+        <input
+          className="campo w-20 text-right"
+          inputMode="numeric"
+          value={holgura}
+          disabled={enviando}
+          onChange={(e) => setHolgura(e.target.value.replace(/\D/g, "").slice(0, 3))}
+          onBlur={() => {
+            const ahora = Number(holgura) || 0;
+            setHolgura(String(ahora));
+            if (ahora === grupo.holguraCm) return;
+            void ejecutar(() => guardarHolgura(grupo.id, ahora), () => router.refresh()).then((ok) => {
+              if (!ok) setHolgura(String(grupo.holguraCm));
+            });
+          }}
+          aria-label={`Aire arriba del bulto en el grupo ${grupo.codigo}, en cm`}
+        />
+        <span>cm</span>
+      </label>
+      <p className="mt-1 text-xs text-slate-500">
+        La altura es la del hueco, de larguero a larguero.{" "}
+        {aire > 0
+          ? `Al bulto se le exigen ${aire} cm de aire arriba para que el clark lo pueda levantar y entrar sin chocar.`
+          : "Con 0 cm, el bulto entra si cabe justo. Si el clark necesita aire para levantarlo, ponelo acá."}{" "}
+        Vale para lo próximo que se meta o se mueva.
       </p>
       {sinAlcance > 0 && (
         <p className="mt-2 text-xs text-slate-500">

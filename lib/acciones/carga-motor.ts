@@ -3,7 +3,6 @@ import { sql } from "drizzle-orm";
 import type { Calidad, Packaging } from "../db/schema";
 import { validarDescripcion, type LineaContenido } from "../bultos";
 import { porQueNoSeUsa } from "../uso";
-import { HOLGURA_CM } from "../posiciones";
 import {
   aplicarMovimiento,
   bloquearPosicion,
@@ -215,7 +214,7 @@ export async function liberarTapada(tx: Tx, posicionId: number): Promise<{ aviso
 
   const [d] = (await tx.execute(sql`
     select b.codigo, b.packaging, g.codigo || '-' || pb.codigo as abajo,
-           coalesce(pb.altura_max_cm, n.altura_max_cm) as hueco,
+           coalesce(pb.altura_max_cm, n.altura_max_cm) as hueco, g.holgura_cm as holgura,
            nm.altura_cm as alto, m.nombre
       from posiciones p
       join bultos b on b.id = p.bloqueada_por_bulto_id
@@ -233,6 +232,7 @@ export async function liberarTapada(tx: Tx, posicionId: number): Promise<{ aviso
     packaging: string;
     abajo: string | null;
     hueco: number | null;
+    holgura: number | null;
     alto: number | null;
     nombre: string | null;
   }>;
@@ -243,8 +243,10 @@ export async function liberarTapada(tx: Tx, posicionId: number): Promise<{ aviso
   const aviso =
     d?.alto != null && d.hueco != null
       ? `Según las medidas, un ${d.packaging} de ${d.nombre} mide ${m(d.alto)} m y en ${d.abajo} entran ` +
-        `hasta ${m(d.hueco - HOLGURA_CM)} m (el hueco mide ${m(d.hueco)} y se dejan ${HOLGURA_CM} cm de aire). ` +
-        `Como ${pos.codigo} está libre, revisá en Admin la altura de ese nivel o la de la norma: ` +
+        (d.holgura
+          ? `hasta ${m(d.hueco - d.holgura)} m (el hueco mide ${m(d.hueco)} y el grupo pide ${d.holgura} cm de aire). `
+          : `hasta ${m(d.hueco)} m. `) +
+        `Como ${pos.codigo} está libre, revisá en Admin la altura de ese nivel, el aire del grupo o la altura de la norma: ` +
         `si no, cuando ${d.codigo} se mueva la vuelve a tapar.`
       : `Revisá en Admin las medidas de ${d?.abajo ?? "la posición de abajo"} y de la norma de ${d?.codigo ?? "ese bulto"}.`;
   return { aviso };
