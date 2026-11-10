@@ -193,6 +193,8 @@ export type DetalleModelo = {
   lineaNombre: string;
   unidadSingular: string;
   unidadPlural: string;
+  /** Null si el modelo no tiene m² por unidad cargados. */
+  m2PorUnidad: number | null;
   normas: Partial<Record<Packaging, number>>;
   bultos: BultoDeModelo[];
 };
@@ -203,7 +205,8 @@ export async function detalleDeModelo(
   const [cabecera, normas, bultos] = await Promise.all([
     db.execute(sql`
       select m.id, m.nombre, l.nombre as linea_nombre,
-             l.unidad_singular, l.unidad_plural, e.nombre as empresa
+             l.unidad_singular, l.unidad_plural, e.nombre as empresa,
+             m.m2_por_unidad::float as m2_por_unidad
       from modelos m join lineas l on l.id = m.linea_id
       left join empresas e on e.id = m.empresa_id
       where m.id = ${modeloId}
@@ -216,6 +219,7 @@ export async function detalleDeModelo(
         unidad_singular: string;
         unidad_plural: string;
         empresa: string | null;
+        m2_por_unidad: number | null;
       }>
     >,
     db.execute(sql`
@@ -278,6 +282,7 @@ export async function detalleDeModelo(
     lineaNombre: m.linea_nombre,
     unidadSingular: m.unidad_singular,
     unidadPlural: m.unidad_plural,
+    m2PorUnidad: m.m2_por_unidad != null ? Number(m.m2_por_unidad) : null,
     normas: Object.fromEntries(normas.map((n) => [n.packaging, n.cantidad])),
     bultos: bultos.map((b) => ({
       id: b.id,

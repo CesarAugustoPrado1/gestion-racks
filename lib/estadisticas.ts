@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db";
 import { mediana } from "./estadisticas-calculo";
 import { FORMATO_SQL, tramosDe, type Rango } from "./periodos";
+import { unidades as enUnidades } from "./formato";
 
 /**
  * Estadísticas: lo que PASÓ en un período, para analizar y decidir.
@@ -33,6 +34,8 @@ export type FlujoPorLinea = {
   ajusteNeto: number;
   /** Lo que control corrigió en valor absoluto: el tamaño del error. */
   ajusteBruto: number;
+  /** Lo mismo en m², con los modelos que tienen m² por unidad. */
+  m2: { ingresaron: number; egresaron: number; ajusteNeto: number; ajusteBruto: number };
 };
 
 export type ModeloEnFlujo = {
@@ -42,6 +45,8 @@ export type ModeloEnFlujo = {
   unidadPlural: string;
   ingresaron: number;
   egresaron: number;
+  /** Null si el modelo no tiene m² por unidad. */
+  m2PorUnidad: number | null;
 };
 
 export type Estadisticas = {
@@ -132,7 +137,11 @@ export async function estadisticas(r: Rango): Promise<Estadisticas> {
              coalesce(sum(ml.cantidad - ml.cantidad_antes) filter (where m.tipo = 'meter'), 0)::int as ingresaron,
              coalesce(-sum(ml.cantidad - ml.cantidad_antes) filter (where m.tipo = 'sacar'), 0)::int as egresaron,
              coalesce(sum(ml.cantidad - ml.cantidad_antes) filter (where m.tipo = 'ajuste'), 0)::int as ajuste_neto,
-             coalesce(sum(abs(ml.cantidad - ml.cantidad_antes)) filter (where m.tipo = 'ajuste'), 0)::int as ajuste_bruto
+             coalesce(sum(abs(ml.cantidad - ml.cantidad_antes)) filter (where m.tipo = 'ajuste'), 0)::int as ajuste_bruto,
+             coalesce(sum((ml.cantidad - ml.cantidad_antes) * mo.m2_por_unidad) filter (where m.tipo = 'meter'), 0)::float8 as m2_ingresaron,
+             coalesce(-sum((ml.cantidad - ml.cantidad_antes) * mo.m2_por_unidad) filter (where m.tipo = 'sacar'), 0)::float8 as m2_egresaron,
+             coalesce(sum((ml.cantidad - ml.cantidad_antes) * mo.m2_por_unidad) filter (where m.tipo = 'ajuste'), 0)::float8 as m2_ajuste_neto,
+             coalesce(sum(abs(ml.cantidad - ml.cantidad_antes) * mo.m2_por_unidad) filter (where m.tipo = 'ajuste'), 0)::float8 as m2_ajuste_bruto
         from movimientos m
         join movimiento_lineas ml on ml.movimiento_id = m.id
         join modelos mo on mo.id = ml.modelo_id
@@ -148,11 +157,15 @@ export async function estadisticas(r: Rango): Promise<Estadisticas> {
         egresaron: number;
         ajuste_neto: number;
         ajuste_bruto: number;
+        m2_ingresaron: number;
+        m2_egresaron: number;
+        m2_ajuste_neto: number;
+        m2_ajuste_bruto: number;
       }>
     >,
 
     db.execute(sql`
-      select mo.id, mo.nombre, l.nombre as linea, l.unidad_plural,
+      select mo.id, mo.nombre, l.nombre as linea, l.unidad_plural, mo.m2_por_unidad::float8 as m2_por_unidad,
              coalesce(sum(ml.cantidad - ml.cantidad_antes) filter (where m.tipo = 'meter'), 0)::int as ingresaron,
              coalesce(-sum(ml.cantidad - ml.cantidad_antes) filter (where m.tipo = 'sacar'), 0)::int as egresaron
         from movimientos m
@@ -164,7 +177,7 @@ export async function estadisticas(r: Rango): Promise<Estadisticas> {
        group by mo.id, l.id
        order by l.orden, egresaron desc, mo.nombre
     `) as unknown as Promise<
-      Array<{ id: number; nombre: string; linea: string; unidad_plural: string; ingresaron: number; egresaron: number }>
+      Array<{ id: number; nombre: string; linea: string; unidad_plural: string; m2_por_unidad: number | null; ingresaron: number; egresaron: number }>
     >,
 
     db.execute(sql`
@@ -290,6 +303,12 @@ export async function estadisticas(r: Rango): Promise<Estadisticas> {
       egresaron: f.egresaron,
       ajusteNeto: f.ajuste_neto,
       ajusteBruto: f.ajuste_bruto,
+      m2: {
+        ingresaron: f.m2_ingresaron,
+        egresaron: f.m2_egresaron,
+        ajusteNeto: f.m2_ajuste_neto,
+        ajusteBruto: f.m2_ajuste_bruto,
+      },
     })),
     modelos: modelos.map((m) => ({
       id: m.id,
@@ -298,6 +317,7 @@ export async function estadisticas(r: Rango): Promise<Estadisticas> {
       unidadPlural: m.unidad_plural,
       ingresaron: m.ingresaron,
       egresaron: m.egresaron,
+      m2PorUnidad: m.m2_por_unidad,
     })),
     motivosEgreso: motivos.map((m) => ({
       motivo: m.motivo,
@@ -356,12 +376,12 @@ export type EstadisticasDeCategoria = {
   /** Correcciones de control que cambiaron la categoría: errores de registro. */
   correcciones: { aSegunda: number; aPrimera: number };
   /** Lo que pasó a segunda en el período, por línea y en su unidad. */
-  aSegundaPorLinea: Array<{ linea: string; unidadPlural: string; unidades: number; bultos: number }>;
+  aSegundaPorLinea: Array<{ linea: string; unidadPlural: string; unidades: number; bultos: number; m2: number }>;
   porUsuario: Array<{ usuario: string; pasajes: number; correcciones: number }>;
   /** Los últimos cambios del período, uno por uno: para auditar. */
   ultimos: CambioDeCategoria[];
   /** Lo que hay HOY de segunda, por línea. No depende del período. */
-  stockSegunda: Array<{ linea: string; unidadPlural: string; unidades: number; bultos: number }>;
+  stockSegunda: Array<{ linea: string; unidadPlural: string; unidades: number; bultos: number; m2: number }>;
 };
 
 /**
@@ -382,6 +402,7 @@ export async function estadisticasDeCategoria(r: Rango): Promise<EstadisticasDeC
 
     db.execute(sql`
       select l.nombre as linea, l.unidad_plural, sum(ml.cantidad)::int as unidades,
+             coalesce(sum(ml.cantidad * mo.m2_por_unidad), 0)::float8 as m2,
              count(distinct m.id)::int as bultos
         from movimientos m
         join movimiento_lineas ml on ml.movimiento_id = m.id
@@ -390,7 +411,7 @@ export async function estadisticasDeCategoria(r: Rango): Promise<EstadisticasDeC
        where ${cambio} and m.calidad = 'segunda'
        group by l.id, l.nombre, l.unidad_plural, l.orden
        order by l.orden
-    `) as unknown as Promise<Array<{ linea: string; unidad_plural: string; unidades: number; bultos: number }>>,
+    `) as unknown as Promise<Array<{ linea: string; unidad_plural: string; unidades: number; bultos: number; m2: number }>>,
 
     db.execute(sql`
       select m.usuario_nombre as usuario,
@@ -425,6 +446,7 @@ export async function estadisticasDeCategoria(r: Rango): Promise<EstadisticasDeC
 
     db.execute(sql`
       select l.nombre as linea, l.unidad_plural, sum(c.cantidad)::int as unidades,
+             coalesce(sum(c.cantidad * mo.m2_por_unidad), 0)::float8 as m2,
              count(distinct b.id)::int as bultos
         from bultos b
         join bulto_contenido c on c.bulto_id = b.id
@@ -433,7 +455,7 @@ export async function estadisticasDeCategoria(r: Rango): Promise<EstadisticasDeC
        where b.estado in ('ubicado', 'sin_ubicar') and b.calidad = 'segunda'
        group by l.id, l.nombre, l.unidad_plural, l.orden
        order by l.orden
-    `) as unknown as Promise<Array<{ linea: string; unidad_plural: string; unidades: number; bultos: number }>>,
+    `) as unknown as Promise<Array<{ linea: string; unidad_plural: string; unidades: number; bultos: number; m2: number }>>,
   ]);
 
   const contar = (tipo: string, calidad: string) =>
@@ -442,7 +464,7 @@ export async function estadisticasDeCategoria(r: Rango): Promise<EstadisticasDeC
   return {
     pasajes: { aSegunda: contar("categoria", "segunda"), aPrimera: contar("categoria", "primera") },
     correcciones: { aSegunda: contar("ajuste", "segunda"), aPrimera: contar("ajuste", "primera") },
-    aSegundaPorLinea: porLinea.map((f) => ({ linea: f.linea, unidadPlural: f.unidad_plural, unidades: f.unidades, bultos: f.bultos })),
+    aSegundaPorLinea: porLinea.map((f) => ({ linea: f.linea, unidadPlural: f.unidad_plural, unidades: f.unidades, bultos: f.bultos, m2: f.m2 })),
     porUsuario,
     ultimos: ultimos.map((f) => ({
       creadoEn: new Date(f.creado_en),
@@ -455,7 +477,7 @@ export async function estadisticasDeCategoria(r: Rango): Promise<EstadisticasDeC
       usuario: f.usuario_nombre,
       porQue: [f.motivo_nombre, f.nota].filter(Boolean).join(" · ") || null,
     })),
-    stockSegunda: stock.map((f) => ({ linea: f.linea, unidadPlural: f.unidad_plural, unidades: f.unidades, bultos: f.bultos })),
+    stockSegunda: stock.map((f) => ({ linea: f.linea, unidadPlural: f.unidad_plural, unidades: f.unidades, bultos: f.bultos, m2: f.m2 })),
   };
 }
 
@@ -476,7 +498,7 @@ export type Totales = {
   m2Entraron: number;
   m2Salieron: number;
   /** Por línea, en su unidad: lo que entró y lo que salió. */
-  porLinea: Record<string, { unidadPlural: string; entraron: number; salieron: number }>;
+  porLinea: Record<string, { unidadPlural: string; entraron: number; salieron: number; m2Entraron: number; m2Salieron: number }>;
 };
 
 export async function totales(inicio: Date, fin: Date): Promise<Totales> {
@@ -519,7 +541,10 @@ export async function totales(inicio: Date, fin: Date): Promise<Totales> {
     m2Entraron: lineas.reduce((s2, l) => s2 + l.m2_entraron, 0),
     m2Salieron: lineas.reduce((s2, l) => s2 + l.m2_salieron, 0),
     porLinea: Object.fromEntries(
-      lineas.map((l) => [l.linea, { unidadPlural: l.unidad_plural, entraron: l.entraron, salieron: l.salieron }]),
+      lineas.map((l) => [
+        l.linea,
+        { unidadPlural: l.unidad_plural, entraron: l.entraron, salieron: l.salieron, m2Entraron: l.m2_entraron, m2Salieron: l.m2_salieron },
+      ]),
     ),
   };
 }
@@ -649,11 +674,15 @@ export type EstadisticasDeMerma = {
   /** Registrada por el clarkista al sacar, o encontrada por control en un chequeo. */
   porOrigen: { egreso: number; chequeo: number };
   porLinea: Array<{ linea: string; unidadPlural: string; unidades: number; m2: number; salieron: number }>;
-  porMotivo: Array<{ motivo: string; registros: number; m2: number }>;
-  porGrupo: Array<{ grupo: string; registros: number; m2: number }>;
-  porPosicion: Array<{ posicion: string; registros: number; m2: number }>;
+  /**
+   * `unidades` es lo perdido en la unidad de cada línea, ya escrito: "120
+   * placas + 40 paquetes". Placas y paquetes no se suman entre sí; los m² sí.
+   */
+  porMotivo: Array<{ motivo: string; registros: number; m2: number; unidades: string }>;
+  porGrupo: Array<{ grupo: string; registros: number; m2: number; unidades: string }>;
+  porPosicion: Array<{ posicion: string; registros: number; m2: number; unidades: string }>;
   porModelo: Array<{ id: number; modelo: string; linea: string; unidadPlural: string; unidades: number; m2: number }>;
-  porUsuario: Array<{ usuario: string; registros: number; m2: number }>;
+  porUsuario: Array<{ usuario: string; registros: number; m2: number; unidades: string }>;
   /** m² perdidos por tramo del período. */
   serie: Serie;
   ultimos: RegistroDeMerma[];
@@ -679,6 +708,31 @@ export async function estadisticasDeMerma(
     join movimiento_lineas ml on ml.movimiento_id = m.id
     join modelos mo on mo.id = ml.modelo_id
     join lineas l on l.id = mo.linea_id`;
+
+  /** Lo perdido por clave y por línea, escrito en la unidad de cada línea. */
+  const unidadesPor = async (clave: ReturnType<typeof sql>, joins = sql``) => {
+    const filas = (await db.execute(sql`
+      select ${clave} as clave, l.unidad_singular, l.unidad_plural, sum(${perdido})::int as unidades
+        ${lineasDe}
+        ${joins}
+       where ${enRango} and m.es_merma
+       group by 1, l.id, l.unidad_singular, l.unidad_plural, l.orden
+      having sum(${perdido}) > 0
+       order by l.orden
+    `)) as unknown as Array<{ clave: string; unidad_singular: string; unidad_plural: string; unidades: number }>;
+    const salida = new Map<string, string[]>();
+    for (const f of filas) {
+      (salida.get(f.clave) ?? salida.set(f.clave, []).get(f.clave)!).push(enUnidades(f.unidades, f.unidad_singular, f.unidad_plural));
+    }
+    return (c: string) => (salida.get(c) ?? []).join(" + ");
+  };
+  const joinGrupo = sql`left join posiciones p on p.id = m.posicion_desde_id left join grupos g on g.id = p.grupo_id`;
+  const [uMotivo, uGrupo, uPosicion, uUsuario] = await Promise.all([
+    unidadesPor(sql`coalesce(m.motivo_nombre, 'Sin motivo')`),
+    unidadesPor(sql`coalesce(g.codigo, 'Sin ubicar')`, joinGrupo),
+    unidadesPor(sql`m.posicion_desde_codigo`),
+    unidadesPor(sql`m.usuario_nombre`),
+  ]);
 
   const [cabecera, cabeceraAnterior, salido, porLinea, porMotivo, porGrupo, porPosicion, porModelo, porUsuario, serie, ultimos] =
     await Promise.all([
@@ -788,11 +842,11 @@ export async function estadisticasDeMerma(
     parteDeLoQueSalio: totalSalido > 0 ? (c?.m2 ?? 0) / totalSalido : null,
     porOrigen: { egreso: c?.egreso ?? 0, chequeo: c?.chequeo ?? 0 },
     porLinea: porLinea.map((l) => ({ linea: l.linea, unidadPlural: l.unidad_plural, unidades: l.unidades, m2: l.m2, salieron: l.salieron })),
-    porMotivo,
-    porGrupo,
-    porPosicion,
+    porMotivo: porMotivo.map((x) => ({ ...x, unidades: uMotivo(x.motivo) })),
+    porGrupo: porGrupo.map((x) => ({ ...x, unidades: uGrupo(x.grupo) })),
+    porPosicion: porPosicion.map((x) => ({ ...x, unidades: uPosicion(x.posicion) })),
     porModelo: porModelo.map((x) => ({ ...x, unidadPlural: x.unidad_plural })),
-    porUsuario,
+    porUsuario: porUsuario.map((x) => ({ ...x, unidades: uUsuario(x.usuario) })),
     serie: completar(r, serie),
     ultimos: ultimos.map((u) => ({
       creadoEn: new Date(u.creado_en),

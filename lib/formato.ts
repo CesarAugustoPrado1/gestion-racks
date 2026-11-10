@@ -146,6 +146,19 @@ export function m2(n: number): string {
   return `${n.toLocaleString("es-AR", { maximumFractionDigits: Math.abs(n) < 100 ? 1 : 0 })} m²`;
 }
 
+/** Los m² de `n` unidades, o null si el modelo no tiene m² por unidad. */
+export function enM2(n: number, m2PorUnidad: number | null | undefined): number | null {
+  return m2PorUnidad == null ? null : n * Number(m2PorUnidad);
+}
+
+/**
+ * Un total dicho en las dos medidas: "807 placas · 242 m²". Si el modelo no
+ * tiene m² por unidad, solo las unidades.
+ */
+export function unidadesYM2(n: number, singular: string, plural: string, metros: number | null): string {
+  return metros == null ? unidades(n, singular, plural) : `${unidades(n, singular, plural)} · ${m2(metros)}`;
+}
+
 /** "2,88" o "2.88" -> 2.88. Vacío o inválido -> null. */
 export function leerDecimal(texto: string): number | null {
   const limpio = texto.trim().replace(",", ".");
