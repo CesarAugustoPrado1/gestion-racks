@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
-import { gruposEnCarga, posicionesParaChequear } from "@/lib/consultas";
+import { gruposEnCarga, modelosParaCargar, motivosDeAjuste, posicionesParaChequear } from "@/lib/consultas";
 import { olvidoDias, semividaDias } from "@/lib/configuracion";
 import {
   confianza,
@@ -11,20 +11,30 @@ import {
   ordenarRecorrida,
 } from "@/lib/confiabilidad";
 import { Indice } from "@/components/confiabilidad";
-import { numero } from "@/lib/formato";
 import { describirPosicion } from "@/lib/posiciones";
 import { Titulo } from "@/components/ui";
+import { Recorrida, type FilaDeRecorrida } from "./recorrida";
 
 export const metadata = { title: "Control · Racks" };
 export const dynamic = "force-dynamic";
 
-export default async function PantallaControl() {
+type Orden = "urgencia" | "ubicacion";
+
+export default async function PantallaControl({
+  searchParams,
+}: {
+  searchParams: Promise<{ orden?: string; grupo?: string }>;
+}) {
   const sesion = await requerirRol("control", "admin");
-  const [todas, semivida, piso, enCarga] = await Promise.all([
+  const q = await searchParams;
+  const orden: Orden = q.orden === "ubicacion" ? "ubicacion" : "urgencia";
+  const [todas, semivida, piso, enCarga, motivos, modelos] = await Promise.all([
     posicionesParaChequear(),
     semividaDias(),
     olvidoDias(),
     gruposEnCarga(),
+    motivosDeAjuste(),
+    modelosParaCargar(),
   ]);
 
   // Los grupos en carga inicial se recorren desde su carga, no desde acá.
@@ -56,13 +66,54 @@ export default async function PantallaControl() {
     };
   });
 
-  const ordenadas = ordenarRecorrida(conDatos);
-  const olvidadas = ordenadas.filter((p) => p.olvidada).length;
-  const resumen = indice(ordenadas.map((p) => p.confianza));
+  const porUrgencia = ordenarRecorrida(conDatos);
+  const olvidadas = porUrgencia.filter((p) => p.olvidada).length;
+  const resumen = indice(porUrgencia.map((p) => p.confianza));
+
+  // Los grupos para filtrar, y el elegido si existe.
+  const grupos = [...new Set(porUrgencia.map((p) => p.rack))].sort((a, b) => a.localeCompare(b, "es", { numeric: true }));
+  const grupo = q.grupo && grupos.includes(q.grupo) ? q.grupo : null;
+
+  /**
+   * Por ubicación: el orden en que se camina el pasillo. El código ya lo trae
+   * -grupo, calle o columna con dos cifras, nivel, profundidad-, así que basta
+   * ordenarlo como texto con los números como números.
+   */
+  const elegidas = (
+    orden === "ubicacion"
+      ? [...porUrgencia].sort((a, b) => a.codigo.localeCompare(b.codigo, "es", { numeric: true }))
+      : porUrgencia
+  ).filter((p) => !grupo || p.rack === grupo);
+
+  const filas: FilaDeRecorrida[] = elegidas.map((p) => ({
+    id: p.id,
+    codigo: p.codigo,
+    rack: p.rack,
+    donde: describirPosicion(p).split(" · ")[1] ?? "",
+    contenido:
+      p.contenido ??
+      (p.invasor ? `La ocupa ${p.invasor}, que sobresale desde abajo` : "El sistema dice que está vacía"),
+    unidades: p.unidades,
+    unidadPlural: p.unidadPlural,
+    estado: etiquetaDeEstado(p, p.confianza),
+    nivel: nivel(p.confianza),
+    olvidada: p.olvidada,
+    fueraDeUso: p.fueraDeUso,
+  }));
+
+  const enlace = (o: Orden, g: string | null) => {
+    const params = new URLSearchParams();
+    if (o !== "urgencia") params.set("orden", o);
+    if (g) params.set("grupo", g);
+    const t = params.toString();
+    return t ? `/control?${t}` : "/control";
+  };
+  const chip = (activo: boolean) =>
+    `rounded-full px-3 py-1.5 text-sm font-medium ${activo ? "bg-slate-900 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`;
 
   return (
     <>
-      <Titulo detalle={`${sesion.nombre} · primero lo que hace más que no se mira`}>
+      <Titulo detalle={`${sesion.nombre} · ${orden === "urgencia" ? "primero lo que hace más que no se mira" : "en el orden del rack"}`}>
         Recorrida
       </Titulo>
 
@@ -92,8 +143,9 @@ export default async function PantallaControl() {
       <div className="tarjeta mb-4 p-5">
         <Indice {...resumen} />
         <p className="mt-2 text-xs text-slate-500">
-          Un chequeo vale la mitad a los {semivida} días. Tocá una posición para
-          chequearla.
+          Un chequeo vale la mitad a los {semivida} días. Si lo que dice el
+          renglón coincide con lo que ves, <strong>OK</strong>; si no,{" "}
+          <strong>Corregir</strong> y se abre ahí mismo.
         </p>
         {olvidadas > 0 && (
           <p className="mt-1 text-xs text-slate-500">
@@ -107,64 +159,36 @@ export default async function PantallaControl() {
         )}
       </div>
 
-      <ul className="space-y-2">
-        {ordenadas.map((p) => (
-          <li key={p.id}>
-            <Link
-              href={`/control/${p.id}`}
-              className="tarjeta flex items-center gap-3 p-4 transition active:scale-[0.99] hover:ring-slate-300"
-            >
-              <span
-                className={`h-10 w-1.5 shrink-0 rounded-full ${
-                  {
-                    alta: "bg-confiable",
-                    media: "bg-dudoso",
-                    baja: "bg-vencido",
-                    sin_datos: "bg-sin-datos",
-                  }[nivel(p.confianza)]
-                }`}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="codigo text-base text-slate-900">
-                    {p.codigo}
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    {describirPosicion(p).split(" · ")[1]}
-                  </span>
-                  {p.olvidada && (
-                    <span className="chip bg-vencido-suave text-vencido">
-                      olvidada
-                    </span>
-                  )}
-                  {p.fueraDeUso && (
-                    <span className="chip bg-slate-100 text-slate-500" title={p.fueraDeUso}>
-                      fuera de uso
-                    </span>
-                  )}
-                </div>
-                <p className="mt-0.5 truncate text-sm text-slate-600">
-                  {p.contenido ??
-                    (p.invasor
-                      ? `La ocupa ${p.invasor}, que sobresale desde abajo`
-                      : "El sistema dice que está vacía")}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-400">
-                  {etiquetaDeEstado(p, p.confianza)}
-                </p>
-              </div>
-              {p.unidades > 0 && (
-                <div className="text-right">
-                  <p className="cifra text-lg text-slate-900">
-                    {numero(p.unidades)}
-                  </p>
-                  <p className="text-[11px] text-slate-500">{p.unidadPlural}</p>
-                </div>
-              )}
+      <div className="mb-3 space-y-2">
+        <div className="flex gap-2">
+          <Link href={enlace("urgencia", grupo)} replace scroll={false} className={chip(orden === "urgencia")}>
+            Urgencia
+          </Link>
+          <Link href={enlace("ubicacion", grupo)} replace scroll={false} className={chip(orden === "ubicacion")}>
+            Por ubicación
+          </Link>
+        </div>
+        {grupos.length > 1 && (
+          <div className="flex flex-wrap gap-1.5">
+            <Link href={enlace(orden, null)} replace scroll={false} className={chip(!grupo)}>
+              Todos
             </Link>
-          </li>
-        ))}
-      </ul>
+            {grupos.map((g) => (
+              <Link key={g} href={enlace(orden, g)} replace scroll={false} className={chip(grupo === g)}>
+                {g}
+              </Link>
+            ))}
+          </div>
+        )}
+        <p className="px-1 text-xs text-slate-500">
+          {orden === "urgencia"
+            ? "Primero lo que hace más que no se mira y más producto tiene."
+            : "En el orden del rack: grupo, calle o columna, nivel y profundidad. Para recorrer un pasillo de corrido."}
+        </p>
+      </div>
+
+      {/* La clave hace que al cambiar el orden o el grupo la lista arranque de nuevo. */}
+      <Recorrida key={`${orden}-${grupo ?? ""}`} filas={filas} motivos={motivos} modelos={modelos} />
 
       {conDatos.length === 0 && (
         <div className="tarjeta p-6 text-sm text-slate-600">
