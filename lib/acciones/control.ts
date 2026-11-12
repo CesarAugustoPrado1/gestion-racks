@@ -21,6 +21,7 @@ import {
 } from "./motor";
 import { ejecutar, fallar, type Resultado } from "./comun";
 import { validarDescripcion } from "../bultos";
+import { posicionConBultos, type BultoEnPosicion } from "../consultas";
 
 /**
  * El trabajo del operario de control: recorrer, confirmar y corregir.
@@ -83,6 +84,24 @@ async function asentarChequeo(
 /* -------------------------------------------------------------------------- */
 /* Está todo bien                                                             */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Lo que hay en una posición, para abrir la corrección dentro del renglón de
+ * la recorrida sin cambiar de pantalla.
+ */
+export async function datosParaChequear(posicionId: number): Promise<
+  Resultado<{ posicion: { id: number; codigo: string; bultos: number; invasor: string | null }; bultos: BultoEnPosicion[] }>
+> {
+  return ejecutar(async () => {
+    await autorizar("control", "admin");
+    const d = await posicionConBultos(posicionId);
+    if (!d) fallar("Esa posición ya no existe.");
+    return {
+      posicion: { id: d.posicion.id, codigo: d.posicion.codigo, bultos: d.posicion.bultos, invasor: d.posicion.invasor },
+      bultos: d.bultos,
+    };
+  });
+}
 
 /**
  * El caso típico, en un toque.

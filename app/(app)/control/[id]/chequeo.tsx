@@ -25,11 +25,20 @@ export function Chequeo({
   bultos,
   motivos,
   modelos,
+  enLinea = false,
+  alTerminar,
 }: {
   posicion: { id: number; codigo: string; bultos: number; invasor: string | null };
   bultos: BultoEnPosicion[];
   motivos: MotivoOpcion[];
   modelos: ModeloParaCargar[];
+  /**
+   * Abierto dentro del renglón de la recorrida: el "Está bien" ya está en el
+   * renglón, así que acá van directo las correcciones.
+   */
+  enLinea?: boolean;
+  /** Qué hacer al terminar. Por defecto, volver a la recorrida. */
+  alTerminar?: () => void;
 }) {
   const router = useRouter();
   const { ejecutar, enviando, error, limpiar } = useAccion();
@@ -39,6 +48,7 @@ export function Chequeo({
   const sinMerma = motivos.filter((m) => !m.esMerma);
 
   function volverALaLista() {
+    if (alTerminar) return alTerminar();
     router.push("/control");
     router.refresh();
   }
@@ -124,7 +134,7 @@ export function Chequeo({
            * posiciones, y si pide confirmar, el operario aprende a tocar dos
            * veces sin leer y el chequeo deja de significar algo.
            */}
-          <button
+          {!enLinea && <button
             type="button"
             className="boton-primario w-full py-5 text-lg"
             disabled={enviando}
@@ -134,7 +144,7 @@ export function Chequeo({
             }}
           >
             {enviando ? "Guardando…" : "Está bien"}
-          </button>
+          </button>}
 
           <div className="tarjeta space-y-2 p-5">
             <h2 className="text-sm font-semibold text-slate-500">

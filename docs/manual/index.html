@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Manual del operario v5 · Gestión de Racks</title>
+<title>Manual del operario v6 · Gestión de Racks</title>
 <style>
   @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
   :root {
@@ -81,7 +81,7 @@
 <section class="tapa">
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:50mm">
     <span style="font-weight:700; color:#475569; font-size:12pt">▤ Gestión de Racks</span>
-    <span style="background:#0f172a; color:white; border-radius:8pt; padding:6pt 12pt; font-weight:700; font-size:14pt">Versión 5</span>
+    <span style="background:#0f172a; color:white; border-radius:8pt; padding:6pt 12pt; font-weight:700; font-size:14pt">Versión 6</span>
   </div>
   <h1>Manual del operario</h1>
   <p style="font-size:14pt; color:#475569">Cómo se usa la app en el galpón, paso a paso.<br>Para quien empieza hoy y para quien ya la usa.</p>
@@ -91,7 +91,7 @@
     <div class="tarj" style="background:#1d4ed8; color:white; border:0"><b style="font-size:13pt">Supervisión</b>Resumen, estadísticas y curvas de confiabilidad.</div>
   </div>
   <p class="muted chico" style="margin-top:40mm; border-top:1pt solid var(--linea); padding-top:6pt">
-    <b>Versión 5</b> · noviembre de 2026. Reemplaza a la versión 4, que queda guardada junto con las anteriores
+    <b>Versión 6</b> · noviembre de 2026. Reemplaza a la versión 5, que queda guardada junto con las anteriores
     (el historial de versiones está al final).
     Las capturas son de la app real con datos de prueba; los nombres de las personas son de ejemplo.
   </p>
@@ -120,7 +120,7 @@
   <div class="caja info"><b class="t">Si sos clarkista</b>leé las secciones 1, 2, 3 y 7. La 4 te sirve para entender qué hace control con lo que cargás.</div>
   <div class="caja ok"><b class="t">Si sos de control</b>leé de la 1 a la 4 y la 7: para verificar bien tenés que saber cómo trabaja el clarkista.</div>
   <div class="caja ej"><b class="t">Si supervisás o administrás</b>la 5 y la 6 son para vos, pero conviene conocer todo.</div>
-  <div class="caja ej"><b class="t">El manual siempre a mano</b>El botón <span class="btn sec">Manual v5</span> arriba de cualquier pantalla abre la versión vigente. El número dice cuál estás leyendo: si el botón dice otro número, hay una versión más nueva.</div>
+  <div class="caja ej"><b class="t">El manual siempre a mano</b>El botón <span class="btn sec">Manual v6</span> arriba de cualquier pantalla abre la versión vigente. El número dice cuál estás leyendo: si el botón dice otro número, hay una versión más nueva.</div>
 </section>
 
 <!-- ======================================================= 1. EMPEZAR -->
@@ -156,7 +156,7 @@
       <table>
         <tr><th></th><th>Qué es</th></tr>
         <tr><td><b>Arriba a la izquierda</b></td><td>El nombre de la app. Tocándolo volvés a tu pantalla principal.</td></tr>
-        <tr><td><b>Arriba a la derecha</b></td><td>Tu nombre y tu puesto. Fijate que sea el tuyo: si el celular es compartido, puede haber quedado abierta la sesión de otro. <span class="btn sec">Manual v5</span> abre este manual, con su número de versión, y <span class="btn sec">Salir</span> cierra tu sesión.</td></tr>
+        <tr><td><b>Arriba a la derecha</b></td><td>Tu nombre y tu puesto. Fijate que sea el tuyo: si el celular es compartido, puede haber quedado abierta la sesión de otro. <span class="btn sec">Manual v6</span> abre este manual, con su número de versión, y <span class="btn sec">Salir</span> cierra tu sesión.</td></tr>
         <tr><td><b>El medio</b></td><td>Lo que estás haciendo.</td></tr>
         <tr><td><b>La barra de abajo</b></td><td>Las secciones que podés usar. Si no entran todas, el resto está en <b>⋯ Más</b>.</td></tr>
       </table>
@@ -770,18 +770,18 @@
         <li>Primero las <span class="chip" style="background:#fee2e2;color:#b91c1c">olvidadas</span>: hace más de 60 días que nadie las mira. Suben aunque tengan poco producto.</li>
         <li>Después, las que <b>hace más tiempo que no se miran y más producto tienen</b>. Un error en un palet de 72 placas pesa más que uno en un suelto de 5.</li>
       </ul>
+      <p>Arriba de la lista elegís el orden: <span class="btn sec">Urgencia</span> (lo de arriba) o <span class="btn sec">Por ubicación</span>, en el orden del rack —grupo, calle o columna, nivel y profundidad— para recorrer un pasillo de corrido. Con los botones de grupo ves solo uno.</p>
       <div class="caja info"><b class="t">No hace falta hacer toda la lista en un día</b>Trabajá de arriba hacia abajo. Lo más importante siempre está primero. Las posiciones vacías también cuentan: confirmar que algo está vacío también es información.</div>
       <h3>Chequear una posición</h3>
       <ol class="pasos s-control-pasos">
-        <li>En la recorrida, tocá la posición.</li>
-        <li>Parate frente a ella. Leé el código en el fierro y <b>comprobá que es el mismo</b> de la pantalla.</li>
-        <li>Compará lo que dice <b>"El sistema dice que acá hay"</b> con lo que ves: packaging, <b>categoría</b>, modelo y cantidad.</li>
-        <li>Si coincide, tocá <span class="btn">Está bien</span>. <b>Un solo toque</b> y volvés a la lista.</li>
-        <li>Si no coincide, usá los botones de <b>"Hay una diferencia"</b>.</li>
+        <li>Parate frente a la posición del renglón. Leé el código en el fierro y <b>comprobá que es el mismo</b> de la pantalla.</li>
+        <li>Compará lo que dice el renglón con lo que ves: modelo y cantidad.</li>
+        <li>Si coincide, tocá <span class="btn">OK</span>. <b>Un solo toque</b>: el renglón se achica en verde y el siguiente queda a mano. No cambiás de pantalla.</li>
+        <li>Si no coincide, tocá <span class="btn sec">Corregir</span>. Se abre ahí abajo, en el mismo renglón, con el detalle (packaging, <b>categoría</b>, código del bulto) y los botones de <b>"Hay una diferencia"</b>. Al terminar, el renglón queda en ámbar como <i>corregida</i> y seguís con el próximo.</li>
       </ol>
-      <div class="caja mal"><b class="t">No toques "Está bien" sin mirar</b>Es el botón más fácil a propósito, porque es lo que pasa casi siempre. Por eso mismo, si lo tocás sin mirar, el índice dice que todo está bien cuando nadie lo comprobó.</div>
+      <div class="caja mal"><b class="t">No toques "OK" sin mirar</b>Es el botón más fácil a propósito, porque es lo que pasa casi siempre. Por eso mismo, si lo tocás sin mirar, el índice dice que todo está bien cuando nadie lo comprobó.</div>
     </div>
-    <figure><img class="tel" src="img/31-chequeo.png"><figcaption>Chequeo: el sistema dice un palet de Standard 9.5, de primera.</figcaption></figure>
+    <figure><img class="tel" src="img/31-chequeo.png"><figcaption>Dos OK en verde y una corrección abierta en su renglón.</figcaption></figure>
   </div>
 </section>
 
@@ -1100,7 +1100,7 @@
     <div class="tarj"><b>Clarkista: sale un bulto o se perdió</b><ol><li>Buscar (posición, código o modelo)</li><li><b>Egreso</b> → todo o una parte</li><li>Motivo (de merma si se rompió o arruinó) · nota</li><li><b>Egreso de N</b> o <b>Merma de N</b>: leé el botón</li></ol></div>
     <div class="tarj"><b>Clarkista: cambia de lugar o de categoría</b><ol><li>Buscar y abrir</li><li><b>Reubicar</b> → posición nueva por partes · bajarlo al piso = <b>Dejarlo sin ubicar</b></li><li><b>Cambiar a segunda/primera</b> → porqué obligatorio</li></ol></div>
     <div class="tarj"><b>Código de posición</b><p style="margin:3pt 0 0"><code>D-06-3</code> = grupo D · columna 06 · nivel 3<br><code>B-07-2-1</code> = grupo B · calle 07 · nivel 2 · profundidad 1 (pasillo)<br>Nivel 1 = piso. Profundidad 1 = la del pasillo.</p></div>
-    <div class="tarj v"><b>Control: chequear</b><ol><li>Recorrida → tocar la primera</li><li>Leer el código del fierro</li><li>Coincide (también la categoría) → <b>Está bien</b></li><li>No coincide → <b>Otra cantidad</b> / <b>Es de segunda</b> / <b>No está acá</b> / <b>Hay algo que el sistema no tiene</b> + motivo</li><li>Producto roto → <b>Otra cantidad</b> + <b>Merma encontrada</b> + nota</li></ol></div>
+    <div class="tarj v"><b>Control: chequear</b><ol><li>Recorrida → Urgencia o Por ubicación</li><li>Leer el código del fierro</li><li>Coincide → <b>OK</b> en el renglón</li><li>No coincide → <b>Corregir</b> → <b>Otra cantidad</b> / <b>Es de segunda</b> / <b>No está acá</b> / <b>Hay algo que el sistema no tiene</b> + motivo</li><li>Producto roto → <b>Otra cantidad</b> + <b>Merma encontrada</b> + nota</li></ol></div>
     <div class="tarj v"><b>Control: carga inicial</b><ol><li>Recorrida → recuadro celeste → <b>Seguir</b></li><li>Dónde estás (lo verde ya está)</li><li><b>Está vacía</b> / <b>Está</b> / cargar con fecha</li><li>Error → <b>Me equivoqué: deshacer</b></li><li>Al final → <b>Cerrar carga inicial</b></li></ol></div>
     <div class="tarj a"><b>Supervisión</b><ol><li><b>Resumen</b>: la foto de ahora o de un cierre, y comparar</li><li><b>Estadísticas</b>: período y comparación con el anterior</li><li><b>Confiabilidad</b>: las curvas</li><li><b>Movimientos</b>: el detalle y el CSV</li></ol></div>
     <div class="tarj" style="background:#dbeafe;border-color:#2a78d6"><b>La regla de oro</b>Lo que dice la app tiene que ser lo que hay en el rack. Registrá cada movimiento <b>en el momento</b>. Si la app te frena, <b>leé el cartel</b>. Si algo no cierra, <b>avisá a control</b>.</div>
@@ -1112,7 +1112,8 @@
   <p class="muted">Cada versión tiene su número, que se ve en el botón de la app, en la tapa, en el pie de cada hoja y en el nombre del archivo. Las versiones anteriores se guardan.</p>
   <table>
     <tr><th style="width:16%">Versión</th><th style="width:22%">Fecha</th><th>Qué cambió</th></tr>
-    <tr><td><b>5</b> (vigente)</td><td>noviembre de 2026</td><td>Los niveles se llaman por su altura, igual en todos los racks: piso, medio, arriba, arriba 2, arriba 3…</td></tr>
+    <tr><td><b>6</b> (vigente)</td><td>noviembre de 2026</td><td>Recorrida de control renglón por renglón: OK o Corregir ahí mismo, sin cambiar de pantalla. Orden por urgencia o por ubicación, y filtro por grupo.</td></tr>
+    <tr><td><b>5</b></td><td>noviembre de 2026</td><td>Los niveles se llaman por su altura, igual en todos los racks: piso, medio, arriba, arriba 2, arriba 3…</td></tr>
     <tr><td><b>4</b></td><td>noviembre de 2026</td><td>El aire arriba del bulto se configura por grupo y arranca en 0. En la carga inicial, «No, está libre» para una posición que figura tapada y no lo está.</td></tr>
     <tr><td><b>3</b></td><td>noviembre de 2026</td><td>Merma: qué es, cómo la registra el clarkista y cómo la encuentra control, los motivos y las estadísticas. Número de versión en todos lados. Esquemas de racks redibujados, con los módulos del selectivo y el autoelevador en el penetrable.</td></tr>
     <tr><td><b>2</b></td><td>noviembre de 2026</td><td>Escrito de cero para la app nueva: selector de posición por partes, buscador de modelos, primera y segunda, pasaje de categoría, carga inicial nueva, Resumen y foto diaria, Estadísticas, curvas de confiabilidad, m² y racks numerados de derecha a izquierda.</td></tr>
