@@ -170,10 +170,10 @@ export type Ocupada = {
  *
  * En un selectivo no hay nada de esto: cada posición se alcanza sin mover nada.
  */
-export function loQueTapa(
+export function loQueTapa<T extends Ocupada>(
   objetivo: { nivel: number; profundidad: number | null },
-  ocupadas: Ocupada[],
-): Ocupada[] {
+  ocupadas: T[],
+): T[] {
   if (objetivo.profundidad == null) return [];
   const p = objetivo.profundidad;
 

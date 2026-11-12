@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Manual del operario v7 · Gestión de Racks</title>
+<title>Manual del operario v8 · Gestión de Racks</title>
 <style>
   @page { size: A4; margin: 16mm 15mm 16mm 15mm; }
   :root {
@@ -81,7 +81,7 @@
 <section class="tapa">
   <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:50mm">
     <span style="font-weight:700; color:#475569; font-size:12pt">▤ Gestión de Racks</span>
-    <span style="background:#0f172a; color:white; border-radius:8pt; padding:6pt 12pt; font-weight:700; font-size:14pt">Versión 7</span>
+    <span style="background:#0f172a; color:white; border-radius:8pt; padding:6pt 12pt; font-weight:700; font-size:14pt">Versión 8</span>
   </div>
   <h1>Manual del operario</h1>
   <p style="font-size:14pt; color:#475569">Cómo se usa la app en el galpón, paso a paso.<br>Para quien empieza hoy y para quien ya la usa.</p>
@@ -91,7 +91,7 @@
     <div class="tarj" style="background:#1d4ed8; color:white; border:0"><b style="font-size:13pt">Supervisión</b>Resumen, estadísticas y curvas de confiabilidad.</div>
   </div>
   <p class="muted chico" style="margin-top:40mm; border-top:1pt solid var(--linea); padding-top:6pt">
-    <b>Versión 7</b> · noviembre de 2026. Reemplaza a la versión 6, que queda guardada junto con las anteriores
+    <b>Versión 8</b> · noviembre de 2026. Reemplaza a la versión 7, que queda guardada junto con las anteriores
     (el historial de versiones está al final).
     Las capturas son de la app real con datos de prueba; los nombres de las personas son de ejemplo.
   </p>
@@ -120,7 +120,7 @@
   <div class="caja info"><b class="t">Si sos clarkista</b>leé las secciones 1, 2, 3 y 7. La 4 te sirve para entender qué hace control con lo que cargás.</div>
   <div class="caja ok"><b class="t">Si sos de control</b>leé de la 1 a la 4 y la 7: para verificar bien tenés que saber cómo trabaja el clarkista.</div>
   <div class="caja ej"><b class="t">Si supervisás o administrás</b>la 5 y la 6 son para vos, pero conviene conocer todo.</div>
-  <div class="caja ej"><b class="t">El manual siempre a mano</b>El botón <span class="btn sec">Manual v7</span> arriba de cualquier pantalla abre la versión vigente. El número dice cuál estás leyendo: si el botón dice otro número, hay una versión más nueva.</div>
+  <div class="caja ej"><b class="t">El manual siempre a mano</b>El botón <span class="btn sec">Manual v8</span> arriba de cualquier pantalla abre la versión vigente. El número dice cuál estás leyendo: si el botón dice otro número, hay una versión más nueva.</div>
 </section>
 
 <!-- ======================================================= 1. EMPEZAR -->
@@ -156,7 +156,7 @@
       <table>
         <tr><th></th><th>Qué es</th></tr>
         <tr><td><b>Arriba a la izquierda</b></td><td>El nombre de la app. Tocándolo volvés a tu pantalla principal.</td></tr>
-        <tr><td><b>Arriba a la derecha</b></td><td>Tu nombre y tu puesto. Fijate que sea el tuyo: si el celular es compartido, puede haber quedado abierta la sesión de otro. <span class="btn sec">Manual v7</span> abre este manual, con su número de versión, y <span class="btn sec">Salir</span> cierra tu sesión.</td></tr>
+        <tr><td><b>Arriba a la derecha</b></td><td>Tu nombre y tu puesto. Fijate que sea el tuyo: si el celular es compartido, puede haber quedado abierta la sesión de otro. <span class="btn sec">Manual v8</span> abre este manual, con su número de versión, y <span class="btn sec">Salir</span> cierra tu sesión.</td></tr>
         <tr><td><b>El medio</b></td><td>Lo que estás haciendo.</td></tr>
         <tr><td><b>La barra de abajo</b></td><td>Las secciones que podés usar. Si no entran todas, el resto está en <b>⋯ Más</b>.</td></tr>
       </table>
@@ -606,7 +606,7 @@
   <p>La app revisa cada movimiento antes de guardarlo. Si algo no cierra, <b>no guarda nada</b> y te explica por qué en un cartel rojo arriba del formulario. No es un error de la app: te está frenando antes de que el sistema quede mal.</p>
   <table>
     <tr><th>El cartel dice</th><th>Qué pasa</th><th>Qué hacer</th></tr>
-    <tr><td><b>"…el paso está tapado"</b></td><td>En un penetrable elegiste una posición del fondo o de arriba, pero hay palets que te cortan el camino. El cartel dice cuáles: <i>"Primero hay que bajar P-00001 (A-01-1-1)…"</i></td><td>Elegí otra posición, o primero reubicá los que tapan.</td></tr>
+    <tr><td><b>"…el paso está tapado"</b></td><td>En un penetrable elegiste como <b>destino</b> una posición del fondo o de arriba, pero hay palets que te cortan el camino. El cartel dice cuáles: <i>"Primero hay que bajar P-00001 (A-01-1-1)…"</i>. (Para <b>sacar</b> uno del fondo no hace falta: ver Reubicar.)</td><td>Elegí otra posición, o primero reubicá los que tapan.</td></tr>
     <tr><td><b>"No entra: …"</b></td><td>Cada nivel tiene una altura libre, y el palet tiene que caber. Si el administrador le puso a ese grupo <b>aire arriba del bulto</b> (por ejemplo 10 cm, para levantarlo por encima del larguero), también tiene que sobrar ese aire: con 10 cm, un palet de 1,40 m no entra en un hueco de 1,45 m. El cartel dice hasta cuánto entra. En un penetrable, un optimizado alto puede entrar ocupando también el hueco de arriba, si está libre: la app lo permite y marca las dos.</td><td>Elegí un nivel más alto o una posición de otro grupo.</td></tr>
     <tr><td><b>"…ya tiene el bulto…"</b></td><td>Mientras tenías la pantalla abierta, otro clarkista ocupó esa posición.</td><td>Elegí otra.</td></tr>
   </table>
@@ -689,6 +689,8 @@
         <li>Tocá <span class="btn">Reubicar</span>.</li>
       </ol>
       <p>Reubicar <b>no suma ni resta stock</b>: el bulto sigue siendo el mismo, con su código.</p>
+      <p><b>Más rápido, desde Racks:</b> tocá el palet en el dibujo (queda marcado con un borde negro; otro toque lo desmarca) y después tocá el lugar libre adonde va (queda con borde punteado azul). Abajo aparece <i>"Mover P-00026 de B-02-3-2 a C-02-2?"</i>: tocá <span class="btn">Mover</span>.</p>
+      <div class="caja info"><b class="t">Sacar uno del fondo aunque esté tapado</b>En un penetrable podés sacar o reubicar un palet del fondo aunque tenga otros adelante o en el piso: registralo en un solo paso. Los que tuviste que bajar quedan registrados como <b>movidos y vueltos a su lugar</b>, y pierden el chequeo: control los va a ver primero en la recorrida. La app te dice cuáles fueron. Si no los volviste a poner en el mismo lugar, reubicalos.</div>
       <div class="caja ojo"><b class="t">Bajarlo al piso</b>Si lo bajás del rack pero sigue en el galpón (para despejar una calle, por ejemplo), marcá <b>Dejarlo sin ubicar</b>. No uses Egreso: eso lo saca del stock.</div>
       <div class="caja mal"><b class="t">No hagas el movimiento sin registrarlo</b>"Lo muevo ahora y lo cargo después" es la forma más común de que la app quede mal. Registrá <b>cada</b> reubicación, aunque sea al lado.</div>
       <h3>Sin ubicar: tu lista de pendientes</h3>
@@ -722,7 +724,7 @@
   <h3>Mirar el rack: Racks y Plano</h3>
   <div class="dos ancho">
     <div>
-      <p><b>Racks</b> es el mapa de todas las posiciones, como se ven paradas en el galpón: en 3D por defecto, o en grilla con <b>Plano</b>. <b>Cada cuadradito es una posición</b>: tocala para ver qué hay. Arriba te dice cuánto está ocupado y si hay bultos en racks de la otra empresa.</p>
+      <p><b>Racks</b> es el mapa de todas las posiciones, como se ven paradas en el galpón: en 3D por defecto, o en grilla con <b>Plano</b>. <b>Cada cuadradito es una posición</b>: tocala y <b>abajo del grupo se abre la lista de su calle o columna</b>, con lo que hay en cada posición, sin cambiar de pantalla. Tocando el número de una calle o columna también se abre. Desde la lista, <i>historial</i> abre la ficha de la posición. Arriba te dice cuánto está ocupado y si hay bultos en racks de la otra empresa.</p>
       <table>
         <tr><th>Ves</th><th>Significa</th></tr>
         <tr><td><span class="chip" style="background:#dbeafe;color:#1d4ed8">PL</span> <span class="chip" style="background:#ffe4e6;color:#be123c">PI</span></td><td>Ocupada. La marca dice la línea: <b>PL</b> placas, <b>PI</b> piedras.</td></tr>
@@ -1049,7 +1051,7 @@
     <tr><td><b>En suelto, el botón de guardar no se habilita.</b></td><td>Falta la cantidad: el recuadro está en ámbar. Escribí cuántas hay de cada modelo.</td></tr>
     <tr><td><b>En la carga inicial, el botón Cargar no se habilita.</b></td><td>Falta la fecha de "desde cuándo está". Con el mes alcanza.</td></tr>
     <tr><td><b>La app dice que una posición está ocupada y está vacía (o al revés).</b></td><td>No la uses ni la fuerces. Avisale a <b>control</b> para que la chequee y la corrija.</td></tr>
-    <tr><td><b>"El paso está tapado".</b></td><td>En un penetrable, hay palets adelante o en el piso. Elegí otra posición o reubicá primero los que tapan.</td></tr>
+    <tr><td><b>"El paso está tapado".</b></td><td>Pasa al elegir un destino en un penetrable con palets adelante o en el piso. Elegí otra posición o reubicá primero los que tapan.</td></tr>
     <tr><td><b>"No entra: …" (altura).</b></td><td>El palet no cabe en ese hueco, o no le sobra el aire que pide el grupo. Elegí un nivel más alto o una posición de otro grupo.</td></tr>
     <tr><td><b>Registré un ingreso con la cantidad o el modelo mal.</b></td><td>Avisale a control. No hagas un egreso para "compensar".</td></tr>
     <tr><td><b>Ingresé de primera algo que es de segunda.</b></td><td>Si fue un error al cargarlo, avisale a control (lo corrige como «Categoría equivocada»). Si se detectó después, hacé el pasaje de categoría desde la ficha.</td></tr>
@@ -1113,7 +1115,8 @@
   <p class="muted">Cada versión tiene su número, que se ve en el botón de la app, en la tapa, en el pie de cada hoja y en el nombre del archivo. Las versiones anteriores se guardan.</p>
   <table>
     <tr><th style="width:16%">Versión</th><th style="width:22%">Fecha</th><th>Qué cambió</th></tr>
-    <tr><td><b>7</b> (vigente)</td><td>noviembre de 2026</td><td>Control: «Es otro producto» para corregir el modelo de un bulto, y en «Otra cantidad» también el packaging.</td></tr>
+    <tr><td><b>8</b> (vigente)</td><td>noviembre de 2026</td><td>Racks: la calle o columna se abre debajo del grupo, y se reubica tocando el palet y el destino. Sacar un palet del fondo aunque esté tapado: los de adelante quedan como movidos.</td></tr>
+    <tr><td><b>7</b></td><td>noviembre de 2026</td><td>Control: «Es otro producto» para corregir el modelo de un bulto, y en «Otra cantidad» también el packaging.</td></tr>
     <tr><td><b>6</b></td><td>noviembre de 2026</td><td>Recorrida de control renglón por renglón: OK o Corregir ahí mismo, sin cambiar de pantalla. Orden por urgencia o por ubicación, y filtro por grupo.</td></tr>
     <tr><td><b>5</b></td><td>noviembre de 2026</td><td>Los niveles se llaman por su altura, igual en todos los racks: piso, medio, arriba, arriba 2, arriba 3…</td></tr>
     <tr><td><b>4</b></td><td>noviembre de 2026</td><td>El aire arriba del bulto se configura por grupo y arranca en 0. En la carga inicial, «No, está libre» para una posición que figura tapada y no lo está.</td></tr>

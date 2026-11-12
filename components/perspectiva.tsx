@@ -14,7 +14,7 @@ import {
   type Punto,
 } from "@/lib/perspectiva";
 import type { CeldaDelMapa, GrupoDelMapa } from "@/lib/consultas";
-import { pintarCelda, type Vista } from "./mapa";
+import { pintarCelda, type Interaccion, type Vista } from "./mapa";
 
 /**
  * Un grupo de racks dibujado en perspectiva, como se lo ve parado en el galpón.
@@ -77,6 +77,7 @@ function Hueco({
   semivida,
   abrev,
   rayas,
+  interaccion,
 }: {
   celda: CeldaDelMapa;
   esquinas: Punto[];
@@ -84,20 +85,23 @@ function Hueco({
   semivida: number;
   abrev: Record<string, string>;
   rayas: string;
+  interaccion?: Interaccion;
 }) {
   const { letra, titulo } = pintarCelda(celda, vista, semivida, abrev);
   const e = estilo(celda, vista, semivida, rayas);
   const [cx, cy] = centro(esquinas);
-  return (
-    <a href={`/racks/${celda.posicionId}`} className="group">
+  const marcada = interaccion?.marcada === celda.posicionId;
+  const destino = interaccion?.destino === celda.posicionId;
+  const contenido = (
+    <>
       <title>{titulo}</title>
       <polygon
         points={comoPuntos(esquinas)}
         fill={e.fill}
         fillOpacity={e.fillOpacity}
-        stroke={e.stroke}
-        strokeWidth={1.5}
-        strokeDasharray={e.dash}
+        stroke={marcada ? "var(--color-slate-900)" : destino ? "var(--color-medida)" : e.stroke}
+        strokeWidth={marcada || destino ? 4 : 1.5}
+        strokeDasharray={destino ? "5 3" : e.dash}
         className="transition group-hover:stroke-slate-900"
         style={{ strokeLinejoin: "round" }}
       />
@@ -122,6 +126,27 @@ function Hueco({
           </text>
         </g>
       )}
+    </>
+  );
+  if (interaccion) {
+    return (
+      <g
+        role="button"
+        tabIndex={0}
+        aria-pressed={marcada}
+        className="group cursor-pointer outline-none"
+        onClick={() => interaccion.tocar(celda)}
+        onKeyDown={(ev) => {
+          if (ev.key === "Enter" || ev.key === " ") interaccion.tocar(celda);
+        }}
+      >
+        {contenido}
+      </g>
+    );
+  }
+  return (
+    <a href={`/racks/${celda.posicionId}`} className="group">
+      {contenido}
     </a>
   );
 }
@@ -131,11 +156,13 @@ export function PerspectivaDeGrupo({
   vista,
   semivida,
   abrev,
+  interaccion,
 }: {
   grupo: GrupoDelMapa;
   vista: Vista;
   semivida: number;
   abrev: Record<string, string>;
+  interaccion?: Interaccion;
 }) {
   const rayas = `rayas-${grupo.id}`;
   const encabezado = (
@@ -173,9 +200,9 @@ export function PerspectivaDeGrupo({
       {encabezado}
       <div className="overflow-x-auto p-4">
         {grupo.penetrable ? (
-          <Penetrable {...{ grupo, vista, semivida, abrev, rayas, patron }} />
+          <Penetrable {...{ grupo, vista, semivida, abrev, rayas, patron, interaccion }} />
         ) : (
-          <Selectivo {...{ grupo, vista, semivida, abrev, rayas, patron }} />
+          <Selectivo {...{ grupo, vista, semivida, abrev, rayas, patron, interaccion }} />
         )}
       </div>
     </section>
@@ -189,9 +216,10 @@ type PropsDibujo = {
   abrev: Record<string, string>;
   rayas: string;
   patron: ReactNode;
+  interaccion?: Interaccion;
 };
 
-function Penetrable({ grupo, vista, semivida, abrev, rayas, patron }: PropsDibujo) {
+function Penetrable({ grupo, vista, semivida, abrev, rayas, patron, interaccion }: PropsDibujo) {
   const g = {
     calles: grupo.unidades,
     niveles: grupo.niveles,
@@ -237,6 +265,7 @@ function Penetrable({ grupo, vista, semivida, abrev, rayas, patron }: PropsDibuj
                 semivida={semivida}
                 abrev={abrev}
                 rayas={rayas}
+                interaccion={interaccion}
               />
             ))}
             <text
@@ -246,6 +275,8 @@ function Penetrable({ grupo, vista, semivida, abrev, rayas, patron }: PropsDibuj
               fontSize={12}
               fontWeight={700}
               fill="var(--color-slate-700)"
+              className={interaccion ? "cursor-pointer underline" : undefined}
+              onClick={interaccion ? () => interaccion.tocarUnidad(calle, null) : undefined}
             >
               {String(calle).padStart(2, "0")}
             </text>
@@ -285,7 +316,7 @@ function Penetrable({ grupo, vista, semivida, abrev, rayas, patron }: PropsDibuj
   );
 }
 
-function Selectivo({ grupo, vista, semivida, abrev, rayas, patron }: PropsDibujo) {
+function Selectivo({ grupo, vista, semivida, abrev, rayas, patron, interaccion }: PropsDibujo) {
   const g = { modulos: grupo.unidades, ancho: grupo.ancho ?? 1, niveles: grupo.niveles };
   const t = tamanoSelectivo(g);
   const etiquetas = 52;
@@ -331,6 +362,7 @@ function Selectivo({ grupo, vista, semivida, abrev, rayas, patron }: PropsDibujo
                 semivida={semivida}
                 abrev={abrev}
                 rayas={rayas}
+                interaccion={interaccion}
               />
             ))}
             {/* El número de cada columna, el que se lee en el fierro. El módulo no se numera. */}
@@ -343,6 +375,8 @@ function Selectivo({ grupo, vista, semivida, abrev, rayas, patron }: PropsDibujo
                 fontSize={11}
                 fontWeight={700}
                 fill="var(--color-slate-700)"
+                className={interaccion ? "cursor-pointer underline" : undefined}
+                onClick={interaccion ? () => interaccion.tocarUnidad(modulo + 1, col) : undefined}
               >
                 {String(col).padStart(2, "0")}
               </text>

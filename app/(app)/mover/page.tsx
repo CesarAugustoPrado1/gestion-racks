@@ -8,7 +8,7 @@ import {
   type BultoEnLista,
 } from "@/lib/consultas";
 import { ETIQUETA_MOVIMIENTO, ETIQUETA_PACKAGING, numero } from "@/lib/formato";
-import { Titulo } from "@/components/ui";
+import { Aviso, Titulo } from "@/components/ui";
 import { Buscador } from "./buscador";
 
 export const metadata = { title: "Mover · Racks" };
@@ -18,10 +18,10 @@ export const dynamic = "force-dynamic";
 export default async function PantallaMover({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; movidos?: string }>;
 }) {
   const sesion = await requerirRol("autoelevador", "admin");
-  const { q } = await searchParams;
+  const { q, movidos } = await searchParams;
 
   const [resultados, sinUbicar, actividad] = await Promise.all([
     q ? buscarBultos(q) : Promise.resolve([]),
@@ -34,6 +34,15 @@ export default async function PantallaMover({
       <Titulo detalle={`${sesion.nombre} · cada movimiento real, registrado acá`}>
         Mover
       </Titulo>
+
+      {movidos && (
+        <div className="mb-4">
+          <Aviso tono="advertencia">
+            Para llegar hubo que bajar {movidos}. Quedaron registrados como movidos y vuelven a su lugar: control
+            los va a ver primero en la recorrida.
+          </Aviso>
+        </div>
+      )}
 
       <Link href="/mover/meter" className="boton-primario mb-4 w-full">
         + Ingreso al rack

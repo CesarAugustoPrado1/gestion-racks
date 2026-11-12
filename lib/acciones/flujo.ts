@@ -12,6 +12,7 @@ import {
   bloquearPosicion,
   cambiarCategoria,
   crearBulto,
+  bajarLosQueTapan,
   exigirAccesible,
   exigirComposicion,
   exigirAltura,
@@ -155,7 +156,7 @@ const esquemaSacar = z.object({
 export async function sacar(
   entrada: z.input<typeof esquemaSacar>,
 ): Promise<
-  Resultado<{ codigo: string; salieron: number; quedaron: number; convertido: boolean }>
+  Resultado<{ codigo: string; salieron: number; quedaron: number; convertido: boolean; movidos: string[] }>
 > {
   return ejecutar(async () => {
     const sesion = await autorizar("autoelevador", "admin");
@@ -165,9 +166,11 @@ export async function sacar(
       const bulto = await bloquearBulto(tx, datos.bultoId);
       exigirEnStock(bulto);
 
+      // Si está tapado, los que tapan se bajan y vuelven: quedan registrados.
+      let movidos: string[] = [];
       if (bulto.posicionId) {
         const pos = await bloquearPosicion(tx, bulto.posicionId);
-        await exigirAccesible(tx, pos);
+        movidos = await bajarLosQueTapan(tx, pos, bulto, { id: sesion.uid, nombre: sesion.nombre });
       }
 
       /**
@@ -189,7 +192,7 @@ export async function sacar(
           nota: datos.nota,
         });
         revalidatePath("/", "layout");
-        return { codigo: bulto.codigo, salieron: 0, quedaron: 0, convertido: false };
+        return { codigo: bulto.codigo, salieron: 0, quedaron: 0, convertido: false, movidos };
       }
 
       if (datos.motivoId == null) fallar("Elegí un motivo.");
@@ -258,7 +261,7 @@ export async function sacar(
       });
 
       revalidatePath("/", "layout");
-      return { codigo: bulto.codigo, salieron, quedaron, convertido };
+      return { codigo: bulto.codigo, salieron, quedaron, convertido, movidos };
     });
   });
 }
@@ -276,7 +279,7 @@ const esquemaMover = z.object({
 
 export async function mover(
   entrada: z.input<typeof esquemaMover>,
-): Promise<Resultado<{ codigo: string; desde: string | null; hasta: string | null }>> {
+): Promise<Resultado<{ codigo: string; desde: string | null; hasta: string | null; movidos: string[] }>> {
   return ejecutar(async () => {
     const sesion = await autorizar("autoelevador", "admin");
     const datos = esquemaMover.parse(entrada);
@@ -293,10 +296,12 @@ export async function mover(
         );
       }
 
-      // Sacarlo de donde está: en un carril penetrable puede estar tapado.
+      // Sacarlo de donde está: en un carril penetrable puede estar tapado. Los
+      // que tapan se bajan y vuelven a su lugar, y quedan registrados.
+      let movidos: string[] = [];
       if (bulto.posicionId) {
         const origen = await bloquearPosicion(tx, bulto.posicionId);
-        await exigirAccesible(tx, origen);
+        movidos = await bajarLosQueTapan(tx, origen, bulto, { id: sesion.uid, nombre: sesion.nombre });
       }
 
       const destino = datos.posicionId
@@ -335,6 +340,7 @@ export async function mover(
         codigo: bulto.codigo,
         desde: bulto.posicionCodigo,
         hasta: destino?.codigo ?? null,
+        movidos,
       };
     });
   });

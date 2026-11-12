@@ -11,6 +11,7 @@ import {
   exigirMotivo,
   exigirNotaSiHaceFalta,
   rechazarMerma,
+  bajarLosQueTapan,
   exigirAltura,
   exigirLibre,
   exigirUsable,
@@ -1400,3 +1401,76 @@ describe("merma", { skip: !hay && "sin base local" }, () => {
     assert.doesNotThrow(() => rechazarMerma({ id: 3, nombre: "Modelo equivocado", esMerma: false }, "x"));
   });
 });
+
+describe("sacar el del fondo aunque esté tapado", { skip: !hay && "sin base local" }, () => {
+  const pos: Record<string, number> = {};
+  before(async () => {
+    if (!hay) return;
+    const [g] = await base.db
+      .insert(schema.grupos)
+      .values({ codigo: "TP", accesibilidad: "penetrable", niveles: 2, profundidad: 3, unidades: 1 })
+      .returning();
+    for (let n = 1; n <= 2; n++)
+      for (let d = 1; d <= 3; d++) {
+        const [p] = await base.db
+          .insert(schema.posiciones)
+          .values({ grupoId: g.id, codigo: `01-${n}-${d}`, unidad: 1, nivel: n, profundidad: d })
+          .returning();
+        pos[`${n}-${d}`] = p.id;
+      }
+  });
+
+  test("los que tapan quedan como movidos en su lugar y sin chequeo, para que control los mire", async () => {
+    const ids: Record<string, number> = {};
+    await base.db.transaction(async (tx) => {
+      for (const k of ["1-1", "1-2", "2-1", "2-3"]) {
+        ids[k] = (await meter(tx as Tx, pos[k], "suelto", [{ modeloId: datos.laja.id, cantidad: 5 }])).id;
+      }
+    });
+    // Todo chequeado, para ver qué se borra.
+    await base.db.execute(sql`update bultos set chequeado_en = now(), chequeos_ok = 1, chequeos_total = 1 where id in (${sql.join(Object.values(ids).map((i) => sql`${i}`), sql`, `)})`);
+    await base.db.execute(sql`update posiciones set chequeado_en = now() where id in (${sql.join(Object.values(pos).map((i) => sql`${i}`), sql`, `)})`);
+
+    let movidos: string[] = [];
+    await base.db.transaction(async (tx) => {
+      const t = tx as Tx;
+      const origen = await bloquearPosicion(t, pos["2-3"]);
+      const buscado = await bloquearBulto(t, ids["2-3"]);
+      movidos = await bajarLosQueTapan(t, origen, buscado, { id: datos.usuario.id, nombre: datos.usuario.nombre });
+    });
+
+    // Tapan: el del mismo nivel más adelante y los del piso hasta esa profundidad.
+    assert.equal(movidos.length, 3, movidos.join(" | "));
+    const filas = (await base.db.execute(sql`
+      select b.id, b.chequeado_en, b.posicion_id, p.chequeado_en as pos_chequeada
+        from bultos b join posiciones p on p.id = b.posicion_id
+       where b.id in (${sql.join(Object.values(ids).map((i) => sql`${i}`), sql`, `)})
+    `)) as unknown as Array<{ id: number; chequeado_en: string | null; posicion_id: number; pos_chequeada: string | null }>;
+    const de = (k: string) => filas.find((f) => f.id === ids[k])!;
+    for (const k of ["1-1", "1-2", "2-1"]) {
+      assert.equal(de(k).chequeado_en, null, `${k} pierde el chequeo`);
+      assert.equal(de(k).pos_chequeada, null, `la posición ${k} pierde la fecha`);
+      assert.equal(de(k).posicion_id, pos[k], `${k} vuelve a su lugar`);
+    }
+    assert.ok(de("2-3").chequeado_en, "el buscado no se toca acá: lo mueve o lo saca quien llama");
+
+    const [m] = (await base.db.execute(sql`
+      select tipo, posicion_desde_id, posicion_hasta_id, nota from movimientos
+       where bulto_id = ${ids["2-1"]} order by id desc limit 1
+    `)) as unknown as Array<{ tipo: string; posicion_desde_id: number; posicion_hasta_id: number; nota: string }>;
+    assert.equal(m.tipo, "mover");
+    assert.equal(m.posicion_desde_id, m.posicion_hasta_id);
+    assert.match(m.nota, /Se bajó para sacar/);
+    await exigirQueCuadre("después de bajar los que tapan");
+  });
+
+  test("en un selectivo, o sin nada adelante, no se toca nada", async () => {
+    await base.db.transaction(async (tx) => {
+      const t = tx as Tx;
+      const origen = await bloquearPosicion(t, pos["1-1"]);
+      const b = await bloquearBulto(t, (await t.execute(sql`select id from bultos where posicion_id = ${pos["1-1"]}`) as unknown as Array<{ id: number }>)[0].id);
+      assert.deepEqual(await bajarLosQueTapan(t, origen, b, { id: datos.usuario.id, nombre: datos.usuario.nombre }), []);
+    });
+  });
+});
+

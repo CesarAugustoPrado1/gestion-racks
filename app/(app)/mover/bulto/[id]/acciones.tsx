@@ -233,8 +233,8 @@ function Sacar({
               limpiar();
               void ejecutar(
                 () => sacar({ bultoId: bulto.id, nota: nota.trim() || undefined }),
-                () => {
-                  router.push("/mover");
+                (r) => {
+                  router.push(conMovidos(r.movidos));
                   router.refresh();
                 },
               );
@@ -376,8 +376,8 @@ function Sacar({
                   parcial: todo ? undefined : parcial,
                   nota: nota.trim() || undefined,
                 }),
-              () => {
-                router.push("/mover");
+              (r) => {
+                router.push(conMovidos(r.movidos));
                 router.refresh();
               },
             );
@@ -466,8 +466,8 @@ function Mover({
                   bultoId: bulto.id,
                   posicionId: alLimbo ? null : posicionId,
                 }),
-              () => {
-                router.push("/mover");
+              (r) => {
+                router.push(conMovidos(r.movidos));
                 router.refresh();
               },
             );
@@ -478,4 +478,9 @@ function Mover({
       </div>
     </div>
   );
+}
+
+/** A Mover, avisando qué se tuvo que bajar para llegar, si se bajó algo. */
+function conMovidos(movidos: string[]): string {
+  return movidos.length > 0 ? `/mover?movidos=${encodeURIComponent(movidos.join(", "))}` : "/mover";
 }
