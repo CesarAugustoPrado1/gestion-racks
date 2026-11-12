@@ -61,6 +61,7 @@ const DIARIO: Array<{ tag: string; when: number }> = [
   { tag: "0013_m2_y_fotos", when: 1791000000000 },
   { tag: "0014_merma", when: 1791100000000 },
   { tag: "0015_holgura-por-grupo", when: 1791200000000 },
+  { tag: "0016_motivos-producto-packaging", when: 1791300000000 },
 ];
 
 /**
