@@ -366,6 +366,77 @@ export async function exigirAccesible(tx: Tx, pos: PosicionVivo) {
   }
 }
 
+/**
+ * Para SACAR un bulto de un carril penetrable aunque esté tapado.
+ *
+ * En el galpón, para llegar al del fondo hay que bajar los de adelante (y los
+ * del piso que le cortan el camino al clark), sacar el que se busca y volver a
+ * poner los otros. La app deja hacerlo en un solo paso, pero no hace como si
+ * los de adelante no se hubieran tocado: a cada uno le registra una
+ * reubicación en su mismo lugar, con una nota que dice por qué.
+ *
+ * Esa reubicación, como cualquier movimiento, le borra el chequeo al bulto y a
+ * su posición: el sistema supone que volvieron a su lugar, pero nadie lo
+ * comprobó. Así suben en la recorrida de control y alguien va a mirarlos.
+ *
+ * Devuelve los códigos de los que se tocaron, para decírselo al operario.
+ * Solo para el ORIGEN: meter algo atrás de todo sigue pidiendo el paso libre.
+ */
+export async function bajarLosQueTapan(
+  tx: Tx,
+  pos: PosicionVivo,
+  para: { codigo: string },
+  usuario: { id: number; nombre: string },
+): Promise<string[]> {
+  if (!pos.penetrable || pos.profundidad == null) return [];
+
+  const ocupadas = (await tx.execute(sql`
+    select p.id as posicion_id, p.nivel, p.profundidad, b.id as bulto_id, b.codigo,
+           g.codigo || '-' || p.codigo as posicion
+      from bultos b
+      join posiciones p on p.id = b.posicion_id
+      join grupos g on g.id = p.grupo_id
+     where b.estado = 'ubicado'
+       and p.grupo_id = ${pos.grupoId}
+       and p.unidad = ${pos.unidad}
+       and p.id <> ${pos.id}
+  `)) as unknown as Array<{
+    posicion_id: number;
+    nivel: number;
+    profundidad: number | null;
+    bulto_id: number;
+    codigo: string;
+    posicion: string;
+  }>;
+
+  const tapan = loQueTapa(
+    { nivel: pos.nivel, profundidad: pos.profundidad },
+    ocupadas.map((o) => ({ ...o, etiqueta: `${o.codigo} (${o.posicion})` })),
+  );
+
+  for (const t of tapan) {
+    const bulto = await bloquearBulto(tx, t.bulto_id);
+    // Si sobresalía hacia arriba, vuelve igual: la tapa se conserva.
+    const [tapaba] = (await tx.execute(sql`
+      select p.id, g.codigo || '-' || p.codigo as codigo
+        from posiciones p join grupos g on g.id = p.grupo_id
+       where p.bloqueada_por_bulto_id = ${bulto.id}
+    `)) as unknown as Array<{ id: number; codigo: string }>;
+    await aplicarMovimiento(tx, {
+      tipo: "mover",
+      bulto,
+      contenidoDespues: bulto.contenido.map((c) => ({ modeloId: c.modeloId, cantidad: c.cantidad })),
+      packagingDespues: bulto.packaging,
+      estadoDespues: "ubicado",
+      posicionDestino: { id: t.posicion_id, codigo: t.posicion },
+      invadeArriba: tapaba ?? null,
+      usuario,
+      nota: `Se bajó para sacar ${para.codigo} de ${pos.codigo} y se volvió a poner en su lugar. Sin chequear.`,
+    });
+  }
+  return tapan.map((t) => `${t.codigo} (${t.posicion})`);
+}
+
 /** Una posición aloja un bulto. Si ya tiene uno, no entra otro. */
 export function exigirLibre(pos: PosicionVivo) {
   if (pos.ocupante) {

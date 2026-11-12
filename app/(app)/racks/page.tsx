@@ -4,8 +4,9 @@ import { mapaDeRacks } from "@/lib/consultas";
 import { semividaDias } from "@/lib/configuracion";
 import { confianza, indice } from "@/lib/confiabilidad";
 import { Indice } from "@/components/confiabilidad";
-import { MapaDeGrupo, type Vista } from "@/components/mapa";
-import { PerspectivaDeGrupo } from "@/components/perspectiva";
+import type { Vista } from "@/components/mapa";
+import { puedeVer } from "@/lib/permisos";
+import { RacksInteractivos } from "./interactivo";
 import { abreviaturas } from "@/lib/formato";
 import { Aviso, Titulo } from "@/components/ui";
 
@@ -22,7 +23,7 @@ export default async function PantallaRacks({
 }: {
   searchParams: Promise<{ ver?: string; dibujo?: string }>;
 }) {
-  await requerirSesion();
+  const sesion = await requerirSesion();
   const { ver, dibujo: dibujoCrudo } = await searchParams;
   const vista: Vista = ver === "confiabilidad" ? "confiabilidad" : "contenido";
   /**
@@ -84,7 +85,7 @@ export default async function PantallaRacks({
 
   return (
     <>
-      <Titulo detalle="Cada cuadradito es una posición. Tocala para ver qué hay.">
+      <Titulo detalle="Tocá una posición o el número de una calle o columna: abajo se abre lo que hay.">
         Racks
       </Titulo>
 
@@ -174,26 +175,16 @@ export default async function PantallaRacks({
 
       <Leyenda vista={vista} lineas={lineas} abrev={abrev} semivida={semivida} />
 
-      <div className="mt-3 space-y-3">
-        {grupos.map((g) =>
-          dibujo === "3d" ? (
-            <PerspectivaDeGrupo
-              key={g.id}
-              grupo={g}
-              vista={vista}
-              semivida={semivida}
-              abrev={abrev}
-            />
-          ) : (
-            <MapaDeGrupo
-              key={g.id}
-              grupo={g}
-              vista={vista}
-              semivida={semivida}
-              abrev={abrev}
-            />
-          ),
-        )}
+      <div className="mt-3">
+        <RacksInteractivos
+          grupos={grupos}
+          vista={vista}
+          dibujo={dibujo}
+          semivida={semivida}
+          abrev={abrev}
+          puedeMover={puedeVer(sesion.rol, "/mover")}
+          puedeChequear={puedeVer(sesion.rol, "/control")}
+        />
       </div>
     </>
   );

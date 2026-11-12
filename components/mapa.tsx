@@ -4,6 +4,20 @@ import { nombreDeNivel, nombreDeProfundidad } from "@/lib/posiciones";
 import { ETIQUETA_PACKAGING, numero } from "@/lib/formato";
 import type { CeldaDelMapa, GrupoDelMapa } from "@/lib/consultas";
 
+/**
+ * Cuando el mapa se usa para TOCAR -elegir un palet, elegir adónde va, abrir
+ * una calle- en vez de navegar. Sin esto, cada celda es un link a su ficha.
+ */
+export type Interaccion = {
+  /** La posición elegida: se resalta. */
+  marcada: number | null;
+  /** El destino elegido para moverle el palet. */
+  destino: number | null;
+  tocar: (celda: CeldaDelMapa) => void;
+  /** La calle (penetrable) o la columna (selectivo), tocando su número. */
+  tocarUnidad: (unidad: number, columna: number | null) => void;
+};
+
 export type Vista = "contenido" | "confiabilidad";
 
 /**
@@ -151,19 +165,46 @@ function Celda({
   vista,
   semivida,
   abrev,
+  interaccion,
 }: {
   celda: CeldaDelMapa;
   vista: Vista;
   semivida: number;
   abrev: Record<string, string>;
+  interaccion?: Interaccion;
 }) {
   const { fondo, texto, letra, titulo } = pintarCelda(celda, vista, semivida, abrev);
+  const clase = `relative flex h-9 w-9 shrink-0 items-center justify-center rounded text-[11px] font-bold tabular-nums transition hover:ring-2 hover:ring-slate-900 ${fondo} ${texto}`;
+  if (interaccion) {
+    const marcada = interaccion.marcada === celda.posicionId;
+    const destino = interaccion.destino === celda.posicionId;
+    return (
+      <button
+        type="button"
+        title={titulo}
+        aria-label={titulo}
+        aria-pressed={marcada}
+        onClick={() => interaccion.tocar(celda)}
+        className={`${clase} ${marcada ? "outline-3 outline-offset-1 outline-slate-900" : ""} ${
+          destino ? "outline-3 outline-offset-1 outline-dashed outline-medida" : ""
+        }`}
+      >
+        {letra}
+        {celda.bulto?.ajeno && (
+          <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[9px] leading-none text-white">
+            !
+          </span>
+        )}
+        {celda.bulto && celda.fueraDeUso && <span className="absolute inset-x-0 bottom-0 h-1 rounded-b fuera-de-uso" />}
+      </button>
+    );
+  }
   return (
     <Link
       href={`/racks/${celda.posicionId}`}
       title={titulo}
       aria-label={titulo}
-      className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded text-[11px] font-bold tabular-nums transition hover:ring-2 hover:ring-slate-900 ${fondo} ${texto}`}
+      className={clase}
     >
       {letra}
       {/* De otra empresa: un "!" en la esquina, y no un color de fondo, porque
@@ -192,11 +233,13 @@ export function MapaDeGrupo({
   vista,
   semivida,
   abrev,
+  interaccion,
 }: {
   grupo: GrupoDelMapa;
   vista: Vista;
   semivida: number;
   abrev: Record<string, string>;
+  interaccion?: Interaccion;
 }) {
   const niveles = [...new Set(grupo.celdas.map((c) => c.nivel))].sort(
     (a, b) => b - a,
@@ -267,19 +310,28 @@ export function MapaDeGrupo({
           <div className="flex gap-2">
             {unidades.map((u) =>
               grupo.penetrable ? (
-                <div
+                <button
+                  type="button"
                   key={u}
-                  className="h-4 text-center text-[10px] font-semibold text-slate-500 tabular-nums"
+                  disabled={!interaccion}
+                  onClick={() => interaccion?.tocarUnidad(u, null)}
+                  className="h-4 text-center text-[10px] font-semibold text-slate-500 tabular-nums enabled:underline enabled:decoration-dotted"
                   style={{ width: (grupo.profundidad ?? 1) * 36 + ((grupo.profundidad ?? 1) - 1) * 2 }}
                 >
                   calle {dos(u)}
-                </div>
+                </button>
               ) : (
                 <div key={u} className="flex gap-0.5">
                   {columnasDe(u).map((col) => (
-                    <div key={col} className="h-4 w-9 text-center text-[10px] font-semibold text-slate-500 tabular-nums">
+                    <button
+                      type="button"
+                      key={col}
+                      disabled={!interaccion}
+                      onClick={() => interaccion?.tocarUnidad(u, col)}
+                      className="h-4 w-9 text-center text-[10px] font-semibold text-slate-500 tabular-nums enabled:underline enabled:decoration-dotted"
+                    >
                       {dos(col)}
-                    </div>
+                    </button>
                   ))}
                 </div>
               ),
@@ -304,6 +356,7 @@ export function MapaDeGrupo({
                         vista={vista}
                         semivida={semivida}
                         abrev={abrev}
+                        interaccion={interaccion}
                       />
                     ))}
                 </div>
