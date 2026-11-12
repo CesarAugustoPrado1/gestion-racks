@@ -310,7 +310,7 @@ export async function tablero(): Promise<Tablero> {
   const porNombre = new Map<string, NivelEnTablero>();
   for (const n of niveles) {
     const nombre = nombreDeNivel(n.nivel, n.niveles);
-    const orden = nombre === "piso" ? 0 : nombre === "arriba" ? 99 : n.nivel;
+    const orden = n.nivel;
     const actual = porNombre.get(nombre) ?? { nombre, orden, total: 0, ocupadas: 0, libres: 0 };
     actual.total += n.total;
     actual.ocupadas += n.ocupadas;

@@ -27,18 +27,35 @@ export type Geometria = {
 };
 
 /**
- * Nombres de los niveles, derivados de cuántos hay.
+ * Nombres de los niveles. El nombre dice la ALTURA y no la posición dentro del
+ * rack: el nivel 2 se llama medio en todos los grupos, tengan 2, 3 o 5 niveles.
+ * Así el "arriba" de un rack de 3 y el de uno de 4 son la misma altura, y la
+ * ocupación por altura compara lo mismo.
  *
- * En la planta les dicen piso, medio y arriba. Con cuatro no tenían nombre, así
- * que se numeran los del medio: piso, medio 1, medio 2, arriba. Se derivan y no
- * se cargan a mano porque son los mismos en todos los grupos, y un nombre que se
- * escribe una vez por grupo es un nombre que un día va a estar mal escrito.
+ *   1 piso · 2 medio · 3 arriba · 4 arriba 2 · 5 arriba 3 …
+ *
+ * "arriba 2" y no "arriba 1": el 3 ya es el primer arriba, y un "arriba 1"
+ * se confundiría con él.
+ *
+ * Se derivan y no se cargan a mano: un nombre que se escribe una vez por grupo
+ * es un nombre que un día va a estar mal escrito. `niveles` ya no cambia el
+ * nombre; queda en la firma porque todos los llamadores lo tienen a mano.
  */
-export function nombreDeNivel(nivel: number, niveles: number): string {
-  if (nivel === 1) return "piso";
-  if (nivel === niveles) return "arriba";
-  if (niveles === 3) return "medio";
-  return `medio ${nivel - 1}`;
+export function nombreDeNivel(nivel: number, niveles?: number): string {
+  void niveles;
+  if (nivel <= 1) return "piso";
+  if (nivel === 2) return "medio";
+  if (nivel === 3) return "arriba";
+  return `arriba ${nivel - 2}`;
+}
+
+/** El número de nivel de un nombre: para ordenar de abajo hacia arriba. */
+export function ordenDeNivel(nombre: string): number {
+  if (nombre === "piso") return 1;
+  if (nombre === "medio") return 2;
+  if (nombre === "arriba") return 3;
+  const n = Number(nombre.replace(/^arriba /, ""));
+  return Number.isFinite(n) ? n + 2 : 99;
 }
 
 /**

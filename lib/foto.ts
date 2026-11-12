@@ -378,7 +378,7 @@ export async function fotoEn(
     const nivel =
       niveles.get(nombre) ??
       niveles
-        .set(nombre, { nombre, orden: nombre === "piso" ? 0 : nombre === "arriba" ? 99 : p.nivel, ocupadas: 0, libres: 0 })
+        .set(nombre, { nombre, orden: p.nivel, ocupadas: 0, libres: 0 })
         .get(nombre)!;
     if (p.empresa_id != null) {
       const e = lugarPorEmpresa.get(p.empresa_id) ?? { posiciones: 0, ocupadas: 0 };
