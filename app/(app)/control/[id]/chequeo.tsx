@@ -18,7 +18,7 @@ import { ETIQUETA_CALIDAD, ETIQUETA_PACKAGING, PACKAGINGS, numero } from "@/lib/
 import type { BultoEnPosicion, ModeloParaCargar, MotivoOpcion } from "@/lib/consultas";
 import type { Calidad, Packaging } from "@/lib/db/schema";
 
-type Modo = "mirando" | "cantidades" | "categoria" | "ausente" | "encontrado";
+type Modo = "mirando" | "cantidades" | "producto" | "categoria" | "ausente" | "encontrado";
 
 export function Chequeo({
   posicion,
@@ -187,6 +187,18 @@ export function Chequeo({
                       className="boton-secundario text-sm"
                       onClick={() => {
                         setElegido(b);
+                        setModo("producto");
+                      }}
+                    >
+                      Es otro producto
+                    </button>
+                  )}
+                  {b.packaging !== "objeto" && (
+                    <button
+                      type="button"
+                      className="boton-secundario text-sm"
+                      onClick={() => {
+                        setElegido(b);
                         setModo("categoria");
                       }}
                     >
@@ -217,11 +229,14 @@ export function Chequeo({
         </>
       )}
 
-      {modo === "cantidades" && elegido && (
-        <Cantidades
+      {(modo === "cantidades" || modo === "producto") && elegido && (
+        <Contenido
+          key={modo}
           posicionId={posicion.id}
           bulto={elegido}
+          modelos={modelos}
           motivos={motivos}
+          modo={modo === "producto" ? "producto" : "cantidad"}
           cancelar={() => setModo("mirando")}
           listo={volverALaLista}
         />
@@ -292,80 +307,185 @@ function SelectorMotivo({
   );
 }
 
-function Cantidades({
+/**
+ * Corregir el CONTENIDO de un bulto que está: otra cantidad, otro packaging u
+ * otro producto (otro modelo). Es una sola corrección con dos puntos de
+ * partida:
+ *
+ * - "cantidad": arranca con lo que dice el sistema, para cambiar los números.
+ * - "producto": arranca vacío, para elegir con el buscador qué es en realidad.
+ *
+ * En las dos se puede cambiar el packaging. Por defecto queda el que tenía: un
+ * palet con 43 en vez de 48 sigue siendo un palet.
+ */
+function Contenido({
   posicionId,
   bulto,
+  modelos,
   motivos,
+  modo,
   cancelar,
   listo,
 }: {
   posicionId: number;
   bulto: BultoEnPosicion;
+  modelos: ModeloParaCargar[];
   motivos: MotivoOpcion[];
+  modo: "cantidad" | "producto";
   cancelar: () => void;
   listo: () => void;
 }) {
   const { ejecutar, enviando, error, limpiar } = useAccion();
-  const [valores, setValores] = useState<Record<number, string>>(
-    Object.fromEntries(bulto.contenido.map((c) => [c.modeloId, String(c.cantidad)])),
+  const [packaging, setPackaging] = useState<Packaging>(bulto.packaging);
+  const [lineas, setLineas] = useState<Array<{ modeloId: number; nombre: string; cantidad: string }>>(
+    modo === "cantidad"
+      ? bulto.contenido.map((c) => ({ modeloId: c.modeloId, nombre: c.nombre, cantidad: String(c.cantidad) }))
+      : [],
   );
-  const [motivoId, setMotivoId] = useState<number | null>(null);
+  const porNombre = (inicio: string) => motivos.find((m) => m.nombre.toLowerCase().startsWith(inicio))?.id ?? null;
+  const [motivoId, setMotivoId] = useState<number | null>(modo === "producto" ? (porNombre("modelo equivocado") ?? porNombre("producto equivocado")) : null);
+  const [motivoTocado, setMotivoTocado] = useState(false);
   const [nota, setNota] = useState("");
+  const [avisos, setAvisos] = useState<string[] | null>(null);
 
-  const cantidades = bulto.contenido.map((c) => ({
-    modeloId: c.modeloId,
-    cantidad: Number(valores[c.modeloId] || 0),
-  }));
-  const nuevo = cantidades.reduce((s, c) => s + c.cantidad, 0);
+  const decia = new Map(bulto.contenido.map((c) => [c.modeloId, c.cantidad]));
+  const cantidades = lineas.map((l) => ({ modeloId: l.modeloId, cantidad: Number(l.cantidad || 0) }));
+  const conAlgo = cantidades.filter((c) => c.cantidad > 0);
+  const nuevo = conAlgo.reduce((s, c) => s + c.cantidad, 0);
   const diferencia = nuevo - bulto.cantidad;
+  const otroPackaging = packaging !== bulto.packaging;
+  const mismosModelos = conAlgo.length === decia.size && conAlgo.every((c) => decia.has(c.modeloId));
+  const sinCambios = mismosModelos && !otroPackaging && conAlgo.every((c) => decia.get(c.modeloId) === c.cantidad);
+  const problema = conAlgo.length > 0 ? validarComposicion(packaging, conAlgo) : null;
+  // La merma solo cuando hay MENOS del mismo producto, en el mismo packaging.
+  const admiteMerma = diferencia < 0 && mismosModelos && !otroPackaging;
   const motivoElegido = motivos.find((m) => m.id === motivoId) ?? null;
   const faltaNota = motivoElegido?.pideNota === true && nota.trim() === "";
+
+  function cambiarPackaging(p: Packaging) {
+    setPackaging(p);
+    // Si nadie eligió motivo, el que corresponde es este.
+    if (!motivoTocado && modo === "cantidad") setMotivoId(p !== bulto.packaging ? porNombre("packaging equivocado") : null);
+  }
+
+  if (avisos) {
+    return (
+      <div className="tarjeta space-y-3 p-5">
+        <p className="text-sm font-semibold text-confiable">Corregido.</p>
+        <Aviso tono="advertencia">{avisos.join(" ")}</Aviso>
+        <button type="button" className="boton-primario w-full" onClick={listo}>
+          Seguir
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="tarjeta space-y-4 p-5">
       <h2 className="text-base font-bold text-slate-900">
-        Cuánto hay de verdad
+        {modo === "producto" ? "Qué producto es en realidad" : "Cuánto hay de verdad"}
       </h2>
       {error && <Aviso>{error}</Aviso>}
 
+      <div>
+        <span className="etiqueta">Packaging</span>
+        <div className="grid grid-cols-3 gap-2">
+          {PACKAGINGS.map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => cambiarPackaging(p)}
+              className={`min-h-11 rounded-xl text-sm font-semibold ${
+                packaging === p ? "bg-slate-900 text-white" : "bg-white text-slate-700 ring-1 ring-slate-300"
+              }`}
+            >
+              {ETIQUETA_PACKAGING[p]}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          {otroPackaging ? (
+            <>
+              Decía <strong>{ETIQUETA_PACKAGING[bulto.packaging].toLowerCase()}</strong>: se corrige a{" "}
+              <strong>{ETIQUETA_PACKAGING[packaging].toLowerCase()}</strong>.
+            </>
+          ) : (
+            "Cambialo solo si el packaging también estaba mal registrado."
+          )}
+        </p>
+      </div>
+
+      {modo === "producto" && (
+        <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-700">
+          Decía: {bulto.contenido.map((c) => `${c.nombre} ${numero(c.cantidad)}`).join(" + ")}
+        </p>
+      )}
+
       <ul className="space-y-2">
-        {bulto.contenido.map((c) => (
-          <li key={c.modeloId} className="flex items-center gap-2">
+        {lineas.map((l) => (
+          <li key={l.modeloId} className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">
-              {c.nombre}
-              <span className="ml-1 font-normal text-slate-400">
-                decía {numero(c.cantidad)}
-              </span>
+              {l.nombre}
+              {decia.has(l.modeloId) && (
+                <span className="ml-1 font-normal text-slate-400">decía {numero(decia.get(l.modeloId)!)}</span>
+              )}
             </span>
             <input
               className="campo w-24 text-right"
               inputMode="numeric"
-              value={valores[c.modeloId] ?? ""}
+              value={l.cantidad}
               onChange={(e) =>
-                setValores((v) => ({
-                  ...v,
-                  [c.modeloId]: e.target.value.replace(/\D/g, ""),
-                }))
+                setLineas((ls) =>
+                  ls.map((x) => (x.modeloId === l.modeloId ? { ...x, cantidad: e.target.value.replace(/\D/g, "") } : x)),
+                )
               }
-              aria-label={`Cantidad real de ${c.nombre}`}
+              aria-label={`Cantidad real de ${l.nombre}`}
             />
+            {modo === "producto" && (
+              <button
+                type="button"
+                className="px-2 text-lg text-slate-400"
+                onClick={() => setLineas((ls) => ls.filter((x) => x.modeloId !== l.modeloId))}
+                aria-label={`Quitar ${l.nombre}`}
+              >
+                ✕
+              </button>
+            )}
           </li>
         ))}
       </ul>
 
-      {diferencia !== 0 && (
+      {modo === "producto" && (
+        <ElegirModelo
+          modelos={modelos}
+          yaElegidos={lineas.map((l) => l.modeloId)}
+          alElegir={(m) =>
+            setLineas((ls) => [
+              ...ls,
+              {
+                modeloId: m.id,
+                nombre: m.nombre,
+                cantidad: m.normas[packaging] != null ? String(m.normas[packaging]) : "",
+              },
+            ])
+          }
+        />
+      )}
+
+      {problema && <Aviso tono="info">{problema}</Aviso>}
+      {conAlgo.length > 0 && !sinCambios && mismosModelos && diferencia !== 0 && (
         <Aviso tono="info">
-          {/* El error se dice con el número, no con un adjetivo: es lo que
-              después se va a medir. */}
-          Diferencia de <strong>{diferencia > 0 ? "+" : ""}{numero(diferencia)}</strong>{" "}
-          {bulto.unidadPlural}. Queda registrada.
+          Diferencia de <strong>{diferencia > 0 ? "+" : ""}{numero(diferencia)}</strong> {bulto.unidadPlural}. Queda registrada.
         </Aviso>
       )}
 
       <SelectorMotivo
-        motivos={motivos.filter((m) => !m.esMerma || diferencia < 0)}
+        motivos={motivos.filter((m) => !m.esMerma || admiteMerma)}
         elegido={motivoId}
-        elegir={setMotivoId}
+        elegir={(id) => {
+          setMotivoTocado(true);
+          setMotivoId(id);
+        }}
       />
       {motivoElegido?.esMerma && (
         <Aviso tono="advertencia">
@@ -390,9 +510,11 @@ function Cantidades({
           disabled={
             enviando ||
             motivoId == null ||
-            diferencia === 0 ||
+            conAlgo.length === 0 ||
+            sinCambios ||
+            problema != null ||
             faltaNota ||
-            (motivoElegido?.esMerma === true && diferencia > 0)
+            (motivoElegido?.esMerma === true && !admiteMerma)
           }
           onClick={() => {
             limpiar();
@@ -401,11 +523,12 @@ function Cantidades({
                 corregirCantidades({
                   posicionId,
                   bultoId: bulto.id,
-                  cantidades,
+                  cantidades: conAlgo,
+                  packaging: otroPackaging ? (packaging as "suelto" | "palet" | "optimizado") : undefined,
                   motivoId: motivoId!,
                   nota: nota.trim() || undefined,
                 }),
-              listo,
+              (r) => (r.avisos.length > 0 ? setAvisos(r.avisos) : listo()),
             );
           }}
         >

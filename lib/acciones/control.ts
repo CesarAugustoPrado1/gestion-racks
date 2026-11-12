@@ -12,6 +12,7 @@ import {
   bloquearPosicion,
   cambiarCategoria,
   crearBulto,
+  exigirAltura,
   exigirComposicion,
   exigirLibre,
   exigirMotivo,
@@ -19,7 +20,7 @@ import {
   rechazarMerma,
   type Tx,
 } from "./motor";
-import { ejecutar, fallar, type Resultado } from "./comun";
+import { ErrorDeNegocio, ejecutar, fallar, type Resultado } from "./comun";
 import { validarDescripcion } from "../bultos";
 import { posicionConBultos, type BultoEnPosicion } from "../consultas";
 
@@ -151,21 +152,30 @@ const esquemaCantidades = z.object({
       }),
     )
     .min(1),
+  /** Si el packaging también estaba mal registrado. Sin esto, queda el que tenía. */
+  packaging: z.enum(["suelto", "palet", "optimizado"]).optional(),
   motivoId: z.number().int().positive("Elegí un motivo."),
   nota: esquemaNota,
 });
 
 /**
  * Lo que hay no es lo que decía el sistema. Control lo corrige y queda asentado.
+ * Sirve para tres errores de registro, que se pueden dar juntos:
  *
- * El packaging NO se toca. Si un palet tiene 43 en vez de 48, sigue siendo el
- * palet que alguien armó: queda marcado como fuera de norma, que es lo que es.
- * Convertirlo a suelto sería afirmar que alguien lo desarmó, y control no sabe
- * eso: sabe lo que contó.
+ * - OTRA CANTIDAD: el bulto está, con más o menos.
+ * - OTRO PACKAGING: dice palet y es suelto, o es un optimizado. Solo si control
+ *   lo elige: un palet con 43 en vez de 48 sigue siendo el palet que alguien
+ *   armó, y queda fuera de norma, que es lo que es. Pasarlo solo a suelto sería
+ *   afirmar que alguien lo desarmó.
+ * - OTRO PRODUCTO: el bulto está, pero es de otro modelo. Se corrige el mismo
+ *   bulto -mismo código, mismo lugar- en vez de darlo por perdido y registrar
+ *   uno nuevo, que inventaría un faltante y un sobrante que no existen.
+ *
+ * Como cualquier ajuste, guarda el antes y el después completos.
  */
 export async function corregirCantidades(
   entrada: z.input<typeof esquemaCantidades>,
-): Promise<Resultado<{ codigo: string; diferencia: number }>> {
+): Promise<Resultado<{ codigo: string; diferencia: number; avisos: string[] }>> {
   return ejecutar(async () => {
     const sesion = await autorizar("control", "admin");
     const datos = esquemaCantidades.parse(entrada);
@@ -182,21 +192,64 @@ export async function corregirCantidades(
 
       const motivo = await exigirMotivo(tx, datos.motivoId, "ajuste");
       exigirNotaSiHaceFalta(motivo, datos.nota);
-      const contenidoDespues = datos.cantidades.filter((c) => c.cantidad > 0);
+      // Un modelo repetido se suma: dos renglones del mismo modelo son un error de pantalla.
+      const porModelo = new Map<number, number>();
+      for (const c of datos.cantidades) porModelo.set(c.modeloId, (porModelo.get(c.modeloId) ?? 0) + c.cantidad);
+      const contenidoDespues = [...porModelo]
+        .map(([modeloId, cantidad]) => ({ modeloId, cantidad }))
+        .filter((c) => c.cantidad > 0);
       if (contenidoDespues.length === 0) {
         fallar(
-          "Si no quedó nada en el bulto, usá «el bulto no está acá» en vez de poner todo en cero.",
+          "Si no quedó nada en el bulto, usá «No está acá» en vez de poner todo en cero.",
+        );
+      }
+      const packaging = datos.packaging ?? bulto.packaging;
+      exigirComposicion(packaging, contenidoDespues);
+
+      const antes = new Map(bulto.contenido.map((c) => [c.modeloId, c.cantidad]));
+      const mismosModelos =
+        antes.size === contenidoDespues.length && contenidoDespues.every((c) => antes.has(c.modeloId));
+      const otroPackaging = packaging !== bulto.packaging;
+      const nuevoTotal = contenidoDespues.reduce((s, c) => s + c.cantidad, 0);
+      const diferencia = nuevoTotal - bulto.cantidad;
+      if (mismosModelos && !otroPackaging && contenidoDespues.every((c) => antes.get(c.modeloId) === c.cantidad)) {
+        fallar("No cambió nada. Si está todo bien, usá «OK».");
+      }
+      // La merma es producto que se perdió del MISMO bulto: solo puede bajar la cantidad.
+      if (motivo.esMerma && (diferencia >= 0 || !mismosModelos || otroPackaging)) {
+        fallar(
+          `«${motivo.nombre}» es merma: solo se usa cuando hay MENOS del mismo producto, en el mismo packaging.`,
         );
       }
 
-      const nuevoTotal = contenidoDespues.reduce((s, c) => s + c.cantidad, 0);
-      const diferencia = nuevoTotal - bulto.cantidad;
-      if (diferencia === 0) {
-        fallar("Las cantidades son las mismas. Si está todo bien, usá «Está bien».");
-      }
-      // La merma es producto que se perdió: solo puede bajar la cantidad.
-      if (motivo.esMerma && diferencia > 0) {
-        fallar(`«${motivo.nombre}» es merma: solo se usa cuando hay MENOS de lo registrado.`);
+      /**
+       * La altura. Si cambió lo que mide el bulto -otro packaging u otro modelo-
+       * se vuelve a calcular si sobresale hacia arriba. Si no, queda como estaba
+       * (un ajuste de cantidad no cambia el alto, y sin esto se soltaba la
+       * posición de arriba que el bulto sí tapa).
+       *
+       * Como en la carga inicial, manda lo que hay: si las medidas dicen que no
+       * entra, se corrige igual y se avisa. El dato a revisar es la medida.
+       */
+      const avisos: string[] = [];
+      const [tapaba] = (await tx.execute(sql`
+        select id, codigo from posiciones where bloqueada_por_bulto_id = ${bulto.id}
+      `)) as unknown as Array<{ id: number; codigo: string }>;
+      let invadeArriba: { id: number; codigo: string } | null = tapaba ?? null;
+      if (otroPackaging || !mismosModelos) {
+        await tx.update(posiciones).set({ bloqueadaPorBultoId: null }).where(eq(posiciones.bloqueadaPorBultoId, bulto.id));
+        const posLibre = await bloquearPosicion(tx, pos.id);
+        invadeArriba = null;
+        try {
+          const encaje = await exigirAltura(tx, posLibre, { packaging, contenido: contenidoDespues });
+          if (encaje.invadeArriba && encaje.arriba) {
+            invadeArriba = encaje.arriba;
+            avisos.push(`Según las medidas, sobresale y tapa ${encaje.arriba.codigo}.`);
+          }
+        } catch (e) {
+          if (!(e instanceof ErrorDeNegocio)) throw e;
+          avisos.push(`Según las medidas cargadas no entraría (${e.message}) Revisá la altura del nivel o de la norma.`);
+        }
       }
 
       const ahora = new Date();
@@ -205,9 +258,10 @@ export async function corregirCantidades(
         tipo: "ajuste",
         bulto,
         contenidoDespues,
-        packagingDespues: bulto.packaging,
+        packagingDespues: packaging,
         estadoDespues: bulto.estado,
         posicionDestino: { id: pos.id, codigo: pos.codigo },
+        invadeArriba,
         usuario: { id: sesion.uid, nombre: sesion.nombre },
         motivo,
         nota: datos.nota,
@@ -228,7 +282,7 @@ export async function corregirCantidades(
 
       await asentarChequeo(tx, pos.id, false, ahora);
       revalidatePath("/", "layout");
-      return { codigo: bulto.codigo, diferencia };
+      return { codigo: bulto.codigo, diferencia, avisos };
     });
   });
 }

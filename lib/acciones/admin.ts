@@ -642,6 +642,7 @@ const ESTANDAR: Array<{
   { nombre: "Cantidad distinta a la registrada", ambito: "ajuste" },
   { nombre: "Bulto en otra posición", ambito: "ajuste" },
   { nombre: "Modelo equivocado", ambito: "ajuste" },
+  { nombre: "Packaging equivocado", ambito: "ajuste" },
   { nombre: "Posición vacía en el sistema", ambito: "ajuste" },
   { nombre: "Categoría equivocada", ambito: "ajuste", esEgreso: false },
   { nombre: "Merma encontrada en el chequeo", ambito: "ajuste", ...MERMA, pideNota: true },
