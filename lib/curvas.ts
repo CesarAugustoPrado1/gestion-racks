@@ -2,7 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "./db";
 import { semividaDias } from "./configuracion";
-import { nombreDeNivel } from "./posiciones";
+import { nombreDeNivel, ordenDeNivel } from "./posiciones";
 import { tramosDe, type Rango } from "./periodos";
 import { curvasDeConfianza, type EventoChequeo, type EventoMovimiento, type PuntoDeCurva } from "./confianza-historia";
 
@@ -111,11 +111,8 @@ export async function curvas(r: Rango, codigoPosicion: string | null = null): Pr
   ).map((p, i) => ({ ...p, etiqueta: tramos[i].etiqueta, clave: tramos[i].clave }));
 
   // Los niveles por nombre, de abajo hacia arriba.
-  // "medio" (el de los racks de 3) va entre "medio 1" y "medio 2".
-  const ordenNivel = (n: string) =>
-    n === "piso" ? 0 : n === "arriba" ? 99 : n === "medio" ? 1.5 : Number(n.replace(/\D/g, "")) || 50;
   const niveles = [...new Set(posiciones.map((p) => nombreDeNivel(p.nivel, p.niveles)))].sort(
-    (a, b) => ordenNivel(a) - ordenNivel(b),
+    (a, b) => ordenDeNivel(a) - ordenDeNivel(b),
   );
 
   return {

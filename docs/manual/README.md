@@ -33,7 +33,8 @@ Los esquemas de racks y el dibujo del autoelevador son SVG dentro de
 
 | Versión | Fecha | Archivo |
 |---|---|---|
-| 4 (vigente) | noviembre 2026 | `public/manuales/manual-operario-v4.pdf` |
+| 5 (vigente) | noviembre 2026 | `public/manuales/manual-operario-v5.pdf` |
+| 4 | noviembre 2026 | `public/manuales/manual-operario-v4.pdf` |
 | 3 | noviembre 2026 | `public/manuales/manual-operario-v3.pdf` |
 | 2 | noviembre 2026 | `public/manuales/manual-operario-v2.pdf` |
 | 1 | octubre 2026 | `public/manuales/manual-operario-v1.pdf` |

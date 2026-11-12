@@ -8,6 +8,7 @@ import {
   cuantasPosiciones,
   loQueTapa,
   nombreDeNivel,
+  ordenDeNivel,
   nombreDeProfundidad,
   posicionesDe,
   type Geometria,
@@ -138,15 +139,24 @@ describe("nombres de niveles y profundidades", () => {
     );
   });
 
-  test("con cuatro se numeran los del medio, porque en la planta no tienen nombre", () => {
-    const nombres = [1, 2, 3, 4].map((n) => nombreDeNivel(n, 4));
-    assert.equal(nombres[0], "piso");
-    assert.equal(nombres[3], "arriba");
-    assert.equal(new Set(nombres).size, 4, "ninguno se repite");
+  test("el nombre es la altura: el mismo nivel se llama igual en cualquier rack", () => {
+    assert.deepEqual(
+      [1, 2, 3, 4].map((n) => nombreDeNivel(n, 4)),
+      ["piso", "medio", "arriba", "arriba 2"],
+    );
+    assert.deepEqual(
+      [1, 2, 3, 4, 5].map((n) => nombreDeNivel(n, 5)),
+      ["piso", "medio", "arriba", "arriba 2", "arriba 3"],
+    );
+    for (const niveles of [3, 4, 5]) assert.equal(nombreDeNivel(3, niveles), "arriba");
   });
 
-  test("con dos niveles no hay medio", () => {
-    assert.deepEqual([1, 2].map((n) => nombreDeNivel(n, 2)), ["piso", "arriba"]);
+  test("con dos niveles, el segundo es el medio", () => {
+    assert.deepEqual([1, 2].map((n) => nombreDeNivel(n, 2)), ["piso", "medio"]);
+  });
+
+  test("del nombre se vuelve al número, para ordenar", () => {
+    for (let n = 1; n <= 7; n++) assert.equal(ordenDeNivel(nombreDeNivel(n)), n);
   });
 
   test("profundidad: el 1 es siempre el del pasillo", () => {
