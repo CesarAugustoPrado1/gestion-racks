@@ -1166,6 +1166,11 @@ export type FiltrosHistorial = {
   texto?: string | null;
   /** Los anulados NO se muestran salvo que se los pida. Ver abajo. */
   incluirAnulados?: boolean;
+  /**
+   * Con la segunda oculta (lib/segunda.ts): afuera todo movimiento de un bulto
+   * que era o quedó de segunda. No viene de la URL, la pone la pantalla.
+   */
+  sinSegunda?: boolean;
 };
 
 /**
@@ -1184,6 +1189,7 @@ function dondeHistorial(f: FiltrosHistorial) {
   const partes = [sql`1 = 1`];
 
   if (!f.incluirAnulados) partes.push(sql`m.anulado_en is null`);
+  if (f.sinSegunda) partes.push(sql`m.calidad <> 'segunda' and m.calidad_antes <> 'segunda'`);
   if (f.desde) partes.push(sql`m.creado_en >= ${f.desde}::date`);
   // `< hasta + 1 día` y no `<= hasta`: con timestamps, `<=` deja afuera todo lo
   // que pasó ese día después de medianoche, que es el día entero.

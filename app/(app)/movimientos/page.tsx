@@ -7,6 +7,8 @@ import {
 } from "@/lib/consultas";
 import { ETIQUETA_CALIDAD, ETIQUETA_MOVIMIENTO, ETIQUETA_PACKAGING, numero } from "@/lib/formato";
 import { Titulo } from "@/components/ui";
+import { distingueSegunda, sumaSegunda } from "@/lib/segunda";
+import { vistaSegunda } from "@/lib/segunda-servidor";
 import { Filtros } from "./filtros";
 
 export const metadata = { title: "Movimientos · Racks" };
@@ -53,7 +55,9 @@ export default async function PantallaMovimientos({
 }) {
   await requerirRol("admin", "auditor", "comercial", "control");
   const s = await searchParams;
-  const filtros = leerFiltros(s);
+  // Cómo se ve la segunda lo dicen los tildes del encabezado. Ver lib/segunda.ts.
+  const vista = await vistaSegunda();
+  const filtros = { ...leerFiltros(s), sinSegunda: !sumaSegunda(vista) };
   const pagina = Math.max(0, Number(s.pagina ?? 0) || 0);
 
   const [{ movimientos, total }, opciones] = await Promise.all([
@@ -120,13 +124,14 @@ export default async function PantallaMovimientos({
                       ? `${ETIQUETA_PACKAGING[m.packagingAntes]} → ${ETIQUETA_PACKAGING[m.packaging]}`
                       : ETIQUETA_PACKAGING[m.packaging]}
                   </span>
-                  {/* Un cambio de categoría se ve siempre, sea pasaje o corrección de control. */}
+                  {/* Un cambio de categoría se ve siempre, sea pasaje o corrección de control.
+                      La marca de 2da, solo si la segunda se ve discriminada. */}
                   {m.calidadAntes !== m.calidad ? (
                     <span className="chip bg-orange-100 text-orange-900">
                       {ETIQUETA_CALIDAD[m.calidadAntes]} → {ETIQUETA_CALIDAD[m.calidad]}
                     </span>
                   ) : (
-                    m.calidad === "segunda" && <span className="chip bg-orange-100 text-orange-900">2da</span>
+                    distingueSegunda(vista) && m.calidad === "segunda" && <span className="chip bg-orange-100 text-orange-900">2da</span>
                   )}
                   {m.esMerma && <span className="chip bg-red-700 text-white">merma</span>}
                   {m.anulado && (

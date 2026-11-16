@@ -71,6 +71,16 @@ export type Estadisticas = {
   porHora: Array<{ hora: number; movimientos: number }>;
 };
 
+/**
+ * Los movimientos que cuentan: los no anulados. Con la segunda OCULTA
+ * (lib/segunda.ts), además quedan afuera los de un bulto que era o quedó de
+ * segunda: para quien mira así, esos movimientos no existieron.
+ */
+const vigentes = (sinSegunda: boolean) =>
+  sinSegunda
+    ? sql`m.anulado_en is null and m.calidad <> 'segunda' and m.calidad_antes <> 'segunda'`
+    : sql`m.anulado_en is null`;
+
 /** Las dos puntas del intervalo, [desde, hasta), como parámetros de la consulta. */
 export const puntas = (inicio: Date, fin: Date) => ({
   desde: sql`${inicio.toISOString()}::timestamptz`,
@@ -89,7 +99,8 @@ export function completar(r: Rango, filas: Array<{ clave: string; valor: number 
   return tramosDe(r).map((t) => ({ clave: t.clave, etiqueta: t.etiqueta, valor: porClave.get(t.clave) ?? 0 }));
 }
 
-export async function estadisticas(r: Rango): Promise<Estadisticas> {
+export async function estadisticas(r: Rango, sinSegunda = false): Promise<Estadisticas> {
+  const vig = vigentes(sinSegunda);
   const { desde, hasta } = puntas(r.inicio, r.fin);
 
   const [
@@ -111,19 +122,19 @@ export async function estadisticas(r: Rango): Promise<Estadisticas> {
       select ${claveDe(sql.raw("m.creado_en"), r)} as clave, m.tipo,
              count(*)::int as valor
         from movimientos m
-       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}
+       where ${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta}
        group by 1, 2
     `) as unknown as Promise<Array<{ clave: string; tipo: string; valor: number }>>,
 
     db.execute(sql`
       select m.tipo, count(*)::int as n from movimientos m
-       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}
+       where ${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta}
        group by m.tipo
     `) as unknown as Promise<Array<{ tipo: string; n: number }>>,
 
     db.execute(sql`
       select count(*)::int as n from movimientos m
-       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}
+       where ${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta}
          and m.tipo = 'meter' and m.posicion_hasta_id is null
     `) as unknown as Promise<Array<{ n: number }>>,
 
@@ -146,7 +157,7 @@ export async function estadisticas(r: Rango): Promise<Estadisticas> {
         join movimiento_lineas ml on ml.movimiento_id = m.id
         join modelos mo on mo.id = ml.modelo_id
         join lineas l on l.id = mo.linea_id
-       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}
+       where ${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta}
        group by l.id
        order by l.orden
     `) as unknown as Promise<
@@ -172,7 +183,7 @@ export async function estadisticas(r: Rango): Promise<Estadisticas> {
         join movimiento_lineas ml on ml.movimiento_id = m.id
         join modelos mo on mo.id = ml.modelo_id
         join lineas l on l.id = mo.linea_id
-       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}
+       where ${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta}
          and m.tipo in ('meter', 'sacar')
        group by mo.id, l.id
        order by l.orden, egresaron desc, mo.nombre
@@ -186,7 +197,7 @@ export async function estadisticas(r: Rango): Promise<Estadisticas> {
              count(*)::int as movimientos
         from movimientos m
         left join motivos mt on mt.id = m.motivo_id
-       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta} and m.tipo = 'sacar'
+       where ${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta} and m.tipo = 'sacar'
        group by 1, 2
        order by 3 desc
     `) as unknown as Promise<Array<{ motivo: string; es_egreso: boolean; movimientos: number }>>,
@@ -206,7 +217,7 @@ export async function estadisticas(r: Rango): Promise<Estadisticas> {
            where ml.movimiento_id = m.id limit 1
         ) x on true
         join lineas l on l.id = x.linea_id
-       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}
+       where ${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta}
          and m.tipo = 'sacar' and m.cantidad = 0 and m.packaging <> 'objeto'
        limit 20000
     `) as unknown as Promise<Array<{ linea: string; orden: number; dias: number | string }>>,
@@ -226,7 +237,7 @@ export async function estadisticas(r: Rango): Promise<Estadisticas> {
     db.execute(sql`
       select coalesce(m.motivo_nombre, 'Sin motivo') as motivo, count(*)::int as ajustes
         from movimientos m
-       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta} and m.tipo = 'ajuste'
+       where ${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta} and m.tipo = 'ajuste'
        group by 1 order by 2 desc
     `) as unknown as Promise<Array<{ motivo: string; ajustes: number }>>,
 
@@ -237,7 +248,7 @@ export async function estadisticas(r: Rango): Promise<Estadisticas> {
              count(*) filter (where m.tipo = 'mover')::int as reubicaciones,
              count(*) filter (where m.tipo = 'ajuste')::int as ajustes
         from movimientos m
-       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}
+       where ${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta}
        group by 1
     `) as unknown as Promise<
       Array<{ usuario: string; ingresos: number; egresos: number; reubicaciones: number; ajustes: number }>
@@ -252,7 +263,7 @@ export async function estadisticas(r: Rango): Promise<Estadisticas> {
     db.execute(sql`
       select extract(hour from m.creado_en at time zone ${TZ})::int as hora, count(*)::int as movimientos
         from movimientos m
-       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}
+       where ${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta}
          -- La carga inicial no es trabajo del autoelevador: deformaría las horas pico.
          and m.tipo <> 'inicial'
        group by 1
@@ -390,8 +401,9 @@ export type EstadisticasDeCategoria = {
  * antes y el después del movimiento, no por notas.
  */
 export async function estadisticasDeCategoria(r: Rango): Promise<EstadisticasDeCategoria> {
+  const vig = vigentes(false);
   const { desde, hasta } = puntas(r.inicio, r.fin);
-  const cambio = sql`m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta} and m.calidad_antes <> m.calidad`;
+  const cambio = sql`${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta} and m.calidad_antes <> m.calidad`;
 
   const [conteos, porLinea, porUsuario, ultimos, stock] = await Promise.all([
     db.execute(sql`
@@ -501,7 +513,8 @@ export type Totales = {
   porLinea: Record<string, { unidadPlural: string; entraron: number; salieron: number; m2Entraron: number; m2Salieron: number }>;
 };
 
-export async function totales(inicio: Date, fin: Date): Promise<Totales> {
+export async function totales(inicio: Date, fin: Date, sinSegunda = false): Promise<Totales> {
+  const vig = vigentes(sinSegunda);
   const { desde, hasta } = puntas(inicio, fin);
   const [movs, chequeos, lineas] = await Promise.all([
     db.execute(sql`
@@ -509,7 +522,7 @@ export async function totales(inicio: Date, fin: Date): Promise<Totales> {
              count(*) filter (where m.tipo = 'meter' and m.packaging <> 'objeto')::int as entraron,
              count(*) filter (where m.tipo = 'sacar' and m.cantidad = 0 and m.packaging <> 'objeto')::int as salieron
         from movimientos m
-       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}
+       where ${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta}
        group by m.tipo
     `) as unknown as Promise<Array<{ tipo: string; n: number; entraron: number; salieron: number }>>,
     db.execute(sql`
@@ -526,7 +539,7 @@ export async function totales(inicio: Date, fin: Date): Promise<Totales> {
         join movimiento_lineas ml on ml.movimiento_id = m.id
         join modelos mo on mo.id = ml.modelo_id
         join lineas l on l.id = mo.linea_id
-       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}
+       where ${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta}
        group by l.id
     `) as unknown as Promise<
       Array<{ linea: string; unidad_plural: string; entraron: number; salieron: number; m2_entraron: number; m2_salieron: number }>
@@ -570,42 +583,52 @@ export type Evolucion = {
  * Los bultos se cuentan igual: +1 cuando un bulto pasa de 0 a algo (entra), −1
  * cuando pasa de algo a 0 (sale entero). Los objetos no cuentan: no son stock.
  */
-export async function evolucion(r: Rango): Promise<Evolucion> {
+export async function evolucion(r: Rango, sinSegunda = false): Promise<Evolucion> {
+  const vig = vigentes(false);
   const { desde, hasta } = puntas(r.inicio, r.fin);
-  const efectoBulto = sql`case when m.cantidad_antes = 0 and m.cantidad > 0 then 1
-                               when m.cantidad_antes > 0 and m.cantidad = 0 then -1 else 0 end`;
-  const efectoM2 = sql`(ml.cantidad - ml.cantidad_antes) * mo.m2_por_unidad`;
+  /**
+   * Con la segunda oculta, el stock que se sigue es el de PRIMERA, y acá no
+   * alcanza con saltear movimientos: un pasaje a segunda saca producto de ese
+   * stock aunque no se mueva nada. Así que cada movimiento cuenta por lo que
+   * deja y por lo que había, mirando solo lo que no es de segunda.
+   */
+  const habia = sinSegunda ? sql`(case when m.calidad_antes <> 'segunda' then 1 else 0 end)` : sql`1`;
+  const queda = sinSegunda ? sql`(case when m.calidad <> 'segunda' then 1 else 0 end)` : sql`1`;
+  const efecto = sql`(ml.cantidad * ${queda} - ml.cantidad_antes * ${habia})`;
+  const efectoBulto = sql`case when m.cantidad_antes * ${habia} = 0 and m.cantidad * ${queda} > 0 then 1
+                               when m.cantidad_antes * ${habia} > 0 and m.cantidad * ${queda} = 0 then -1 else 0 end`;
+  const efectoM2 = sql`${efecto} * mo.m2_por_unidad`;
   const [lineas, inicialLineas, netoLineas, inicialBultos, netoBultos, inicialM2, netoM2] = await Promise.all([
     db.execute(sql`select nombre, unidad_plural from lineas where activa order by orden`) as unknown as Promise<
       Array<{ nombre: string; unidad_plural: string }>
     >,
     db.execute(sql`
-      select l.nombre as linea, coalesce(sum(ml.cantidad - ml.cantidad_antes), 0)::int as q
+      select l.nombre as linea, coalesce(sum(${efecto}), 0)::int as q
         from movimientos m
         join movimiento_lineas ml on ml.movimiento_id = m.id
         join modelos mo on mo.id = ml.modelo_id
         join lineas l on l.id = mo.linea_id
-       where m.anulado_en is null and m.creado_en < ${desde}
+       where ${vig} and m.creado_en < ${desde}
        group by l.id
     `) as unknown as Promise<Array<{ linea: string; q: number }>>,
     db.execute(sql`
       select l.nombre as linea, ${claveDe(sql.raw("m.creado_en"), r)} as clave,
-             sum(ml.cantidad - ml.cantidad_antes)::int as valor
+             sum(${efecto})::int as valor
         from movimientos m
         join movimiento_lineas ml on ml.movimiento_id = m.id
         join modelos mo on mo.id = ml.modelo_id
         join lineas l on l.id = mo.linea_id
-       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}
+       where ${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta}
        group by 1, 2
     `) as unknown as Promise<Array<{ linea: string; clave: string; valor: number }>>,
     db.execute(sql`
       select coalesce(sum(${efectoBulto}), 0)::int as q from movimientos m
-       where m.anulado_en is null and m.creado_en < ${desde} and m.packaging <> 'objeto'
+       where ${vig} and m.creado_en < ${desde} and m.packaging <> 'objeto'
     `) as unknown as Promise<Array<{ q: number }>>,
     db.execute(sql`
       select ${claveDe(sql.raw("m.creado_en"), r)} as clave, sum(${efectoBulto})::int as valor
         from movimientos m
-       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}
+       where ${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta}
          and m.packaging <> 'objeto'
        group by 1
     `) as unknown as Promise<Array<{ clave: string; valor: number }>>,
@@ -614,14 +637,14 @@ export async function evolucion(r: Rango): Promise<Evolucion> {
         from movimientos m
         join movimiento_lineas ml on ml.movimiento_id = m.id
         join modelos mo on mo.id = ml.modelo_id
-       where m.anulado_en is null and m.creado_en < ${desde}
+       where ${vig} and m.creado_en < ${desde}
     `) as unknown as Promise<Array<{ q: number }>>,
     db.execute(sql`
       select ${claveDe(sql.raw("m.creado_en"), r)} as clave, coalesce(sum(${efectoM2}), 0)::float8 as valor
         from movimientos m
         join movimiento_lineas ml on ml.movimiento_id = m.id
         join modelos mo on mo.id = ml.modelo_id
-       where m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}
+       where ${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta}
        group by 1
     `) as unknown as Promise<Array<{ clave: string; valor: number }>>,
   ]);
@@ -697,10 +720,12 @@ export type EstadisticasDeMerma = {
 export async function estadisticasDeMerma(
   r: Rango,
   anterior: { inicio: Date; fin: Date },
+  sinSegunda = false,
 ): Promise<EstadisticasDeMerma> {
+  const vig = vigentes(sinSegunda);
   const { desde, hasta } = puntas(r.inicio, r.fin);
   const ant = puntas(anterior.inicio, anterior.fin);
-  const enRango = sql`m.anulado_en is null and m.creado_en >= ${desde} and m.creado_en < ${hasta}`;
+  const enRango = sql`${vig} and m.creado_en >= ${desde} and m.creado_en < ${hasta}`;
   const perdido = sql`(ml.cantidad_antes - ml.cantidad)`;
   const m2Perdido = sql`(ml.cantidad_antes - ml.cantidad) * mo.m2_por_unidad`;
   const lineasDe = sql`
@@ -747,7 +772,7 @@ export async function estadisticasDeMerma(
       db.execute(sql`
         select count(distinct m.id)::int as registros, coalesce(sum(${m2Perdido}), 0)::float8 as m2
           ${lineasDe}
-         where m.anulado_en is null and m.creado_en >= ${ant.desde} and m.creado_en < ${ant.hasta} and m.es_merma
+         where ${vig} and m.creado_en >= ${ant.desde} and m.creado_en < ${ant.hasta} and m.es_merma
       `) as unknown as Promise<Array<{ registros: number; m2: number }>>,
       db.execute(sql`
         select coalesce(sum(${m2Perdido}), 0)::float8 as m2

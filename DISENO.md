@@ -425,10 +425,27 @@ cambiarla, y no son lo mismo:
   por eso cuenta como diferencia en el chequeo y en la precisión, igual que una
   cantidad mal cargada.
 
-El stock de segunda está incluido en el total y se dice aparte en Stock. En
-Movimientos se filtra con *Todo cambio de categoría* (pasajes y correcciones), y
-Estadísticas tiene la sección *Primera y segunda*: cuántos pasajes y
-correcciones, de quién, lo que pasó a segunda por línea y la lista uno por uno.
+**Cómo se ve la segunda lo elige quien mira**, con dos tildes en el encabezado
+(`lib/segunda.ts`):
+
+- **Ocultar**: la segunda no existe. No suma en ningún total ni aparece en
+  ninguna lista: ni sus bultos, ni sus movimientos.
+- **Mostrar → Junto**: es stock como cualquier otro. Suma y no se la distingue.
+- **Mostrar → Discriminado** (así arranca): suma, y se dice aparte cuánto es de
+  segunda — en Stock, en el Resumen, la marca *2da* en Movimientos y la sección
+  *Primera y segunda* de Estadísticas (pasajes, correcciones, de quién).
+
+Es una forma de mirar, no un dato: se guarda en una cookie del navegador, cada
+uno la deja como le sirve. Vale en **Resumen, Stock, Estadísticas y Movimientos**
+(y su CSV), y la franja solo aparece ahí. En las pantallas donde se opera
+—Mover, Control, Racks, el plano— manda lo que hay en el rack: un palet de
+segunda oculto sería un hueco que parece libre y no lo está. Por lo mismo, con
+la segunda oculta el *lugar* del Resumen sigue contando esas posiciones como
+ocupadas.
+
+Con la segunda oculta, el Resumen de un día pasado se arma siempre del
+historial y no de la foto guardada (que trae la segunda sumada), y la evolución
+del stock de Estadísticas sigue el de primera: un pasaje a segunda lo baja.
 
 ### 3.13 Merma
 

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { requerirRol } from "@/lib/auth";
+import { distingueSegunda, sumaSegunda } from "@/lib/segunda";
+import { vistaSegunda } from "@/lib/segunda-servidor";
 import { estadisticas, estadisticasDeCategoria, estadisticasDeMerma, evolucion, totales } from "@/lib/estadisticas";
 import { dias as textoDias, porcentaje } from "@/lib/estadisticas-calculo";
 import { Barras, Columnas, Seccion, Tile } from "@/components/graficos";
@@ -36,13 +38,16 @@ export default async function PantallaEstadisticas({
   const ahora = new Date();
   const rango = leerRango(await searchParams, ahora);
   const anterior = rangoAnterior(rango);
+  // Cómo se ve la segunda lo dicen los tildes del encabezado. Ver lib/segunda.ts.
+  const vista = await vistaSegunda();
+  const sinSegunda = !sumaSegunda(vista);
   const [e, cat, tot, ant, evo, merma] = await Promise.all([
-    estadisticas(rango),
+    estadisticas(rango, sinSegunda),
     estadisticasDeCategoria(rango),
-    totales(rango.inicio, rango.fin),
-    totales(anterior.inicio, anterior.fin),
-    evolucion(rango),
-    estadisticasDeMerma(rango, anterior),
+    totales(rango.inicio, rango.fin, sinSegunda),
+    totales(anterior.inicio, anterior.fin, sinSegunda),
+    evolucion(rango, sinSegunda),
+    estadisticasDeMerma(rango, anterior, sinSegunda),
   ]);
 
   const tipos = ["meter", "sacar", "mover", "ajuste"] as const;
@@ -567,112 +572,115 @@ export default async function PantallaEstadisticas({
         )}
       </Seccion>
 
-      <Seccion
-        titulo="Primera y segunda"
-        detalle="Los cambios de categoría del período. Un pasaje es una decisión (se detectó después que era de la otra); una corrección de control es un error de registro."
-      >
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Tile etiqueta="Pasajes a segunda" valor={numero(cat.pasajes.aSegunda)} />
-          <Tile etiqueta="Pasajes a primera" valor={numero(cat.pasajes.aPrimera)} />
-          <Tile
-            etiqueta="Correcciones de control"
-            valor={numero(cat.correcciones.aSegunda + cat.correcciones.aPrimera)}
-            detalle={`${numero(cat.correcciones.aSegunda)} a 2da · ${numero(cat.correcciones.aPrimera)} a 1ra`}
-            tono={cat.correcciones.aSegunda + cat.correcciones.aPrimera > 0 ? "atencion" : "normal"}
-          />
-          <Tile
-            etiqueta="Hoy de segunda"
-            valor={numero(cat.stockSegunda.reduce((s2, l) => s2 + l.bultos, 0))}
-            detalle={
-              cat.stockSegunda.length === 0
-                ? "nada"
-                : `${cat.stockSegunda.map((l) => `${numero(l.unidades)} ${l.unidadPlural}`).join(" + ")} · ${m2(
-                    cat.stockSegunda.reduce((s2, l) => s2 + l.m2, 0),
-                  )}`
-            }
-          />
-        </div>
-
-        {cat.aSegundaPorLinea.length > 0 && (
-          <div className="mt-2">
-            <p className="mb-1 text-xs font-semibold text-slate-500">Lo que pasó a segunda en el período</p>
-            <Barras
-              filas={cat.aSegundaPorLinea.map((l) => ({
-                clave: l.linea,
-                etiqueta: l.linea,
-                valor: l.bultos,
-                texto: `${numero(l.unidades)} ${l.unidadPlural}${l.m2 ? ` · ${m2(l.m2)}` : ""} · ${l.bultos} bulto${l.bultos === 1 ? "" : "s"}`,
-              }))}
+      {/* Solo con la segunda DISCRIMINADA: oculta no existe, y junta no se distingue. */}
+      {distingueSegunda(vista) && (
+        <Seccion
+          titulo="Primera y segunda"
+          detalle="Los cambios de categoría del período. Un pasaje es una decisión (se detectó después que era de la otra); una corrección de control es un error de registro."
+        >
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Tile etiqueta="Pasajes a segunda" valor={numero(cat.pasajes.aSegunda)} />
+            <Tile etiqueta="Pasajes a primera" valor={numero(cat.pasajes.aPrimera)} />
+            <Tile
+              etiqueta="Correcciones de control"
+              valor={numero(cat.correcciones.aSegunda + cat.correcciones.aPrimera)}
+              detalle={`${numero(cat.correcciones.aSegunda)} a 2da · ${numero(cat.correcciones.aPrimera)} a 1ra`}
+              tono={cat.correcciones.aSegunda + cat.correcciones.aPrimera > 0 ? "atencion" : "normal"}
+            />
+            <Tile
+              etiqueta="Hoy de segunda"
+              valor={numero(cat.stockSegunda.reduce((s2, l) => s2 + l.bultos, 0))}
+              detalle={
+                cat.stockSegunda.length === 0
+                  ? "nada"
+                  : `${cat.stockSegunda.map((l) => `${numero(l.unidades)} ${l.unidadPlural}`).join(" + ")} · ${m2(
+                      cat.stockSegunda.reduce((s2, l) => s2 + l.m2, 0),
+                    )}`
+              }
             />
           </div>
-        )}
 
-        {cat.porUsuario.length > 0 && (
-          <div className="tarjeta mt-2 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-slate-500">
-                <tr>
-                  <th className="px-4 py-2 font-medium">Persona</th>
-                  <th className="px-2 py-2 text-right font-medium">Pasajes</th>
-                  <th className="px-4 py-2 text-right font-medium">Correcciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {cat.porUsuario.map((u) => (
-                  <tr key={u.usuario}>
-                    <td className="px-4 py-2 font-semibold text-slate-900">{u.usuario}</td>
-                    <td className="cifra px-2 py-2 text-right">{numero(u.pasajes)}</td>
-                    <td className="cifra px-4 py-2 text-right">{numero(u.correcciones)}</td>
+          {cat.aSegundaPorLinea.length > 0 && (
+            <div className="mt-2">
+              <p className="mb-1 text-xs font-semibold text-slate-500">Lo que pasó a segunda en el período</p>
+              <Barras
+                filas={cat.aSegundaPorLinea.map((l) => ({
+                  clave: l.linea,
+                  etiqueta: l.linea,
+                  valor: l.bultos,
+                  texto: `${numero(l.unidades)} ${l.unidadPlural}${l.m2 ? ` · ${m2(l.m2)}` : ""} · ${l.bultos} bulto${l.bultos === 1 ? "" : "s"}`,
+                }))}
+              />
+            </div>
+          )}
+
+          {cat.porUsuario.length > 0 && (
+            <div className="tarjeta mt-2 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-xs text-slate-500">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">Persona</th>
+                    <th className="px-2 py-2 text-right font-medium">Pasajes</th>
+                    <th className="px-4 py-2 text-right font-medium">Correcciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {cat.porUsuario.map((u) => (
+                    <tr key={u.usuario}>
+                      <td className="px-4 py-2 font-semibold text-slate-900">{u.usuario}</td>
+                      <td className="cifra px-2 py-2 text-right">{numero(u.pasajes)}</td>
+                      <td className="cifra px-4 py-2 text-right">{numero(u.correcciones)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-        {cat.ultimos.length === 0 ? (
-          <p className="tarjeta mt-2 p-4 text-sm text-slate-500">No hubo cambios de categoría en este período.</p>
-        ) : (
-          <div className="mt-2">
-            <p className="mb-1 text-xs font-semibold text-slate-500">Uno por uno</p>
-            <ul className="tarjeta divide-y divide-slate-100">
-              {cat.ultimos.map((c, i) => (
-                <li key={i} className="px-4 py-2.5 text-sm">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="codigo text-slate-900">{c.bultoCodigo}</span>
-                    <span className="chip bg-orange-100 text-orange-900">
-                      {c.desde} → {c.hasta}
-                    </span>
-                    <span className={`chip ${c.tipo === "ajuste" ? "bg-dudoso-suave text-yellow-800" : "bg-slate-100 text-slate-600"}`}>
-                      {c.tipo === "ajuste" ? "corrección de control" : "pasaje"}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-slate-600">{c.contenido}</p>
-                  {c.porQue && <p className="text-xs text-slate-500 italic">{c.porQue}</p>}
-                  <p className="text-xs text-slate-400">
-                    {c.usuario} ·{" "}
-                    {c.creadoEn.toLocaleString("es-AR", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      timeZone: "America/Argentina/Buenos_Aires",
-                    })}
-                  </p>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-1 text-xs text-slate-500">
-              El detalle completo, filtrable y para Excel:{" "}
-              <Link href="/movimientos?tipo=cambio_categoria" className="font-semibold underline">
-                Movimientos → todo cambio de categoría
-              </Link>
-              .
-            </p>
-          </div>
-        )}
-      </Seccion>
+          {cat.ultimos.length === 0 ? (
+            <p className="tarjeta mt-2 p-4 text-sm text-slate-500">No hubo cambios de categoría en este período.</p>
+          ) : (
+            <div className="mt-2">
+              <p className="mb-1 text-xs font-semibold text-slate-500">Uno por uno</p>
+              <ul className="tarjeta divide-y divide-slate-100">
+                {cat.ultimos.map((c, i) => (
+                  <li key={i} className="px-4 py-2.5 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="codigo text-slate-900">{c.bultoCodigo}</span>
+                      <span className="chip bg-orange-100 text-orange-900">
+                        {c.desde} → {c.hasta}
+                      </span>
+                      <span className={`chip ${c.tipo === "ajuste" ? "bg-dudoso-suave text-yellow-800" : "bg-slate-100 text-slate-600"}`}>
+                        {c.tipo === "ajuste" ? "corrección de control" : "pasaje"}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-slate-600">{c.contenido}</p>
+                    {c.porQue && <p className="text-xs text-slate-500 italic">{c.porQue}</p>}
+                    <p className="text-xs text-slate-400">
+                      {c.usuario} ·{" "}
+                      {c.creadoEn.toLocaleString("es-AR", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        timeZone: "America/Argentina/Buenos_Aires",
+                      })}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1 text-xs text-slate-500">
+                El detalle completo, filtrable y para Excel:{" "}
+                <Link href="/movimientos?tipo=cambio_categoria" className="font-semibold underline">
+                  Movimientos → todo cambio de categoría
+                </Link>
+                .
+              </p>
+            </div>
+          )}
+        </Seccion>
+      )}
 
       <Seccion titulo="A qué hora se trabaja" detalle="Movimientos por hora del día, en el período.">
         <Columnas

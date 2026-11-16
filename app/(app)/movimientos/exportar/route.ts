@@ -17,6 +17,8 @@
  * la autorización de la página, se puede pedir la URL directo.
  */
 import { requerirRol } from "@/lib/auth";
+import { sumaSegunda } from "@/lib/segunda";
+import { vistaSegunda } from "@/lib/segunda-servidor";
 import { historialPlano } from "@/lib/consultas";
 import { leerFiltros } from "../page";
 
@@ -32,8 +34,10 @@ export async function GET(pedido: Request) {
   await requerirRol("admin", "auditor", "comercial", "control");
 
   const params = new URL(pedido.url).searchParams;
-  const filas = await historialPlano(
-    leerFiltros({
+  // El CSV sale con lo mismo que se ve: con la segunda oculta, sin sus movimientos.
+  const sinSegunda = !sumaSegunda(await vistaSegunda());
+  const filas = await historialPlano({
+    ...leerFiltros({
       desde: params.get("desde") ?? undefined,
       hasta: params.get("hasta") ?? undefined,
       tipo: params.get("tipo") ?? undefined,
@@ -42,7 +46,8 @@ export async function GET(pedido: Request) {
       q: params.get("q") ?? undefined,
       anulados: params.get("anulados") ?? undefined,
     }),
-  );
+    sinSegunda,
+  });
 
   // Las columnas salen de la primera fila para que agregar un campo en
   // `historialPlano` alcance. Sin filas igual mandamos el encabezado: un CSV
