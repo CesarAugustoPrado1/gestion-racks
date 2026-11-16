@@ -117,21 +117,32 @@ Si mañana aparece un cuarto packaging, es un cambio de código, y está bien qu
 La cantidad de un palet **depende del modelo y del packaging**, no de la línea:
 un optimizado de Laja no lleva las mismas placas que un optimizado de Patagónica,
 y los cinco palets de Ekos llevan todos lo mismo. Eso es una tabla `normas`
-`(modelo, packaging) → cantidad`, con dos reglas:
+`(modelo, packaging) → cantidad`, con estas reglas:
 
 - **Sin fila = sin norma.** Es el `null` con significado propio de secaderos
   (§4.2b): el sistema no opina sobre la cantidad de un suelto, y **cero seguiría
   siendo inválido**.
-- **La norma es el valor por defecto, no una validación.** El bulto guarda su
-  **cantidad real**. Las excepciones existen y hay que poder registrarlas; lo que
-  no puede pasar es que se registren sin darse cuenta: cargar un palet fuera de
-  norma **pide confirmación con el número grande** y exige nota, igual que la
-  carga incompleta en el carrusel.
-
-Fuera de norma **se calcula, no se carga** (mismo criterio que el desvío del plan
-en secaderos): es `cantidad ≠ norma_de_hoy`. Se compara contra la norma vigente y
-no contra un snapshot, porque la pregunta que importa es comercial y es del
-presente: *¿este palet es despachable como estándar hoy?*
+- **La cantidad normalizada es fija.** Un palet o un optimizado lleva
+  exactamente la cantidad configurada para su modelo. El operario no la
+  escribe —la pantalla la muestra sin campo— y solo la cambia el administrador
+  desde Administración → Modelos.
+- **Lo que no tiene la cantidad normalizada es suelto. Siempre.** No existe el
+  "palet fuera de norma": un palet de 48 al que se le cuentan 43 es un suelto
+  de 43, y así queda cuando sale una parte o cuando control corrige la
+  cantidad. Un modelo sin cantidad configurada para un packaging no se puede
+  cargar en ese packaging.
+- **Al revés no vale.** Un suelto con la misma cantidad que un palet sigue
+  siendo suelto: un palet conlleva un armado, y 300 placas sueltas no son un
+  palet de 300. El packaging lo dice el operario; nunca se deduce de la
+  cantidad.
+- **Se exige en un solo lugar**: `aplicarMovimiento`, por donde pasa toda
+  escritura. Solo cuando el movimiento cambia lo que el bulto lleva o su
+  packaging, así los bultos anteriores a la regla se pueden seguir moviendo.
+- **Cambiar la cantidad de un modelo** deja a sus palets ya cargados con una
+  cantidad que no es la normalizada, así que pasan a suelto en la misma
+  transacción (un `ajuste`, con su cantidad y su lugar). El admin lo confirma
+  antes, viendo cuántos son. Lo cargado antes de la regla se corrige igual,
+  desde la misma pantalla.
 
 ### 3.4 Grupos, unidades y posiciones
 

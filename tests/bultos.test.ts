@@ -80,3 +80,25 @@ describe("total y norma", () => {
     assert.equal(fueraDeNorma(49, 48), true);
   });
 });
+
+describe("la cantidad normalizada es fija", () => {
+  const normas = new Map([[1, 48]]);
+  const norma = (id: number) => normas.get(id);
+
+  test("un palet con su cantidad pasa; con otra, es suelto", async () => {
+    const { validarNormalizado } = await import("../lib/bultos");
+    assert.equal(validarNormalizado("palet", [laja], norma), null);
+    assert.match(validarNormalizado("palet", [{ modeloId: 1, cantidad: 43 }], norma) ?? "", /lleva 48/);
+  });
+
+  test("sin cantidad configurada no se puede cargar como palet", async () => {
+    const { validarNormalizado } = await import("../lib/bultos");
+    assert.match(validarNormalizado("palet", [patagonica], norma) ?? "", /no tiene cantidad normalizada/);
+  });
+
+  test("al suelto no se le exige nada, aunque coincida con la de un palet", async () => {
+    const { validarNormalizado } = await import("../lib/bultos");
+    assert.equal(validarNormalizado("suelto", [laja], norma), null);
+    assert.equal(validarNormalizado("suelto", [{ modeloId: 1, cantidad: 7 }], norma), null);
+  });
+});

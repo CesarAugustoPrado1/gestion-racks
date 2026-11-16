@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "../db";
 import { autorizar } from "../auth";
 import { bultos, chequeos, posiciones, type Packaging } from "../db/schema";
+import { esNormalizado } from "../bultos";
 import {
   aplicarMovimiento,
   bloquearBulto,
@@ -17,6 +18,7 @@ import {
   exigirLibre,
   exigirMotivo,
   exigirNotaSiHaceFalta,
+  normaDe,
   rechazarMerma,
   type Tx,
 } from "./motor";
@@ -163,10 +165,11 @@ const esquemaCantidades = z.object({
  * Sirve para tres errores de registro, que se pueden dar juntos:
  *
  * - OTRA CANTIDAD: el bulto está, con más o menos.
- * - OTRO PACKAGING: dice palet y es suelto, o es un optimizado. Solo si control
- *   lo elige: un palet con 43 en vez de 48 sigue siendo el palet que alguien
- *   armó, y queda fuera de norma, que es lo que es. Pasarlo solo a suelto sería
- *   afirmar que alguien lo desarmó.
+ * - OTRO PACKAGING: dice palet y es suelto, o es un optimizado.
+ * - Y LA REGLA DE LA CANTIDAD NORMALIZADA, que une a las dos: un palet lleva
+ *   exactamente su cantidad. Si control cuenta 43 en un palet de 48, lo que hay
+ *   es un SUELTO de 43, y así queda aunque nadie haya tocado el packaging. Si
+ *   control elige palet a propósito, la cantidad tiene que ser la del palet.
  * - OTRO PRODUCTO: el bulto está, pero es de otro modelo. Se corrige el mismo
  *   bulto -mismo código, mismo lugar- en vez de darlo por perdido y registrar
  *   uno nuevo, que inventaría un faltante y un sobrante que no existen.
@@ -203,7 +206,18 @@ export async function corregirCantidades(
           "Si no quedó nada en el bulto, usá «No está acá» en vez de poner todo en cero.",
         );
       }
-      const packaging = datos.packaging ?? bulto.packaging;
+      /**
+       * Elegido a propósito, el packaging se exige tal cual: `aplicarMovimiento`
+       * rechaza un palet con otra cantidad. Sin elegir, el bulto conserva el
+       * suyo salvo que lo que se contó ya no sea su cantidad normalizada: ahí
+       * pasa a suelto solo, igual que cuando sale una parte.
+       */
+      let packaging: Packaging = datos.packaging ?? bulto.packaging;
+      if (datos.packaging == null && esNormalizado(packaging)) {
+        const norma =
+          contenidoDespues.length === 1 ? await normaDe(tx, contenidoDespues[0].modeloId, packaging) : null;
+        if (norma == null || norma !== contenidoDespues[0].cantidad) packaging = "suelto";
+      }
       exigirComposicion(packaging, contenidoDespues);
 
       const antes = new Map(bulto.contenido.map((c) => [c.modeloId, c.cantidad]));
@@ -215,10 +229,11 @@ export async function corregirCantidades(
       if (mismosModelos && !otroPackaging && contenidoDespues.every((c) => antes.get(c.modeloId) === c.cantidad)) {
         fallar("No cambió nada. Si está todo bien, usá «OK».");
       }
-      // La merma es producto que se perdió del MISMO bulto: solo puede bajar la cantidad.
-      if (motivo.esMerma && (diferencia >= 0 || !mismosModelos || otroPackaging)) {
+      // La merma es producto que se perdió del MISMO bulto: solo puede bajar la
+      // cantidad. Que por eso el palet pase a suelto es la regla, no otro error.
+      if (motivo.esMerma && (diferencia >= 0 || !mismosModelos || (otroPackaging && packaging !== "suelto"))) {
         fallar(
-          `«${motivo.nombre}» es merma: solo se usa cuando hay MENOS del mismo producto, en el mismo packaging.`,
+          `«${motivo.nombre}» es merma: solo se usa cuando hay MENOS del mismo producto.`,
         );
       }
 
@@ -232,6 +247,11 @@ export async function corregirCantidades(
        * entra, se corrige igual y se avisa. El dato a revisar es la medida.
        */
       const avisos: string[] = [];
+      if (datos.packaging == null && otroPackaging) {
+        avisos.push(
+          `Ya no tiene la cantidad de un ${bulto.packaging}: ${bulto.codigo} quedó como suelto.`,
+        );
+      }
       const [tapaba] = (await tx.execute(sql`
         select id, codigo from posiciones where bloqueada_por_bulto_id = ${bulto.id}
       `)) as unknown as Array<{ id: number; codigo: string }>;

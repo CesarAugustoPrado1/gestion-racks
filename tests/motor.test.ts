@@ -16,6 +16,7 @@ import {
   exigirLibre,
   exigirUsable,
   exigirGrupoVacio,
+  pasarASueltoLoNoNormalizado,
   type Tx,
 } from "../lib/acciones/motor";
 import * as schema from "../lib/db/schema";
@@ -1474,3 +1475,79 @@ describe("sacar el del fondo aunque esté tapado", { skip: !hay && "sin base loc
   });
 });
 
+
+describe("cantidades normalizadas", { skip: !hay && "sin base local" }, () => {
+  const packagingDe = async (id: number) =>
+    ((await base.db.execute(sql`select packaging, cantidad from bultos where id = ${id}`)) as unknown as Array<{
+      packaging: string;
+      cantidad: number;
+    }>)[0];
+
+  test("un palet con otra cantidad no se puede cargar", async () => {
+    await assert.rejects(
+      base.db.transaction((tx) => meter(tx as Tx, null, "palet", [{ modeloId: datos.laja.id, cantidad: 43 }])),
+      /lleva 48.*va como suelto/s,
+    );
+    await exigirQueCuadre("después de rechazar un palet de 43");
+  });
+
+  test("sin cantidad configurada, ese modelo no se carga como optimizado", async () => {
+    await assert.rejects(
+      base.db.transaction((tx) => meter(tx as Tx, null, "optimizado", [{ modeloId: datos.patagonica.id, cantidad: 50 }])),
+      /no tiene cantidad normalizada de optimizado/,
+    );
+  });
+
+  test("un suelto con la cantidad de un palet sigue siendo suelto", async () => {
+    let id = 0;
+    await base.db.transaction(async (tx) => {
+      id = (await meter(tx as Tx, null, "suelto", [{ modeloId: datos.laja.id, cantidad: 48 }])).id;
+    });
+    assert.deepEqual({ ...(await packagingDe(id)) }, { packaging: "suelto", cantidad: 48 });
+  });
+
+  test("al cambiar la norma, los palets que quedan con otra cantidad pasan a suelto y los demás no", async () => {
+    const ids = { palet: 0, optimizado: 0 };
+    await base.db.transaction(async (tx) => {
+      ids.palet = (await meter(tx as Tx, null, "palet", [{ modeloId: datos.laja.id, cantidad: 48 }])).id;
+      ids.optimizado = (await meter(tx as Tx, null, "optimizado", [{ modeloId: datos.laja.id, cantidad: 60 }])).id;
+    });
+    await base.db.execute(sql`update normas set cantidad = 50 where modelo_id = ${datos.laja.id} and packaging = 'palet'`);
+    try {
+      // Con la regla vieja a medio aplicar, el bulto se puede mover igual: no cambia lo que lleva.
+      await base.db.transaction(async (tx) => {
+        const b = await bloquearBulto(tx as Tx, ids.palet);
+        await aplicarMovimiento(tx as Tx, {
+          tipo: "mover",
+          bulto: b,
+          contenidoDespues: b.contenido.map((c) => ({ modeloId: c.modeloId, cantidad: c.cantidad })),
+          packagingDespues: b.packaging,
+          estadoDespues: b.estado,
+          posicionDestino: null,
+          usuario: { id: datos.usuario.id, nombre: datos.usuario.nombre },
+        });
+      });
+
+      let hechos: Array<{ codigo: string }> = [];
+      await base.db.transaction(async (tx) => {
+        hechos = await pasarASueltoLoNoNormalizado(tx as Tx, {
+          usuario: { id: datos.usuario.id, nombre: datos.usuario.nombre },
+          modeloId: datos.laja.id,
+          nota: "prueba",
+        });
+      });
+      assert.ok(hechos.length >= 1);
+      assert.deepEqual({ ...(await packagingDe(ids.palet)) }, { packaging: "suelto", cantidad: 48 });
+      assert.deepEqual({ ...(await packagingDe(ids.optimizado)) }, { packaging: "optimizado", cantidad: 60 });
+      const [m] = (await base.db.execute(sql`
+        select tipo, packaging_antes, packaging, cantidad_antes, cantidad from movimientos
+         where bulto_id = ${ids.palet} order by id desc limit 1
+      `)) as unknown as Array<Record<string, unknown>>;
+      assert.deepEqual({ ...m }, { tipo: "ajuste", packaging_antes: "palet", packaging: "suelto", cantidad_antes: 48, cantidad: 48 });
+      await exigirQueCuadre("después de pasar a suelto");
+    } finally {
+      // Los palets de 48 de los otros tests ya pasaron a suelto o salieron; la norma vuelve a su valor.
+      await base.db.execute(sql`update normas set cantidad = 48 where modelo_id = ${datos.laja.id} and packaging = 'palet'`);
+    }
+  });
+});

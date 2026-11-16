@@ -1661,3 +1661,38 @@ export async function cargaDelGrupo(grupoId: number): Promise<CargaDelGrupo | nu
     })),
   };
 }
+
+/**
+ * Palets y optimizados vivos con una cantidad que no es la normalizada. Con la
+ * regla en el motor no se pueden crear más: son los que se cargaron antes. El
+ * mismo criterio que `pasarASueltoLoNoNormalizado`, que es quien los corrige.
+ */
+export async function bultosNoNormalizados() {
+  const filas = (await db.execute(sql`
+    select b.id, b.codigo, b.packaging, b.cantidad, n.cantidad as norma,
+           (select string_agg(m.nombre, ' + ' order by m.nombre)
+              from bulto_contenido c2 join modelos m on m.id = c2.modelo_id
+             where c2.bulto_id = b.id) as modelo,
+           case when p.id is null then null else g.codigo || '-' || p.codigo end as posicion
+      from bultos b
+      join lateral (
+        select min(c.modelo_id) as modelo_id, count(*)::int as modelos from bulto_contenido c where c.bulto_id = b.id
+      ) c on true
+      left join normas n on n.modelo_id = c.modelo_id and n.packaging = b.packaging
+      left join posiciones p on p.id = b.posicion_id
+      left join grupos g on g.id = p.grupo_id
+     where b.estado in ('ubicado', 'sin_ubicar')
+       and b.packaging in ('palet', 'optimizado')
+       and (c.modelos <> 1 or n.cantidad is null or n.cantidad <> b.cantidad)
+     order by b.id
+  `)) as unknown as Array<{
+    id: number;
+    codigo: string;
+    packaging: string;
+    cantidad: number;
+    norma: number | null;
+    modelo: string | null;
+    posicion: string | null;
+  }>;
+  return filas.map((f) => ({ ...f, modelo: f.modelo ?? "?" }));
+}

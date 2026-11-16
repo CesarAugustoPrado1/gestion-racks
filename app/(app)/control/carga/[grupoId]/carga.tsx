@@ -15,6 +15,8 @@ import { Aviso } from "@/components/ui";
 import { SelectorPosicion } from "@/components/selector-posicion";
 import { ElegirModelo } from "@/components/elegir-modelo";
 import { validarComposicion, validarDescripcion } from "@/lib/bultos";
+import { CampoCantidad } from "@/components/cantidad";
+import { esNormalizado, validarNormalizado } from "@/lib/bultos";
 import { ETIQUETA_PACKAGING, PACKAGINGS } from "@/lib/formato";
 import type { ModeloParaCargar, PosicionDeCarga } from "@/lib/consultas";
 import type { Calidad, Packaging } from "@/lib/db/schema";
@@ -325,12 +327,26 @@ function Formulario({
   const contenido = lineas
     .map((l) => ({ modeloId: l.modeloId, cantidad: Number(l.cantidad) }))
     .filter((l) => l.cantidad > 0);
-  const faltaCantidad = !objeto && lineas.some((l) => !(Number(l.cantidad) > 0));
-  const problema = objeto ? null : contenido.length > 0 ? validarComposicion(packaging, contenido) : null;
+  const faltaCantidad = !objeto && !esNormalizado(packaging) && lineas.some((l) => !(Number(l.cantidad) > 0));
+  /**
+   * Un palet o un optimizado lleva su cantidad normalizada, fija: lo que tenga
+   * otra cantidad se carga como suelto. La misma regla la aplica el servidor.
+   */
+  const problema = objeto
+    ? null
+    : ((contenido.length > 0 ? validarComposicion(packaging, contenido) : null) ??
+      validarNormalizado(
+        packaging,
+        lineas.map((l) => ({ modeloId: l.modeloId, cantidad: Number(l.cantidad) || 0 })),
+        (id) => modelos.find((m) => m.id === id)?.normas[packaging],
+        (id) => modelos.find((m) => m.id === id)?.nombre ?? "ese modelo",
+      ));
   const fechaValida = /^\d{4}-\d{2}-\d{2}$/.test(fecha) && fecha <= hoy();
   const completo =
     fechaValida &&
-    (objeto ? validarDescripcion(descripcion) == null : contenido.length > 0 && !faltaCantidad && !problema);
+    (objeto
+      ? validarDescripcion(descripcion) == null
+      : lineas.length > 0 && contenido.length === lineas.length && !faltaCantidad && !problema);
 
   return (
     <div className="tarjeta space-y-4 p-5">
@@ -415,20 +431,15 @@ function Formulario({
                   return (
                     <li key={l.modeloId} className="flex items-center gap-2">
                       <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{m.nombre}</span>
-                      <input
-                        className={`campo w-24 text-right ${Number(l.cantidad) > 0 ? "" : "ring-2 ring-amber-400"}`}
-                        inputMode="numeric"
-                        placeholder="Cant."
-                        autoFocus={recienTocado === l.modeloId && l.cantidad === ""}
-                        value={l.cantidad}
-                        onChange={(e) =>
-                          setLineas((ls) =>
-                            ls.map((x) =>
-                              x.modeloId === l.modeloId ? { ...x, cantidad: e.target.value.replace(/\D/g, "") } : x,
-                            ),
-                          )
+                      <CampoCantidad
+                        packaging={packaging}
+                        norma={m.normas[packaging]}
+                        valor={l.cantidad}
+                        nombre={m.nombre}
+                        enfocar={recienTocado === l.modeloId && l.cantidad === ""}
+                        onCambio={(v) =>
+                          setLineas((ls) => ls.map((x) => (x.modeloId === l.modeloId ? { ...x, cantidad: v } : x)))
                         }
-                        aria-label={`Cantidad de ${m.nombre}`}
                       />
                       <button
                         type="button"
@@ -447,9 +458,7 @@ function Formulario({
 
           {faltaCantidad && (
             <Aviso tono="info">
-              {packaging === "suelto"
-                ? "Suelto no tiene cantidad fija: escribí cuántas hay de cada modelo."
-                : "Escribí la cantidad de cada modelo."}
+              Suelto no tiene cantidad fija: escribí cuántas hay de cada modelo.
             </Aviso>
           )}
           {problema && <Aviso tono="info">{problema}</Aviso>}

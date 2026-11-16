@@ -2,7 +2,7 @@ import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { requerirRol } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { empresas as leerEmpresas } from "@/lib/consultas";
+import { bultosNoNormalizados, empresas as leerEmpresas } from "@/lib/consultas";
 import { Titulo } from "@/components/ui";
 import { Modelos } from "./lista";
 
@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 export default async function PantallaModelos() {
   await requerirRol("admin");
 
-  const [modelos, lineas, empresas] = await Promise.all([
+  const [noNormalizados, modelos, lineas, empresas] = await Promise.all([
+    bultosNoNormalizados(),
     db.execute(sql`
       select m.id, m.nombre, m.activo, m.linea_id, l.nombre as linea_nombre,
              m.empresa_id, e.nombre as empresa_nombre,
@@ -87,6 +88,7 @@ export default async function PantallaModelos() {
           }))}
           lineas={lineas}
           empresas={empresas}
+          noNormalizados={noNormalizados}
         />
       )}
     </>
