@@ -17,6 +17,8 @@ import { validarComposicion, validarDescripcion } from "@/lib/bultos";
 import { ETIQUETA_CALIDAD, ETIQUETA_PACKAGING, PACKAGINGS, numero } from "@/lib/formato";
 import type { BultoEnPosicion, ModeloParaCargar, MotivoOpcion } from "@/lib/consultas";
 import type { Calidad, Packaging } from "@/lib/db/schema";
+import { CampoCantidad } from "@/components/cantidad";
+import { esNormalizado, validarNormalizado } from "@/lib/bultos";
 
 type Modo = "mirando" | "cantidades" | "producto" | "categoria" | "ausente" | "encontrado";
 
@@ -315,8 +317,9 @@ function SelectorMotivo({
  * - "cantidad": arranca con lo que dice el sistema, para cambiar los números.
  * - "producto": arranca vacío, para elegir con el buscador qué es en realidad.
  *
- * En las dos se puede cambiar el packaging. Por defecto queda el que tenía: un
- * palet con 43 en vez de 48 sigue siendo un palet.
+ * En las dos se puede cambiar el packaging. Y hay una regla que lo cambia sola:
+ * un palet o un optimizado lleva su cantidad normalizada, fija. Si se cuenta
+ * otra, lo que hay es un suelto, y la pantalla lo pasa a suelto a la vista.
  */
 function Contenido({
   posicionId,
@@ -356,16 +359,43 @@ function Contenido({
   const otroPackaging = packaging !== bulto.packaging;
   const mismosModelos = conAlgo.length === decia.size && conAlgo.every((c) => decia.has(c.modeloId));
   const sinCambios = mismosModelos && !otroPackaging && conAlgo.every((c) => decia.get(c.modeloId) === c.cantidad);
-  const problema = conAlgo.length > 0 ? validarComposicion(packaging, conAlgo) : null;
-  // La merma solo cuando hay MENOS del mismo producto, en el mismo packaging.
-  const admiteMerma = diferencia < 0 && mismosModelos && !otroPackaging;
+  const normaDe = (modeloId: number, p: Packaging) => modelos.find((m) => m.id === modeloId)?.normas[p];
+  const problema =
+    conAlgo.length > 0
+      ? (validarComposicion(packaging, conAlgo) ??
+        validarNormalizado(
+          packaging,
+          conAlgo,
+          (id) => normaDe(id, packaging),
+          (id) => lineas.find((l) => l.modeloId === id)?.nombre ?? "ese modelo",
+        ))
+      : null;
+  // La merma solo cuando hay MENOS del mismo producto. Que por eso un palet pase a suelto es la regla.
+  const admiteMerma = diferencia < 0 && mismosModelos && (!otroPackaging || packaging === "suelto");
+  /** Pasó a suelto solo, porque la cantidad dejó de ser la normalizada. */
+  const [pasoSolo, setPasoSolo] = useState(false);
   const motivoElegido = motivos.find((m) => m.id === motivoId) ?? null;
   const faltaNota = motivoElegido?.pideNota === true && nota.trim() === "";
 
   function cambiarPackaging(p: Packaging) {
     setPackaging(p);
+    setPasoSolo(false);
+    // Elegir palet u optimizado es decir que tiene su cantidad: se pone sola.
+    if (esNormalizado(p) && lineas.length === 1) {
+      const norma = normaDe(lineas[0].modeloId, p);
+      if (norma != null) setLineas((ls) => ls.map((l) => ({ ...l, cantidad: String(norma) })));
+    }
     // Si nadie eligió motivo, el que corresponde es este.
     if (!motivoTocado && modo === "cantidad") setMotivoId(p !== bulto.packaging ? porNombre("packaging equivocado") : null);
+  }
+
+  /** Escribir una cantidad que no es la del palet lo deja en suelto: no hay palets con otra cantidad. */
+  function cambiarCantidad(modeloId: number, valor: string) {
+    setLineas((ls) => ls.map((x) => (x.modeloId === modeloId ? { ...x, cantidad: valor } : x)));
+    if (esNormalizado(packaging) && Number(valor || 0) !== normaDe(modeloId, packaging)) {
+      setPackaging("suelto");
+      setPasoSolo(true);
+    }
   }
 
   if (avisos) {
@@ -404,13 +434,18 @@ function Contenido({
           ))}
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          {otroPackaging ? (
+          {pasoSolo ? (
+            <>
+              Con esa cantidad ya no es un {ETIQUETA_PACKAGING[bulto.packaging].toLowerCase()}:{" "}
+              <strong>queda como suelto</strong>. Palet y optimizado llevan una cantidad fija.
+            </>
+          ) : otroPackaging ? (
             <>
               Decía <strong>{ETIQUETA_PACKAGING[bulto.packaging].toLowerCase()}</strong>: se corrige a{" "}
               <strong>{ETIQUETA_PACKAGING[packaging].toLowerCase()}</strong>.
             </>
           ) : (
-            "Cambialo solo si el packaging también estaba mal registrado."
+            "Cambialo solo si el packaging también estaba mal registrado. Palet y optimizado llevan una cantidad fija: con otra, es suelto."
           )}
         </p>
       </div>
@@ -434,11 +469,7 @@ function Contenido({
               className="campo w-24 text-right"
               inputMode="numeric"
               value={l.cantidad}
-              onChange={(e) =>
-                setLineas((ls) =>
-                  ls.map((x) => (x.modeloId === l.modeloId ? { ...x, cantidad: e.target.value.replace(/\D/g, "") } : x)),
-                )
-              }
+              onChange={(e) => cambiarCantidad(l.modeloId, e.target.value.replace(/\D/g, ""))}
               aria-label={`Cantidad real de ${l.nombre}`}
             />
             {modo === "producto" && (
@@ -706,14 +737,30 @@ function Encontrado({
   const contenido = lineas
     .map((l) => ({ modeloId: l.modeloId, cantidad: Number(l.cantidad) }))
     .filter((l) => l.cantidad > 0);
+  // Un palet o un optimizado lleva su cantidad normalizada, fija. Ver lib/bultos.ts.
   const problema = objeto
     ? null
-    : contenido.length > 0
-      ? validarComposicion(packaging, contenido)
-      : null;
+    : ((contenido.length > 0 ? validarComposicion(packaging, contenido) : null) ??
+      validarNormalizado(
+        packaging,
+        lineas.map((l) => ({ modeloId: l.modeloId, cantidad: Number(l.cantidad) || 0 })),
+        (id) => modelos.find((m) => m.id === id)?.normas[packaging],
+        (id) => modelos.find((m) => m.id === id)?.nombre ?? "ese modelo",
+      ));
   const completo = objeto
     ? validarDescripcion(descripcion) == null
-    : contenido.length > 0 && !problema;
+    : lineas.length > 0 && contenido.length === lineas.length && !problema;
+
+  /** Al cambiar el packaging, la cantidad es la normalizada del nuevo; en suelto queda vacía, para contarla. */
+  function cambiarPackaging(p: Packaging) {
+    setPackaging(p);
+    setLineas((ls) =>
+      ls.map((l) => {
+        const norma = modelos.find((m) => m.id === l.modeloId)?.normas[p];
+        return { ...l, cantidad: norma != null ? String(norma) : "" };
+      }),
+    );
+  }
 
   return (
     <div className="tarjeta space-y-4 p-5">
@@ -759,7 +806,7 @@ function Encontrado({
                 <button
                   key={p}
                   type="button"
-                  onClick={() => setPackaging(p)}
+                  onClick={() => cambiarPackaging(p)}
                   className={`min-h-12 rounded-xl text-sm font-semibold ${
                     packaging === p
                       ? "bg-slate-900 text-white"
@@ -783,20 +830,15 @@ function Encontrado({
                   <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">
                     {m.nombre}
                   </span>
-                  <input
-                    className="campo w-24 text-right"
-                    inputMode="numeric"
-                    value={l.cantidad}
-                    onChange={(e) =>
-                      setLineas((ls) =>
-                        ls.map((x) =>
-                          x.modeloId === l.modeloId
-                            ? { ...x, cantidad: e.target.value.replace(/\D/g, "") }
-                            : x,
-                        ),
-                      )
+                  <CampoCantidad
+                    packaging={packaging}
+                    norma={m.normas[packaging]}
+                    valor={l.cantidad}
+                    nombre={m.nombre}
+                    enfocar={l.cantidad === ""}
+                    onCambio={(v) =>
+                      setLineas((ls) => ls.map((x) => (x.modeloId === l.modeloId ? { ...x, cantidad: v } : x)))
                     }
-                    aria-label={`Cantidad de ${m.nombre}`}
                   />
                   <button
                     type="button"

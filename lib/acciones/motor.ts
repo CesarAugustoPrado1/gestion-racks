@@ -12,7 +12,7 @@ import {
   type Packaging,
   type TipoMovimiento,
 } from "../db/schema";
-import { total, validarComposicion, type LineaContenido } from "../bultos";
+import { esNormalizado, total, validarComposicion, validarNormalizado, type LineaContenido } from "../bultos";
 import {
   alturaAdmitida,
   entraEnAltura,
@@ -732,6 +732,23 @@ export async function aplicarMovimiento(tx: Tx, a: Aplicacion): Promise<number> 
     for (const f of filas) nombres.set(f.id, f.nombre);
   }
 
+  /**
+   * La cantidad normalizada se exige ACÁ, que es por donde pasa toda escritura:
+   * si el movimiento deja un palet o un optimizado con un contenido que antes
+   * no tenía, ese contenido tiene que ser exactamente el de la norma.
+   *
+   * No se le exige al movimiento que no toca ni el contenido ni el packaging
+   * (mover, cambiar de categoría, dar por ausente): eso deja mover y sacar los
+   * bultos que se cargaron antes de que existiera la regla.
+   */
+  const cambiaLoQueLleva =
+    a.packagingDespues !== a.bulto.packaging ||
+    antes.size !== despues.size ||
+    [...despues].some(([id, cant]) => antes.get(id) !== cant);
+  if (cambiaLoQueLleva && a.contenidoDespues.length > 0) {
+    await exigirNormalizado(tx, a.packagingDespues, a.contenidoDespues, (id) => nombres.get(id) ?? "ese modelo");
+  }
+
   const cantidadDespues = total(a.contenidoDespues);
   const calidadDespues = a.calidadDespues ?? a.bulto.calidad;
   const descripcion =
@@ -982,4 +999,86 @@ export function exigirComposicion(
 ) {
   const problema = validarComposicion(packaging, contenido);
   if (problema) fallar(problema);
+}
+
+/** La cantidad normalizada de un modelo en un packaging, o null si no tiene. */
+export async function normaDe(tx: Tx, modeloId: number, packaging: Packaging): Promise<number | null> {
+  if (!esNormalizado(packaging)) return null;
+  const [n] = (await tx.execute(sql`
+    select cantidad from normas where modelo_id = ${modeloId} and packaging = ${packaging}
+  `)) as unknown as Array<{ cantidad: number }>;
+  return n?.cantidad ?? null;
+}
+
+/** Un palet o un optimizado lleva exactamente su cantidad normalizada. Ver lib/bultos.ts. */
+export async function exigirNormalizado(
+  tx: Tx,
+  packaging: Packaging,
+  contenido: LineaContenido[],
+  nombreDe?: (modeloId: number) => string,
+) {
+  if (!esNormalizado(packaging) || contenido.length !== 1) return;
+  const norma = await normaDe(tx, contenido[0].modeloId, packaging);
+  const problema = validarNormalizado(packaging, contenido, () => norma, nombreDe);
+  if (problema) fallar(problema);
+}
+
+/**
+ * Pasa a SUELTO los palets y optimizados que tienen una cantidad que no es la
+ * normalizada: los que se cargaron así antes de que la regla existiera, y los
+ * que quedan así cuando el admin cambia la cantidad de un modelo.
+ *
+ * No cambia la cantidad ni el lugar: lo que hay es lo que hay. Queda en el
+ * historial como un ajuste a nombre de quien lo hizo, y el bulto conserva su
+ * chequeo -nadie tocó nada- y el hueco de arriba, si lo tapaba.
+ */
+export async function pasarASueltoLoNoNormalizado(
+  tx: Tx,
+  a: { usuario: { id: number; nombre: string }; modeloId?: number; nota: string },
+): Promise<Array<{ codigo: string; packaging: Packaging; cantidad: number }>> {
+  const filas = (await tx.execute(sql`
+    select b.id
+      from bultos b
+      join lateral (
+        select min(c.modelo_id) as modelo_id, count(*)::int as modelos from bulto_contenido c where c.bulto_id = b.id
+      ) c on true
+      left join normas n on n.modelo_id = c.modelo_id and n.packaging = b.packaging
+     where b.estado in ('ubicado', 'sin_ubicar')
+       and b.packaging in ('palet', 'optimizado')
+       and (c.modelos <> 1 or n.cantidad is null or n.cantidad <> b.cantidad)
+       and (${a.modeloId ?? null}::int is null or c.modelo_id = ${a.modeloId ?? null}::int)
+     order by b.id
+  `)) as unknown as Array<{ id: number }>;
+
+  const [motivo] = (await tx.execute(sql`
+    select id, nombre, es_merma from motivos
+     where lower(nombre) = 'packaging equivocado' and ambito = 'ajuste' limit 1
+  `)) as unknown as Array<{ id: number; nombre: string; es_merma: boolean }>;
+
+  const hechos: Array<{ codigo: string; packaging: Packaging; cantidad: number }> = [];
+  for (const f of filas) {
+    const bulto = await bloquearBulto(tx, f.id);
+    const [arriba] = (await tx.execute(sql`
+      select p.id, g.codigo || '-' || p.codigo as codigo
+        from posiciones p join grupos g on g.id = p.grupo_id
+       where p.bloqueada_por_bulto_id = ${bulto.id}
+       limit 1
+    `)) as unknown as Array<{ id: number; codigo: string }>;
+    await aplicarMovimiento(tx, {
+      tipo: "ajuste",
+      bulto,
+      contenidoDespues: bulto.contenido.map((c) => ({ modeloId: c.modeloId, cantidad: c.cantidad })),
+      packagingDespues: "suelto",
+      estadoDespues: bulto.estado,
+      posicionDestino:
+        bulto.posicionId != null ? { id: bulto.posicionId, codigo: bulto.posicionCodigo ?? "" } : null,
+      invadeArriba: arriba ?? null,
+      usuario: a.usuario,
+      motivo: motivo ? ({ id: motivo.id, nombre: motivo.nombre, esMerma: false } as Motivo) : undefined,
+      nota: a.nota,
+      conservarChequeo: true,
+    });
+    hechos.push({ codigo: bulto.codigo, packaging: bulto.packaging, cantidad: bulto.cantidad });
+  }
+  return hechos;
 }

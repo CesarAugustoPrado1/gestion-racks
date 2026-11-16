@@ -4,6 +4,8 @@ import { ETIQUETA_ROL, navParaRol } from "@/lib/permisos";
 import { NavInferior, NavLateral } from "@/components/navegacion";
 import { Marca } from "@/components/marca";
 import { MANUAL, MANUAL_VIGENTE } from "@/lib/manual";
+import { TildesSegunda } from "@/components/segunda";
+import { vistaSegunda } from "@/lib/segunda-servidor";
 
 export default async function LayoutApp({
   children,
@@ -12,6 +14,7 @@ export default async function LayoutApp({
 }) {
   const sesion = await requerirSesion();
   const items = navParaRol(sesion.rol);
+  const vista = await vistaSegunda();
 
   return (
     <div className="min-h-dvh">
@@ -52,6 +55,8 @@ export default async function LayoutApp({
             </form>
           </div>
         </div>
+        {/* Cómo se ve la segunda en todo lo que se mira. Ver lib/segunda.ts. */}
+        <TildesSegunda vista={vista} />
       </header>
 
       <div className="mx-auto flex max-w-6xl gap-6 px-4 py-5">

@@ -5,7 +5,8 @@ import { useMemo, useState } from "react";
 import { meter } from "@/lib/acciones/flujo";
 import { useAccion } from "@/components/usar-accion";
 import { Aviso } from "@/components/ui";
-import { validarComposicion, validarDescripcion } from "@/lib/bultos";
+import { esNormalizado, validarComposicion, validarDescripcion, validarNormalizado } from "@/lib/bultos";
+import { CampoCantidad } from "@/components/cantidad";
 import { ETIQUETA_PACKAGING, PACKAGINGS, numero } from "@/lib/formato";
 import { SelectorPosicion } from "@/components/selector-posicion";
 import { ElegirModelo } from "@/components/elegir-modelo";
@@ -49,17 +50,26 @@ export function FormularioMeter({
     .map((l) => ({ modeloId: l.modeloId, cantidad: Number(l.cantidad) }))
     .filter((l) => Number.isFinite(l.cantidad) && l.cantidad > 0);
 
+  /**
+   * Un palet o un optimizado lleva su cantidad normalizada, fija. La regla es
+   * la misma que aplica el servidor: acá solo se adelanta el mensaje.
+   */
   const problema =
-    contenido.length > 0 ? validarComposicion(packaging, contenido) : null;
-  const faltaCantidad = lineas.some((l) => !(Number(l.cantidad) > 0));
+    (contenido.length > 0 ? validarComposicion(packaging, contenido) : null) ??
+    validarNormalizado(
+      packaging,
+      lineas.map((l) => ({ modeloId: l.modeloId, cantidad: Number(l.cantidad) || 0 })),
+      (id) => porId.get(id)?.normas[packaging],
+      (id) => porId.get(id)?.nombre ?? "ese modelo",
+    );
+  const faltaCantidad = !esNormalizado(packaging) && lineas.some((l) => !(Number(l.cantidad) > 0));
 
   const unidad = lineas[0] ? porId.get(lineas[0].modeloId)?.unidadPlural : null;
   const total = contenido.reduce((s, l) => s + l.cantidad, 0);
 
   /**
-   * Al elegir el modelo, la cantidad viene puesta con la norma. Es el caso
-   * típico y tiene que salir en un toque; la excepción se escribe a mano, y
-   * ahí abajo la pantalla avisa que está fuera de norma.
+   * Al elegir el modelo de un palet o un optimizado, la cantidad es la
+   * normalizada y no se escribe. En un suelto queda vacía, para contarla.
    */
   function agregar(modeloId: number) {
     const m = porId.get(modeloId);
@@ -85,15 +95,10 @@ export function FormularioMeter({
     );
   }
 
-  const fueraDeNorma = lineas.some((l) => {
-    const norma = porId.get(l.modeloId)?.normas[packaging];
-    return norma != null && Number(l.cantidad) !== norma;
-  });
-
   const conLugar = posicionId != null || sinUbicar;
   const listo = objeto
     ? !problemaDescripcion && conLugar
-    : contenido.length > 0 && !faltaCantidad && !problema && conLugar;
+    : lineas.length > 0 && contenido.length === lineas.length && !faltaCantidad && !problema && conLugar;
 
   /**
    * De otra empresa: se avisa ANTES de guardar y no se frena. El operario puede
@@ -213,43 +218,27 @@ export function FormularioMeter({
 
             {lineas.length === 0 && (
               <p className="mb-3 text-sm text-slate-500">
-                Elegí el tipo o escribí el modelo, y tocalo. La cantidad viene con la norma puesta.
+                Elegí el tipo o escribí el modelo, y tocalo. En palet y optimizado la cantidad es fija; en suelto la escribís vos.
               </p>
             )}
 
             <ul className="mb-3 space-y-2">
               {lineas.map((l) => {
                 const m = porId.get(l.modeloId)!;
-                const norma = m.normas[packaging];
-                const distinto = norma != null && Number(l.cantidad) !== norma;
                 return (
                   <li key={l.modeloId} className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">
                       {m.nombre}
-                      {distinto && (
-                        <span className="ml-2 chip bg-amber-100 text-amber-900">
-                          norma {numero(norma!)}
-                        </span>
-                      )}
                     </span>
-                    <input
-                      className={`campo w-24 text-right ${
-                        Number(l.cantidad) > 0 ? "" : "ring-2 ring-amber-400"
-                      }`}
-                      inputMode="numeric"
-                      placeholder="Cant."
-                      autoFocus={l.cantidad === ""}
-                      value={l.cantidad}
-                      onChange={(e) =>
-                        setLineas((ls) =>
-                          ls.map((x) =>
-                            x.modeloId === l.modeloId
-                              ? { ...x, cantidad: e.target.value.replace(/\D/g, "") }
-                              : x,
-                          ),
-                        )
+                    <CampoCantidad
+                      packaging={packaging}
+                      norma={m.normas[packaging]}
+                      valor={l.cantidad}
+                      nombre={m.nombre}
+                      enfocar={l.cantidad === ""}
+                      onCambio={(v) =>
+                        setLineas((ls) => ls.map((x) => (x.modeloId === l.modeloId ? { ...x, cantidad: v } : x)))
                       }
-                      aria-label={`Cantidad de ${m.nombre}`}
                     />
                     <button
                       type="button"
@@ -275,9 +264,7 @@ export function FormularioMeter({
             {faltaCantidad && (
               <div className="mt-3">
                 <Aviso tono="info">
-                  {packaging === "suelto"
-                    ? "Suelto no tiene cantidad fija: escribí cuántas hay de cada modelo."
-                    : "Escribí la cantidad de cada modelo."}
+                  Suelto no tiene cantidad fija: escribí cuántas hay de cada modelo.
                 </Aviso>
               </div>
             )}
@@ -353,15 +340,14 @@ export function FormularioMeter({
 
       {/**
        * La confirmación con el número grande solo aparece cuando hay algo raro:
-       * fuera de norma o sin ubicar. El caso típico no pregunta, porque una
+       * de segunda o sin ubicar. El caso típico no pregunta, porque una
        * confirmación en cada movimiento se termina tocando sin leer.
        */}
-      {listo && !objeto && (fueraDeNorma || sinUbicar || calidad === "segunda") && (
+      {listo && !objeto && (sinUbicar || calidad === "segunda") && (
         <Aviso tono="info">
           Vas a ingresar <strong>{numero(total)} {unidad}</strong> en{" "}
           {ETIQUETA_PACKAGING[packaging].toLowerCase()}
           {calidad === "segunda" && <> , <strong>de SEGUNDA</strong></>}
-          {fueraDeNorma && <> , con una cantidad distinta a la norma</>}
           {sinUbicar && <> , sin ubicación asignada</>}.
         </Aviso>
       )}

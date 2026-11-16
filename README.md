@@ -127,6 +127,17 @@ otra foto) y reemplaza al Tablero. `/estadisticas` es la evolución en un perío
 (hoy, ayer, esta semana, el mes, rangos a elección…), comparada con el período
 anterior equivalente. Ver DISENO.md §6.2.1.
 
+**Cantidades normalizadas fijas** (sin migración): un palet o un optimizado
+lleva exactamente la cantidad configurada para su modelo; no se escribe al
+cargar y solo la cambia el admin en Modelos. Lo que tenga otra cantidad es
+suelto, siempre, y un suelto con la cantidad de un palet sigue siendo suelto.
+Administración → Modelos lista los bultos cargados antes de la regla con otra
+cantidad y los pasa a suelto. Ver DISENO.md §3.3.
+
+**Vista de la segunda** (sin migración): dos tildes en el encabezado —mostrar u
+ocultar el producto de segunda y, si se muestra, junto o discriminado— que valen
+para Resumen, Stock, Estadísticas y Movimientos. Ver DISENO.md §3.12.
+
 **Merma** (migración `0014_merma`): producto que se pierde en el depósito. Se
 registra con motivos de merma (configurables, con nota obligatoria si hace
 falta) al sacar o desde el chequeo de control, y tiene su sección en

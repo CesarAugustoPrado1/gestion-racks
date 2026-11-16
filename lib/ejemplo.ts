@@ -35,7 +35,7 @@ import {
  *
  * El conjunto esta armado para que se vea lo que hay que ver:
  * - Los tres packagings, incluido producto suelto sin norma.
- * - Bultos fuera de norma, que tienen que aparecer marcados.
+ * - Sueltos con cantidades cercanas a la de un palet, que siguen siendo sueltos.
  * - Un rack penetrable con carriles de profundidad 3, al lado de dos selectivos.
  * - Chequeos de ayer, de hace un mes y de hace dos, MAS posiciones nunca
  *   chequeadas: sin esa mezcla el indice de confiabilidad se ve plano y no se
@@ -422,7 +422,7 @@ export async function cargarDatosDeEjemplo(
     const primero = candidatos[Math.floor(rnd() * candidatos.length)];
 
     const dado = rnd();
-    const packaging: Packaging = mezclado
+    let packaging: Packaging = mezclado
       ? "suelto"
       : dado < 0.2
         ? "suelto"
@@ -456,12 +456,13 @@ export async function cargarDatosDeEjemplo(
       let cantidad: number;
       if (packaging === "suelto") {
         cantidad = 3 + Math.floor(rnd() * 25);
-      } else if (norma != null && rnd() < 0.12) {
-        // Una de cada ocho fuera de norma: existen, y la pantalla las tiene
-        // que marcar.
-        cantidad = Math.max(1, norma - (1 + Math.floor(rnd() * 6)));
+      } else if (norma == null || rnd() < 0.12) {
+        // Un palet al que le falta producto no es un palet: es suelto. Lo
+        // mismo si el modelo no tiene cantidad normalizada en ese packaging.
+        cantidad = Math.max(1, (norma ?? 20) - (1 + Math.floor(rnd() * 6)));
+        packaging = "suelto";
       } else {
-        cantidad = norma ?? 1;
+        cantidad = norma;
       }
       contenido.push({ modeloId: primero.id, nombre: primero.nombre, cantidad });
     }

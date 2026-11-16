@@ -3,15 +3,17 @@ import { requerirRol } from "@/lib/auth";
 import { stockPorLinea } from "@/lib/consultas";
 import { PACKAGINGS, m2, numero, resumenPackaging } from "@/lib/formato";
 import { Titulo } from "@/components/ui";
+import { distingueSegunda, sumaSegunda } from "@/lib/segunda";
+import { vistaSegunda } from "@/lib/segunda-servidor";
 
 export const metadata = { title: "Stock · Racks" };
 export const dynamic = "force-dynamic";
 
-export default async function PantallaStock({ searchParams }: { searchParams: Promise<{ segunda?: string }> }) {
+export default async function PantallaStock() {
   await requerirRol("comercial", "admin", "auditor", "control");
-  // Por defecto suma la segunda: es stock igual. El tilde la saca de las cuentas.
-  const conSegunda = (await searchParams).segunda !== "no";
-  const lineas = await stockPorLinea(conSegunda);
+  // Si la segunda suma y si se dice aparte lo deciden los tildes del encabezado.
+  const vista = await vistaSegunda();
+  const lineas = await stockPorLinea(sumaSegunda(vista));
 
   if (lineas.length === 0) {
     return (
@@ -30,33 +32,6 @@ export default async function PantallaStock({ searchParams }: { searchParams: Pr
       <Titulo detalle="Cuánto hay de cada modelo. Tocá un modelo para abrirlo por packaging.">
         Stock
       </Titulo>
-
-      {/* Un link y no un formulario: el tilde queda en la dirección, y la pantalla se puede compartir así. */}
-      <Link
-        href={conSegunda ? "/stock?segunda=no" : "/stock"}
-        role="checkbox"
-        aria-checked={conSegunda}
-        replace
-        scroll={false}
-        className="tarjeta mb-5 flex items-center gap-3 p-4"
-      >
-        <span
-          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 text-sm font-bold ${
-            conSegunda ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-transparent"
-          }`}
-          aria-hidden
-        >
-          ✓
-        </span>
-        <span className="text-sm">
-          <span className="font-semibold text-slate-800">Incluye producto de segunda</span>
-          <span className="block text-xs text-slate-500">
-            {conSegunda
-              ? "Los totales suman primera y segunda. Tocá para ver solo primera."
-              : "Los totales son solo de primera. Tocá para sumar la segunda."}
-          </span>
-        </span>
-      </Link>
 
       <div className="space-y-5">
         {lineas.map((linea) => (
@@ -98,11 +73,9 @@ export default async function PantallaStock({ searchParams }: { searchParams: Pr
                             </span>
                           );
                         })}
-                        {m.bultos === 0 && <span>{m.segunda > 0 ? "Sin stock de primera" : "Sin stock"}</span>}
-                        {m.segunda > 0 && (
-                          <span className="font-semibold text-orange-700">
-                            {numero(m.segunda)} de segunda{conSegunda ? "" : " (no sumadas)"}
-                          </span>
+                        {m.bultos === 0 && <span>Sin stock</span>}
+                        {distingueSegunda(vista) && m.segunda > 0 && (
+                          <span className="font-semibold text-orange-700">de eso, {numero(m.segunda)} de segunda</span>
                         )}
                       </p>
                     </div>

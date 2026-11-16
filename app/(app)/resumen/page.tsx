@@ -14,6 +14,8 @@ import { ETIQUETA_PACKAGING, PACKAGINGS, m2, numero } from "@/lib/formato";
 import { diaDe, fechaLarga, leerMomento, sumarDias, type Momento } from "@/lib/periodos";
 import { puedeVer } from "@/lib/permisos";
 import { Aviso, Titulo } from "@/components/ui";
+import { distingueSegunda, sumaSegunda, type VistaSegunda } from "@/lib/segunda";
+import { vistaSegunda } from "@/lib/segunda-servidor";
 
 export const metadata = { title: "Resumen · Racks" };
 export const dynamic = "force-dynamic";
@@ -37,7 +39,12 @@ function lugar(f: Foto) {
  * la confiabilidad y la configuración de ese día), si no, reconstruida del
  * historial. La de ahora siempre es la viva.
  */
-async function fotoDe(m: Momento): Promise<{ foto: Foto; guardada: FotoGuardada | null }> {
+async function fotoDe(m: Momento, vista: VistaSegunda): Promise<{ foto: Foto; guardada: FotoGuardada | null }> {
+  // Con la segunda oculta la foto se arma siempre del historial, sin esos
+  // bultos: la guardada los trae sumados y no se pueden separar de sus totales.
+  if (!sumaSegunda(vista)) {
+    return { foto: await fotoEn(m.instante, m.esAhora, undefined, { sinSegunda: true }), guardada: null };
+  }
   if (m.dia) {
     const g = await fotoGuardada(m.dia);
     if (g) return { foto: g.foto, guardada: g };
@@ -69,9 +76,11 @@ export default async function PantallaResumen({
   // se guarda ahora. Es idempotente: si ya está, no hace nada.
   await tomarFoto(sumarDias(diaDe(ahora), -1), ahora);
 
+  const vista = await vistaSegunda();
+  const distingue = distingueSegunda(vista);
   const [{ foto, guardada }, otraF, vivo, conChequeo, semivida, fotos] = await Promise.all([
-    fotoDe(momento),
-    comparacion ? fotoDe(comparacion) : Promise.resolve(null),
+    fotoDe(momento, vista),
+    comparacion ? fotoDe(comparacion, vista) : Promise.resolve(null),
     momento.esAhora ? tablero() : Promise.resolve(null),
     momento.esAhora ? bultosConChequeo() : Promise.resolve(null),
     semividaDias(),
@@ -217,14 +226,16 @@ export default async function PantallaResumen({
           detalle={d(foto.bultos.ajenos, otra?.bultos.ajenos) ?? (foto.bultos.ajenos > 0 ? "para reacomodar" : "cada uno en lo suyo")}
           tono={foto.bultos.ajenos > 0 ? "atencion" : "normal"}
         />
-        <Tile
-          etiqueta="De segunda"
-          valor={numero(foto.bultos.segunda)}
-          detalle={
-            d(foto.bultos.segunda, otra?.bultos.segunda) ??
-            `bulto${foto.bultos.segunda === 1 ? "" : "s"} de segunda en stock${foto.m2.segunda ? ` · ${m2(foto.m2.segunda)}` : ""}`
-          }
-        />
+        {distingue && (
+          <Tile
+            etiqueta="De segunda"
+            valor={numero(foto.bultos.segunda)}
+            detalle={
+              d(foto.bultos.segunda, otra?.bultos.segunda) ??
+              `bulto${foto.bultos.segunda === 1 ? "" : "s"} de segunda en stock${foto.m2.segunda ? ` · ${m2(foto.m2.segunda)}` : ""}`
+            }
+          />
+        )}
       </div>
 
       {(conChequeo || guardada?.confiabilidad) && (
@@ -326,7 +337,7 @@ export default async function PantallaResumen({
                       </span>
                     </li>
                   ))}
-                  {ln.segunda.unidades > 0 && (
+                  {distingue && ln.segunda.unidades > 0 && (
                     <li className="flex justify-between font-semibold text-orange-800">
                       <span>de eso, de segunda</span>
                       <span>
@@ -355,7 +366,7 @@ export default async function PantallaResumen({
                   <th className="px-2 py-2 text-right font-medium">Bultos</th>
                   <th className="px-2 py-2 text-right font-medium">Unidades</th>
                   <th className="px-2 py-2 text-right font-medium">m²</th>
-                  <th className="px-2 py-2 text-right font-medium">2da</th>
+                  {distingue && <th className="px-2 py-2 text-right font-medium">2da</th>}
                   {otra && <th className="px-4 py-2 text-right font-medium">Diferencia</th>}
                 </tr>
               </thead>
@@ -388,12 +399,14 @@ export default async function PantallaResumen({
                       <td className={`cifra whitespace-nowrap px-2 py-2 text-right ${m.m2 == null ? "text-slate-300" : ""}`}>
                         {m.m2 == null ? "—" : m2(m.m2)}
                       </td>
-                      <td className={`cifra px-2 py-2 text-right ${m.segunda > 0 ? "text-orange-800" : "text-slate-300"}`}>
-                        {m.segunda > 0 ? numero(m.segunda) : "—"}
-                        {m.segunda > 0 && segundaM2 != null && (
-                          <span className="block whitespace-nowrap text-xs text-orange-700">{m2(segundaM2)}</span>
-                        )}
-                      </td>
+                      {distingue && (
+                        <td className={`cifra px-2 py-2 text-right ${m.segunda > 0 ? "text-orange-800" : "text-slate-300"}`}>
+                          {m.segunda > 0 ? numero(m.segunda) : "—"}
+                          {m.segunda > 0 && segundaM2 != null && (
+                            <span className="block whitespace-nowrap text-xs text-orange-700">{m2(segundaM2)}</span>
+                          )}
+                        </td>
+                      )}
                       {otra && (
                         <td className={`cifra px-4 py-2 text-right ${dif === 0 ? "text-slate-300" : "text-slate-800"}`}>
                           {dif === 0 ? "=" : `${dif > 0 ? "+" : "−"}${numero(Math.abs(dif))}`}

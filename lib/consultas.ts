@@ -1166,6 +1166,11 @@ export type FiltrosHistorial = {
   texto?: string | null;
   /** Los anulados NO se muestran salvo que se los pida. Ver abajo. */
   incluirAnulados?: boolean;
+  /**
+   * Con la segunda oculta (lib/segunda.ts): afuera todo movimiento de un bulto
+   * que era o quedó de segunda. No viene de la URL, la pone la pantalla.
+   */
+  sinSegunda?: boolean;
 };
 
 /**
@@ -1184,6 +1189,7 @@ function dondeHistorial(f: FiltrosHistorial) {
   const partes = [sql`1 = 1`];
 
   if (!f.incluirAnulados) partes.push(sql`m.anulado_en is null`);
+  if (f.sinSegunda) partes.push(sql`m.calidad <> 'segunda' and m.calidad_antes <> 'segunda'`);
   if (f.desde) partes.push(sql`m.creado_en >= ${f.desde}::date`);
   // `< hasta + 1 día` y no `<= hasta`: con timestamps, `<=` deja afuera todo lo
   // que pasó ese día después de medianoche, que es el día entero.
@@ -1660,4 +1666,39 @@ export async function cargaDelGrupo(grupoId: number): Promise<CargaDelGrupo | nu
       }),
     })),
   };
+}
+
+/**
+ * Palets y optimizados vivos con una cantidad que no es la normalizada. Con la
+ * regla en el motor no se pueden crear más: son los que se cargaron antes. El
+ * mismo criterio que `pasarASueltoLoNoNormalizado`, que es quien los corrige.
+ */
+export async function bultosNoNormalizados() {
+  const filas = (await db.execute(sql`
+    select b.id, b.codigo, b.packaging, b.cantidad, n.cantidad as norma,
+           (select string_agg(m.nombre, ' + ' order by m.nombre)
+              from bulto_contenido c2 join modelos m on m.id = c2.modelo_id
+             where c2.bulto_id = b.id) as modelo,
+           case when p.id is null then null else g.codigo || '-' || p.codigo end as posicion
+      from bultos b
+      join lateral (
+        select min(c.modelo_id) as modelo_id, count(*)::int as modelos from bulto_contenido c where c.bulto_id = b.id
+      ) c on true
+      left join normas n on n.modelo_id = c.modelo_id and n.packaging = b.packaging
+      left join posiciones p on p.id = b.posicion_id
+      left join grupos g on g.id = p.grupo_id
+     where b.estado in ('ubicado', 'sin_ubicar')
+       and b.packaging in ('palet', 'optimizado')
+       and (c.modelos <> 1 or n.cantidad is null or n.cantidad <> b.cantidad)
+     order by b.id
+  `)) as unknown as Array<{
+    id: number;
+    codigo: string;
+    packaging: string;
+    cantidad: number;
+    norma: number | null;
+    modelo: string | null;
+    posicion: string | null;
+  }>;
+  return filas.map((f) => ({ ...f, modelo: f.modelo ?? "?" }));
 }

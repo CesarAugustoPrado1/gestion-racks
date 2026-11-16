@@ -138,7 +138,7 @@ export function NavLateral({ items }: { items: ItemNav[] }) {
 
   return (
     <nav className="hidden w-56 shrink-0 md:block">
-      <ul className="sticky top-20 space-y-1">
+      <ul className="sticky top-28 space-y-1">
         {items.map((item) => {
           const activo = estaActivo(pathname, item.href);
           return (

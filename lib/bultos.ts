@@ -73,6 +73,51 @@ export function validarDescripcion(descripcion: string | null | undefined): stri
 export const total = (contenido: LineaContenido[]): number =>
   contenido.reduce((suma, l) => suma + l.cantidad, 0);
 
+/** `palet` y `optimizado`: los dos packagings de cantidad normalizada. */
+export const esNormalizado = (packaging: Packaging | string): boolean =>
+  packaging === "palet" || packaging === "optimizado";
+
+/**
+ * LA REGLA DE LA CANTIDAD NORMALIZADA. Un palet y un optimizado llevan
+ * exactamente la cantidad configurada para ese modelo: es fija, no la escribe
+ * el operario y solo la cambia el administrador desde Configuración.
+ *
+ * - Sin cantidad configurada, ese modelo no se puede cargar como palet (u
+ *   optimizado): va como suelto hasta que el admin la configure.
+ * - Con otra cantidad, no es un palet: es suelto. Siempre.
+ *
+ * Al revés NO vale: un suelto con la misma cantidad que un palet sigue siendo
+ * suelto. Un palet conlleva un armado, y 300 placas sueltas no son un palet de
+ * 300 placas. Por eso el packaging lo dice el operario y nunca se deduce de la
+ * cantidad.
+ *
+ * Pura: la pantalla y el servidor usan la misma, cada uno con sus normas.
+ */
+export function validarNormalizado(
+  packaging: Packaging,
+  contenido: LineaContenido[],
+  normaDe: (modeloId: number) => number | null | undefined,
+  nombreDe: (modeloId: number) => string = () => "ese modelo",
+): string | null {
+  if (!esNormalizado(packaging) || contenido.length !== 1) return null;
+  const { modeloId, cantidad } = contenido[0];
+  const norma = normaDe(modeloId);
+  const como = packaging === "palet" ? "palet" : "optimizado";
+  if (norma == null) {
+    return (
+      `${nombreDe(modeloId)} no tiene cantidad normalizada de ${como}. ` +
+      `Cargalo como suelto, o pedile al administrador que la configure.`
+    );
+  }
+  if (cantidad !== norma) {
+    return (
+      `Un ${como} de ${nombreDe(modeloId)} lleva ${norma}, y no se puede cambiar. ` +
+      `Si hay ${cantidad}, va como suelto.`
+    );
+  }
+  return null;
+}
+
 /**
  * Si la cantidad coincide con la norma. `null` cuando no hay norma contra que
  * comparar -producto suelto, bulto mezclado- y eso NO es "fuera de norma": es

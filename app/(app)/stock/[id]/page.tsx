@@ -2,6 +2,8 @@ import Link from "next/link";
 import { ChipSegunda } from "@/components/calidad";
 import { notFound } from "next/navigation";
 import { requerirRol } from "@/lib/auth";
+import { distingueSegunda, sumaSegunda } from "@/lib/segunda";
+import { vistaSegunda } from "@/lib/segunda-servidor";
 import { detalleDeModelo, type BultoDeModelo } from "@/lib/consultas";
 import { semividaDias } from "@/lib/configuracion";
 import { confianza, indice } from "@/lib/confiabilidad";
@@ -39,8 +41,13 @@ export default async function PantallaModelo({
 
   const { id } = await params;
   const { solapa: pedida } = await searchParams;
-  const modelo = await detalleDeModelo(Number(id));
-  if (!modelo) notFound();
+  const [completo, vista] = await Promise.all([detalleDeModelo(Number(id)), vistaSegunda()]);
+  if (!completo) notFound();
+  // Con la segunda oculta, esos bultos no están: ni en las solapas ni en la lista.
+  const modelo = sumaSegunda(vista)
+    ? completo
+    : { ...completo, bultos: completo.bultos.filter((b) => b.calidad !== "segunda") };
+  const distingue = distingueSegunda(vista);
 
   const semivida = await semividaDias();
 
@@ -162,7 +169,7 @@ export default async function PantallaModelo({
         </p>
         {/* De segunda: incluido en el total, y dicho aparte para que nadie
             venda como primera algo que no lo es. */}
-        {segunda.unidades > 0 && (
+        {distingue && segunda.unidades > 0 && (
           <p className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-sm text-orange-900">
             De eso,{" "}
             <strong>
@@ -191,6 +198,7 @@ export default async function PantallaModelo({
               bulto={b}
               confianza={confianzas[i]}
               modelo={modelo}
+              distingue={distingue}
               mostrarPackaging={solapa === "total"}
             />
           ))}
@@ -205,7 +213,10 @@ function FilaBulto({
   confianza: c,
   modelo,
   mostrarPackaging,
+  distingue,
 }: {
+  /** Si se marca cuál es de segunda. Con la segunda «junta», no. */
+  distingue: boolean;
   bulto: BultoDeModelo;
   confianza: ReturnType<typeof confianza>;
   modelo: { normas: Partial<Record<Packaging, number>>; unidadPlural: string; m2PorUnidad: number | null };
@@ -244,7 +255,7 @@ function FilaBulto({
               {ETIQUETA_PACKAGING[bulto.packaging]}
             </span>
           )}
-          <ChipSegunda calidad={bulto.calidad} />
+          {distingue && <ChipSegunda calidad={bulto.calidad} />}
           {bulto.accesibilidad === "penetrable" && (
             /**
              * En un carril penetrable la profundidad NO es un detalle: dos

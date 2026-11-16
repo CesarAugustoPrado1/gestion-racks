@@ -23,7 +23,7 @@ import { ROLES } from "../permisos";
 import { codigoDePosicion, posicionesDe, type Geometria } from "../posiciones";
 import { MOTIVOS_EXCLUSION } from "../uso";
 import { ejecutar, fallar, type Resultado } from "./comun";
-import { exigirGrupoVacio } from "./motor";
+import { exigirGrupoVacio, pasarASueltoLoNoNormalizado, type Tx } from "./motor";
 
 /**
  * ABM de los datos que definen cómo mide el sistema.
@@ -133,14 +133,24 @@ const esquemaModelo = z.object({
   }),
 });
 
+/**
+ * Cambiar la cantidad normalizada de un modelo que ya tiene palets cargados
+ * los deja con una cantidad que no es la del palet, y eso no puede existir: lo
+ * que no tiene la cantidad normalizada es suelto. Así que esos bultos pasan a
+ * suelto -con su cantidad y su lugar- en la misma transacción.
+ *
+ * No se hace sin avisar: la primera vez devuelve cuántos son (`porConfirmar`)
+ * y no guarda nada; con `confirmado`, guarda y los convierte.
+ */
 export async function guardarModelo(
   entrada: z.input<typeof esquemaModelo>,
-): Promise<Resultado<void>> {
+  confirmado = false,
+): Promise<Resultado<{ porConfirmar: number; pasaronASuelto: number }>> {
   return ejecutar(async () => {
-    await autorizar("admin");
+    const sesion = await autorizar("admin");
     const d = esquemaModelo.parse(entrada);
 
-    await db.transaction(async (tx) => {
+    const r = await db.transaction(async (tx) => {
       let modeloId = d.id;
 
       if (modeloId) {
@@ -197,8 +207,46 @@ export async function guardarModelo(
             });
         }
       }
+
+      const hechos = await pasarASueltoLoNoNormalizado(tx as unknown as Tx, {
+        usuario: { id: sesion.uid, nombre: sesion.nombre },
+        modeloId,
+        nota: "Cambió la cantidad normalizada del modelo: ya no es la de este bulto.",
+      });
+      if (hechos.length > 0 && !confirmado) throw new FaltaConfirmar(hechos.length);
+      return { porConfirmar: 0, pasaronASuelto: hechos.length };
+    }).catch((e) => {
+      // Abortó la transacción a propósito: no se guardó nada, solo se cuenta.
+      if (e instanceof FaltaConfirmar) return { porConfirmar: e.cuantos, pasaronASuelto: 0 };
+      throw e;
     });
+    if (r.porConfirmar === 0) revalidatePath("/", "layout");
+    return r;
+  });
+}
+
+class FaltaConfirmar extends Error {
+  constructor(readonly cuantos: number) {
+    super("falta confirmar");
+  }
+}
+
+/**
+ * Los palets y optimizados que hoy tienen una cantidad que no es la
+ * normalizada pasan a suelto. Es la limpieza de lo que se cargó antes de que
+ * la regla existiera; de acá en más no se puede volver a cargar uno así.
+ */
+export async function pasarNoNormalizadosASuelto(): Promise<Resultado<{ cuantos: number }>> {
+  return ejecutar(async () => {
+    const sesion = await autorizar("admin");
+    const hechos = await db.transaction((tx) =>
+      pasarASueltoLoNoNormalizado(tx as unknown as Tx, {
+        usuario: { id: sesion.uid, nombre: sesion.nombre },
+        nota: "Tenía una cantidad distinta a la normalizada: lo que no es normalizado es suelto.",
+      }),
+    );
     revalidatePath("/", "layout");
+    return { cuantos: hechos.length };
   });
 }
 

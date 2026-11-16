@@ -122,6 +122,12 @@ export async function fotoEn(
   instante: Date,
   esAhora: boolean,
   conexion: Pick<typeof db, "execute"> = db,
+  /**
+   * `sinSegunda`: la foto como si el producto de segunda no existiera. No suma
+   * en ningún total ni aparece en ninguna lista. El LUGAR no cambia: la
+   * posición que ocupa sigue ocupada, porque lo está.
+   */
+  { sinSegunda = false }: { sinSegunda?: boolean } = {},
 ): Promise<Foto> {
   const t = instante.toISOString();
 
@@ -276,6 +282,7 @@ export async function fotoEn(
       cuenta.objetos++;
       continue;
     }
+    if (sinSegunda && b.calidad === "segunda") continue;
 
     if (ubicado) cuenta.ubicados++;
     else {
