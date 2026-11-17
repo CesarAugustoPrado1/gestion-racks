@@ -315,6 +315,8 @@ function SelectorMotivo({
  * partida:
  *
  * - "cantidad": arranca con lo que dice el sistema, para cambiar los números.
+ *   Y si en el bulto hay además un modelo que el sistema no tiene -125 de Laja
+ *   y 31 de Patagónica-, se agrega ahí mismo: lo que había queda como estaba.
  * - "producto": arranca vacío, para elegir con el buscador qué es en realidad.
  *
  * En las dos se puede cambiar el packaging. Y hay una regla que lo cambia sola:
@@ -372,14 +374,26 @@ function Contenido({
       : null;
   // La merma solo cuando hay MENOS del mismo producto. Que por eso un palet pase a suelto es la regla.
   const admiteMerma = diferencia < 0 && mismosModelos && (!otroPackaging || packaging === "suelto");
-  /** Pasó a suelto solo, porque la cantidad dejó de ser la normalizada. */
-  const [pasoSolo, setPasoSolo] = useState(false);
+  /**
+   * Pasó a suelto solo: porque la cantidad dejó de ser la normalizada, o
+   * porque con otro modelo es un mezclado, que nunca es normalizado.
+   */
+  const [pasoSolo, setPasoSolo] = useState<null | "cantidad" | "mezclado">(null);
+  /** En "cantidad", el buscador para agregar un modelo se abre a pedido. */
+  const [agregando, setAgregando] = useState(modo === "producto");
+  /** Lo que cambia, modelo por modelo, cuando el bulto no tiene los mismos modelos que antes. */
+  const cambios = [...new Set([...decia.keys(), ...conAlgo.map((c) => c.modeloId)])]
+    .map((id) => ({
+      nombre: lineas.find((l) => l.modeloId === id)?.nombre ?? bulto.contenido.find((c) => c.modeloId === id)?.nombre ?? "?",
+      dif: (conAlgo.find((c) => c.modeloId === id)?.cantidad ?? 0) - (decia.get(id) ?? 0),
+    }))
+    .filter((c) => c.dif !== 0);
   const motivoElegido = motivos.find((m) => m.id === motivoId) ?? null;
   const faltaNota = motivoElegido?.pideNota === true && nota.trim() === "";
 
   function cambiarPackaging(p: Packaging) {
     setPackaging(p);
-    setPasoSolo(false);
+    setPasoSolo(null);
     // Elegir palet u optimizado es decir que tiene su cantidad: se pone sola.
     if (esNormalizado(p) && lineas.length === 1) {
       const norma = normaDe(lineas[0].modeloId, p);
@@ -394,8 +408,27 @@ function Contenido({
     setLineas((ls) => ls.map((x) => (x.modeloId === modeloId ? { ...x, cantidad: valor } : x)));
     if (esNormalizado(packaging) && Number(valor || 0) !== normaDe(modeloId, packaging)) {
       setPackaging("suelto");
-      setPasoSolo(true);
+      setPasoSolo("cantidad");
     }
+  }
+
+  /**
+   * Agregar un modelo. Si ya hay otro, el bulto pasa a ser un MEZCLADO, que va
+   * siempre como suelto: la cantidad queda vacía para contarla. Si es el único,
+   * en palet u optimizado viene con su cantidad normalizada.
+   */
+  function agregarModelo(m: ModeloParaCargar) {
+    const mezclado = lineas.length > 0;
+    const p = mezclado ? "suelto" : packaging;
+    if (mezclado && packaging !== "suelto") {
+      setPackaging("suelto");
+      setPasoSolo("mezclado");
+    }
+    setLineas((ls) => [
+      ...ls,
+      { modeloId: m.id, nombre: m.nombre, cantidad: m.normas[p] != null && !mezclado ? String(m.normas[p]) : "" },
+    ]);
+    if (!motivoTocado && modo === "cantidad") setMotivoId(porNombre("cantidad distinta"));
   }
 
   if (avisos) {
@@ -434,10 +467,15 @@ function Contenido({
           ))}
         </div>
         <p className="mt-1 text-xs text-slate-500">
-          {pasoSolo ? (
+          {pasoSolo === "cantidad" ? (
             <>
               Con esa cantidad ya no es un {ETIQUETA_PACKAGING[bulto.packaging].toLowerCase()}:{" "}
               <strong>queda como suelto</strong>. Palet y optimizado llevan una cantidad fija.
+            </>
+          ) : pasoSolo === "mezclado" ? (
+            <>
+              Con más de un modelo es un bulto mezclado: <strong>queda como suelto</strong>. Palet y optimizado son
+              de un solo modelo.
             </>
           ) : otroPackaging ? (
             <>
@@ -466,13 +504,15 @@ function Contenido({
               )}
             </span>
             <input
-              className="campo w-24 text-right"
+              className={`campo w-24 text-right ${Number(l.cantidad) > 0 ? "" : "ring-2 ring-amber-400"}`}
               inputMode="numeric"
+              placeholder="Cant."
+              autoFocus={l.cantidad === ""}
               value={l.cantidad}
               onChange={(e) => cambiarCantidad(l.modeloId, e.target.value.replace(/\D/g, ""))}
               aria-label={`Cantidad real de ${l.nombre}`}
             />
-            {modo === "producto" && (
+            {(modo === "producto" || !decia.has(l.modeloId)) && (
               <button
                 type="button"
                 className="px-2 text-lg text-slate-400"
@@ -486,27 +526,30 @@ function Contenido({
         ))}
       </ul>
 
-      {modo === "producto" && (
-        <ElegirModelo
-          modelos={modelos}
-          yaElegidos={lineas.map((l) => l.modeloId)}
-          alElegir={(m) =>
-            setLineas((ls) => [
-              ...ls,
-              {
-                modeloId: m.id,
-                nombre: m.nombre,
-                cantidad: m.normas[packaging] != null ? String(m.normas[packaging]) : "",
-              },
-            ])
-          }
-        />
+      {agregando ? (
+        <ElegirModelo modelos={modelos} yaElegidos={lineas.map((l) => l.modeloId)} alElegir={agregarModelo} />
+      ) : (
+        <button type="button" className="boton-secundario w-full text-sm" onClick={() => setAgregando(true)}>
+          + Hay otro modelo en el bulto
+        </button>
       )}
 
       {problema && <Aviso tono="info">{problema}</Aviso>}
       {conAlgo.length > 0 && !sinCambios && mismosModelos && diferencia !== 0 && (
         <Aviso tono="info">
           Diferencia de <strong>{diferencia > 0 ? "+" : ""}{numero(diferencia)}</strong> {bulto.unidadPlural}. Queda registrada.
+        </Aviso>
+      )}
+      {conAlgo.length > 0 && !mismosModelos && cambios.length > 0 && (
+        <Aviso tono="info">
+          Queda registrado:{" "}
+          {cambios.map((c, i) => (
+            <span key={c.nombre}>
+              {i > 0 && " · "}
+              {c.nombre} <strong>{c.dif > 0 ? "+" : "−"}{numero(Math.abs(c.dif))}</strong>
+            </span>
+          ))}{" "}
+          {bulto.unidadPlural}.
         </Aviso>
       )}
 
@@ -542,6 +585,7 @@ function Contenido({
             enviando ||
             motivoId == null ||
             conAlgo.length === 0 ||
+            lineas.some((l) => !decia.has(l.modeloId) && !(Number(l.cantidad) > 0)) ||
             sinCambios ||
             problema != null ||
             faltaNota ||
